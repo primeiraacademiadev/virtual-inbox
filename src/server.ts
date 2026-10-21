@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
+import nodemailer from "nodemailer";
 import { Sandbox, Fault, classify, type Channel, type Event } from "./core.js";
 
 export const sandbox = new Sandbox(Number(process.env.LOG_CAPACITY || 2000));
@@ -13,19 +14,20 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const o=observerId?sandbox.snapshot(observerId):sandbox.newObserver();
  const url=new URL(req.url||"/","http://localhost");
  const after=String(req.headers["last-event-id"]||url.searchParams.get("after")||"");
- const subscribed=new Set(o.inboxes.map(r=>r.id));
+ const isRelevant=(e:Event)=>!observerId || (!!e.resourceId && sandbox.observer(observerId).inboxes.has(e.resourceId));
  res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","Access-Control-Allow-Origin":"*","X-Accel-Buffering":"no"});
  const buffered:Event[]=[];
  let replaying=true;
- const callback=(e:Event)=>{if(observerId && e.resourceId && !subscribed.has(e.resourceId))return;if(replaying)buffered.push(e);else sse(res,e.resourceId?"inbox.notification":"log",e,e.id)};
+ const callback=(e:Event)=>{if(!isRelevant(e))return;if(replaying)buffered.push(e);else sse(res,e.resourceId?"inbox.notification":"log",e,e.id)};
  sandbox.emitter.on("event",callback);
  sse(res,observerId?"session.restored":"session.initialized",o);
  const replay=sandbox.replay(after);
+ if(!observerId) { /* Global log clients receive all events. */ }
  if(replay.reset)sse(res,"log.reset",{runId:replay.runId});
  if(replay.gap)sse(res,"log.gap",{oldest:replay.oldest,latest:replay.latest});
- for(const e of replay.events)if(!observerId||!e.resourceId||subscribed.has(e.resourceId))sse(res,e.resourceId?"inbox.notification":"log",e,e.id);
+ for(const e of replay.events)if(isRelevant(e))sse(res,e.resourceId?"inbox.notification":"log",e,e.id);
  replaying=false;
- const emitted=new Set(replay.events.map(x=>x.id));
+ const emitted=new Set(replay.events.filter(isRelevant).map(x=>x.id));
  for(const e of buffered)if(!emitted.has(e.id))callback(e);
  const heartbeat=setInterval(()=>res.write(": heartbeat\n\n"),20000);
  req.on("close",()=>{clearInterval(heartbeat);sandbox.emitter.off("event",callback)});
@@ -46,13 +48,20 @@ const http=createServer(async(req,res)=>{
   if(path[2]==="inboxes"&&path[3]&&method==="DELETE"){sandbox.unwatch(oid,path[3]);return json(res,204,{})}
   if(path.length===2&&method==="GET")return json(res,200,sandbox.snapshot(oid));
  }
+ if(path[0]==="mailboxes"&&path[1]&&path[2]==="demo-send"&&method==="POST"){
+   const recipient=sandbox.resource(path[1]);if(recipient.channel!=="email")throw new Fault(400,"Not an email inbox");
+   const b=await body(req);
+   const client=nodemailer.createTransport({host:"127.0.0.1",port:smtpPort,secure:false,ignoreTLS:true});
+   await client.sendMail({from:b.from||"demo@sandbox.test",to:recipient.address,subject:b.subject||"Demo",text:b.body||""});
+   return json(res,202,{accepted:true});
+ }
  const channel=channels[path[0]];
  if(channel){
   const id=path[1];
   if(!id){if(method==="GET")return json(res,200,sandbox.list(channel));if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId))}}
   if(id&&path.length===2){if(method==="GET")return json(res,200,sandbox.resource(id));if(method==="DELETE"){sandbox.deleteResource(id);return json(res,204,{})}}
   if(id&&path[2]==="messages"){
-    if(path[3]&&method==="GET")return json(res,200,sandbox.listMessages(id).find(m=>m.id===path[3])||null);
+    if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,m)}
     if(path[3]&&method==="DELETE"){sandbox.removeMessage(id,path[3]);return json(res,204,{})}
     if(method==="GET")return json(res,200,sandbox.listMessages(id));
     if(method==="DELETE"){sandbox.clearMessages(id);return json(res,204,{})}

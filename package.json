@@ -1,0 +1,21 @@
+{
+  "name": "virtual-inbox",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "smtp-server": "^3.14.0",
+    "postal-mime": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/smtp-server": "^3.5.10",
+    "typescript": "^5.8.0",
+    "tsx": "^4.20.0"
+  }
+}

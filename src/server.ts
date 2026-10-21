@@ -18,16 +18,17 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","Access-Control-Allow-Origin":"*","X-Accel-Buffering":"no"});
  const buffered:Event[]=[];
  let replaying=true;
- const callback=(e:Event)=>{if(!isRelevant(e))return;if(replaying)buffered.push(e);else sse(res,e.resourceId?"inbox.notification":"log",e,e.id)};
+ const emit=(e:Event)=>{sse(res,"log",e,e.id);if(observerId&&e.type.startsWith("message.")&&isRelevant(e))sse(res,"inbox.notification",e)};
+ const callback=(e:Event)=>{if(replaying)buffered.push(e);else emit(e)};
  sandbox.emitter.on("event",callback);
  sse(res,observerId?"session.restored":"session.initialized",o);
  const replay=sandbox.replay(after);
  if(!observerId) { /* Global log clients receive all events. */ }
  if(replay.reset)sse(res,"log.reset",{runId:replay.runId});
  if(replay.gap)sse(res,"log.gap",{oldest:replay.oldest,latest:replay.latest});
- for(const e of replay.events)if(isRelevant(e))sse(res,e.resourceId?"inbox.notification":"log",e,e.id);
+ for(const e of replay.events)emit(e);
  replaying=false;
- const emitted=new Set(replay.events.filter(isRelevant).map(x=>x.id));
+ const emitted=new Set(replay.events.map(x=>x.id));
  for(const e of buffered)if(!emitted.has(e.id))callback(e);
  const heartbeat=setInterval(()=>res.write(": heartbeat\n\n"),20000);
  req.on("close",()=>{clearInterval(heartbeat);sandbox.emitter.off("event",callback)});

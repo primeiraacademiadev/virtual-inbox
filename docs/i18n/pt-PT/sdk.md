@@ -1,15 +1,33 @@
-# Automatizar testes
+# Automatizar testes com o SDK TypeScript
 
-Criar caixas efémeras, provocar o envio e esperar pela mensagem sem a consumir.
+O cliente está em `sdk/client.ts` e utiliza o `fetch` nativo do Node.js 24+. Ainda não é um pacote npm publicado.
 
-## Cliente TypeScript
+## Teste de envio de email
 
-O SDK está em `sdk/client.ts` e utiliza o `fetch` nativo. Cria uma `VirtualInboxClient`, usa `withInbox("email", async inbox => { ... })` e chama `api.wait(inbox, {subjectContains:"OTP"}, 15000)`. A caixa é eliminada no `finally`.
+```ts
+import {VirtualInboxClient} from "../sdk/client.js";
+const api = new VirtualInboxClient("http://127.0.0.1:3000");
+await api.withInbox("email", async inbox => {
+  // Configura a aplicação em teste para enviar para inbox.address.
+  // Executa a ação na aplicação que provoca o envio SMTP.
+  const message = await api.wait(inbox,{subjectContains:"OTP"},15000);
+  if(!message)throw Error("OTP não recebido");
+  if(!message.body.includes("123456"))throw Error("Código incorreto");
+});
+```
 
-## Critérios de verificação
+O `withInbox` elimina a caixa em `finally`, incluindo quando uma asserção falha. A espera não consome mensagens.
 
-O endpoint de espera responde 200 com mensagem, ou 204 quando o tempo termina. O cursor `after` usa sequência de mensagens, não IDs de eventos SSE.
+## Teste SMS
 
----
+Usa `withInbox("sms",...)`; configura o fornecedor SMS da aplicação para enviar para `http://127.0.0.1:3001/sms/messages`, desencadeia a ação e verifica com `wait`.
 
-[API de gestão](api.md) · [TLS](tls.md) · [SDK](sdk.md)
+## Cursores, tempos e isolamento
+
+O argumento `after` corresponde a uma sequência numérica de mensagens. Não é um ID SSE. `wait` devolve uma mensagem ou `null` quando a API responde 204. Usa destinatários aleatórios ou exclusivos por teste para evitar interferência. A memória e as sessões desaparecem após reinício.
+
+## Anexos
+
+Os dados JSON incluem metadados dos anexos. Usa `api.download(inbox,message.id,attachment.id)` para obter os bytes e comparar hashes ou conteúdos. Verifica limites SMTP e quotas no ambiente de aceitação.
+
+[Integrar como mock](integration.md) · [API](api.md)

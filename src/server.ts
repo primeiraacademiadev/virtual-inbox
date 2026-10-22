@@ -40,9 +40,10 @@ function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]
   res.end(readFileSync(file));return true;
 }
 
-function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data))}
+function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data,(_key,value)=>_key==="content"&&Buffer.isBuffer(value)?undefined:value))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
+function publicMessage(m:import("./core.js").Message){const {attachments=[],...other}=m;return {...other,attachments:attachments.map(({id,filename,contentType,size})=>({id,filename,contentType,size}))}}
 function sse(res:ServerResponse,event:string,data:unknown,id?:string){if(res.writableEnded)return;res.write((id?"id: "+id+"\n":"")+"event: "+event+"\n"+"data: "+JSON.stringify(data)+"\n\n")}
 function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const o=observerId?sandbox.snapshot(observerId):sandbox.newObserver();
@@ -102,14 +103,14 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    res.writeHead(200,{"Content-Type":"application/x-pem-file","Content-Disposition":"attachment; filename=virtual-inbox-server.pem"});
    return res.end(tlsIdentity.cert);
  }
- if(path[0]==="sms"&&path[1]==="messages"&&method==="POST"){const b=await body(req);return json(res,201,sandbox.deliver("sms",b.from,b.to,b.body))}
+ if(path[0]==="sms"&&path[1]==="messages"&&method==="POST"){const b=await body(req);return json(res,201,publicMessage(sandbox.deliver("sms",b.from,b.to,b.body)))}
  if(path[0]==="logs"&&path[1]==="events"&&method==="GET")return observe(req,res);
  if(path[0]==="logs"&&method==="GET"){const u=new URL(req.url||"/","http://localhost");return json(res,200,sandbox.replay(u.searchParams.get("after")||undefined))}
  if(path[0]==="observers"){
   if(path[1]==="events"&&method==="GET")return observe(req,res);
   const oid=path[1];if(!oid)throw new Fault(404,"Unknown observer route");
   if(path[2]==="events"&&method==="GET")return observe(req,res,oid);
-  if(path[2]==="inboxes"&&method==="POST"){const b=await body(req);return json(res,200,sandbox.watch(oid,b.inboxId))}
+  if(path[2]==="inboxes"&&method==="POST"){const b=await body(req);{const result=sandbox.watch(oid,b.inboxId);return json(res,200,{recipient:result.recipient,messages:result.messages.map(publicMessage)})}}
   if(path[2]==="inboxes"&&path[3]&&method==="DELETE"){sandbox.unwatch(oid,path[3]);return json(res,204,{})}
   if(path.length===2&&method==="GET")return json(res,200,sandbox.snapshot(oid));
  }
@@ -132,14 +133,14 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
       if(!attachment)throw new Fault(404,"Attachment not found");
       res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename="download"`});return res.end(attachment.content);
     }
-    if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,m)}
+    if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,publicMessage(m))}
     if(path[3]&&method==="DELETE"){sandbox.removeMessage(id,path[3]);return json(res,204,{})}
-    if(method==="GET")return json(res,200,sandbox.listMessages(id));
+    if(method==="GET")return json(res,200,sandbox.listMessages(id).map(publicMessage));
     if(method==="DELETE"){sandbox.clearMessages(id);return json(res,204,{})}
   }
   if(id&&path[2]==="wait-for-message"&&method==="POST"){
     const b=await body(req),controller=new AbortController();req.on("close",()=>{if(!res.writableEnded)controller.abort()});
-    const m=await sandbox.wait(id,b,controller.signal);return json(res,m?200:204,m||{});
+    const m=await sandbox.wait(id,b,controller.signal);return json(res,m?200:204,m?publicMessage(m):{});
   }
  }
  if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;

@@ -1,6 +1,7 @@
 export type Channel="email"|"sms";
 export type Recipient={id:string;address:string;channel:Channel;createdAt:string;expiresAt:string|null;system?:boolean};
-export type Message={id:string;sequence:number;destinationId:string;channel:Channel;from:string;originalRecipient:string;subject?:string;body:string;html?:string;receivedAt:string;captureReason?:string};
+export type Attachment={id:string;filename:string;contentType:string;size:number};
+export type Message={id:string;sequence:number;destinationId:string;channel:Channel;from:string;originalRecipient:string;subject?:string;body:string;html?:string;receivedAt:string;captureReason?:string;attachments?:Attachment[]};
 export type Observer={observerId:string;inboxes:Recipient[]};
 export type EventEntry={id:string;type:string;at:string;resourceId?:string;messageId?:string;data?:Record<string,unknown>};
 export async function request<T>(path:string,options?:RequestInit):Promise<T>{const res=await fetch("/api"+path,{...options,headers:{"Content-Type":"application/json",...options?.headers}});if(!res.ok){let message=res.statusText;try{message=(await res.json()).error||message}catch{}throw Object.assign(new Error(message),{status:res.status})}return res.status===204?undefined as T:await res.json() as T}

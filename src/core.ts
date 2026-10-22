@@ -76,7 +76,7 @@ export class Sandbox {
   removeMessage(id:string,messageId:string){this.resource(id);const m=this.messages.get(messageId);if(!m||m.destinationId!==id)throw new Fault(404,"Message not found","MESSAGE_NOT_FOUND");this.messages.delete(messageId);this.log("message.deleted",id,messageId)}
   clearMessages(id:string){for(const m of this.listMessages(id))this.removeMessage(id,m.id)}
   newObserver(){if(this.observers.size>=config.maxObservers)throw new Fault(507,"Observer capacity reached","CAPACITY_EXCEEDED");const id=randomUUID();this.observers.set(id,{id,expiresAt:Date.now()+config.observerTtl*1000,inboxes:new Set()});return this.snapshot(id)}
-  observer(id:string){const o=this.observers.get(id);if(!o||o.expiresAt<=Date.now())throw new Fault(404,"Observer not found");o.expiresAt=Date.now()+3600000;return o}
+  observer(id:string){const o=this.observers.get(id);if(!o||o.expiresAt<=Date.now())throw new Fault(404,"Observer not found");o.expiresAt=Date.now()+config.observerTtl*1000;return o}
   snapshot(id:string){const o=this.observer(id);return {observerId:id,inboxes:[...o.inboxes].flatMap(i=>{try{return [this.resource(i)]}catch{return []}})}}
   watch(id:string,resourceId:string){const o=this.observer(id),r=this.resource(resourceId);o.inboxes.add(r.id);return {recipient:r,messages:this.listMessages(r.id)}}
   unwatch(id:string,resourceId:string){this.observer(id).inboxes.delete(resourceId)}

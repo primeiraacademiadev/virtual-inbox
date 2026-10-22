@@ -4,13 +4,15 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
-    "start": "node --env-file-if-exists=.env --import tsx src/server.ts",
-    "build": "tsc",
+    "start": "node --env-file-if-exists=.env dist/src/server.js",
+    "build": "npm run build:server && npm run build:console",
     "test": "node --import tsx --test test/*.test.ts",
     "dev:console": "npm run dev --prefix web",
     "build:console": "npm run build --prefix web",
     "audit": "npm audit --audit-level=high && npm audit --prefix web --audit-level=high",
-    "dev:console:https": "npm run dev:https --prefix web"
+    "dev:console:https": "npm run dev:https --prefix web",
+    "build:server": "tsc",
+    "predev": "npm run build:console"
   },
   "dependencies": {
     "smtp-server": "^3.19.23",

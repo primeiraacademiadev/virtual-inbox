@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import {config} from "./config.js";
+import {generateAddress,canonicalAddress,generationDefaults,locales,type Generation,type IdentityLocale} from "./identity-generation/generator.js";
 
 export type Channel = "email" | "sms";
 export type Recipient = { id: string; channel: Channel; address: string; createdAt: string; expiresAt: string | null; system?: boolean };
@@ -20,13 +21,23 @@ export class Sandbox {
   private expired=new Map<string,number>();
   private msgSeq=0;
   private addressIds=new Map<string,string>();
+  private resourceAliases=new Map<string,string[]>();
   readonly defaults:Record<Channel,string>;
   constructor(readonly capacity=config.logs) {
     this.emitter.setMaxListeners(0);
     this.defaults={email:this.addSystem("email","anomalies@sandbox.test"),sms:this.addSystem("sms","+999000000000")};
   }
   private key(c:Channel,a:string){return c+":"+(c==="email"?a.toLowerCase():a)}
-  private addSystem(channel:Channel,address:string){const id=randomUUID();this.resources.set(id,{id,channel,address,createdAt:new Date().toISOString(),expiresAt:null,system:true});this.addressIds.set(this.key(channel,address),id);return id}
+  private aliases(c:Channel,a:string,locale:IdentityLocale=generationDefaults.locale){
+    const keys=[this.key(c,a)];
+    if(c==="sms"){
+      keys.push(this.key(c,canonicalAddress(c,a,locale)));
+      for(const candidate of locales)keys.push(this.key(c,canonicalAddress(c,a,candidate)));
+    }
+    return [...new Set(keys)];
+  }
+  private lookup(c:Channel,a:string){for(const key of this.aliases(c,a)){const id=this.addressIds.get(key);if(id)return id}return undefined}
+  private addSystem(channel:Channel,address:string){const id=randomUUID();this.resources.set(id,{id,channel,address,createdAt:new Date().toISOString(),expiresAt:null,system:true});this.addressIds.set(this.key(channel,address),id);this.resourceAliases.set(id,[this.key(channel,address)]);return id}
   log(type:string,resourceId?:string,messageId?:string,data?:Record<string,unknown>){
     const id=this.runId+":"+(++this.seq);
     const e:Event={id,type,at:new Date().toISOString(),resourceId,messageId,data};
@@ -35,21 +46,33 @@ export class Sandbox {
   }
   resource(id:string){const r=this.resources.get(id);if(!r||r.expiresAt&&Date.parse(r.expiresAt)<=Date.now())throw new Fault(404,"Inbox not found","INBOX_NOT_FOUND");return r}
   list(channel?:Channel){return [...this.resources.values()].filter(r=>(!channel||r.channel===channel)&&(!r.expiresAt||Date.parse(r.expiresAt)>Date.now()))}
-  find(channel:Channel,address:string){const id=this.addressIds.get(this.key(channel,address));return id?this.resource(id):undefined}
-  create(channel:Channel,address?:string,ttlSeconds=config.defaultTtl,observerId?:string){
+  find(channel:Channel,address:string){const id=this.lookup(channel,address);return id?this.resource(id):undefined}
+  create(channel:Channel,address?:string,ttlSeconds=config.defaultTtl,observerId?:string,generation?:Generation){
     if(!Number.isInteger(ttlSeconds)||ttlSeconds<1||ttlSeconds>config.maxTtl)throw new Fault(400,"Invalid TTL","INVALID_TTL");
     if(this.resources.size>=config.maxInboxes+2)throw new Fault(507,"Inbox capacity reached","CAPACITY_EXCEEDED");
-    const addr=address?.trim()||(channel==="email"?"inbox-"+randomUUID().slice(0,10)+"@sandbox.test":"+999"+String(Math.floor(Math.random()*1e9)).padStart(9,"0"));
-    if(classify(addr)!==channel)throw new Fault(400,"Invalid identifier");
-    if(this.addressIds.has(this.key(channel,addr)))throw new Fault(409,"Identifier already exists");
     const o=observerId?this.observer(observerId):null;
+    const manual=!!address?.trim();
+    const locale=generation?.locale??generationDefaults.locale;
+    let addr="",aliases:string[]=[];
+    for(let attempt=0;attempt<(manual?1:generationDefaults.maxAttempts);attempt++){
+      addr=manual?address!.trim():generateAddress(channel,generation);
+      if(classify(addr)!==channel)throw new Fault(400,"Invalid identifier","INVALID_REQUEST");
+      aliases=this.aliases(channel,addr,locale);
+      if(aliases.every(k=>!this.addressIds.has(k)))break;
+      if(manual)throw new Fault(409,"Identifier already exists","CONFLICT");
+      aliases=[];
+    }
+    if(!aliases.length)throw new Fault(409,"Generation attempts exhausted","IDENTITY_GENERATION_EXHAUSTED");
     const r:Recipient={id:randomUUID(),channel,address:addr,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+ttlSeconds*1000).toISOString()};
-    this.resources.set(r.id,r);this.addressIds.set(this.key(channel,addr),r.id);o?.inboxes.add(r.id);
+    this.resources.set(r.id,r);
+    for(const alias of aliases)this.addressIds.set(alias,r.id);
+    this.resourceAliases.set(r.id,aliases);
+    o?.inboxes.add(r.id);
     this.log("recipient.created",r.id,undefined,{channel,address:addr});return r;
   }
   deleteResource(id:string){
     const r=this.resource(id);if(r.system)throw new Fault(403,"System inbox cannot be deleted");
-    this.resources.delete(id);this.addressIds.delete(this.key(r.channel,r.address));
+    this.resources.delete(id);for(const alias of this.resourceAliases.get(id)||[this.key(r.channel,r.address)])this.addressIds.delete(alias);this.resourceAliases.delete(id);
     for(const m of this.messages.values())if(m.destinationId===id)this.messages.delete(m.id);
     for(const o of this.observers.values())o.inboxes.delete(id);
     this.emitter.emit("resource.removed",id);this.log("recipient.deleted",id);
@@ -64,7 +87,7 @@ export class Sandbox {
     if(this.messages.size>=config.messages)throw new Fault(507,"Message capacity reached","CAPACITY_EXCEEDED");
     const storedBytes=[...this.messages.values()].reduce((n,m)=>n+Buffer.byteLength(m.body)+(m.rawMime?Buffer.byteLength(m.rawMime):0)+(m.attachments||[]).reduce((t,a)=>t+a.size,0),0);
     if(storedBytes+Buffer.byteLength(body)+(rawMime?Buffer.byteLength(rawMime):0)+attachments.reduce((n,a)=>n+a.size,0)>config.storedBytes)throw new Fault(507,"In-memory storage capacity reached","CAPACITY_EXCEEDED");
-    const id=this.addressIds.get(this.key(channel,to));const r=id?this.resources.get(id):null;
+    const id=this.lookup(channel,to);const r=id?this.resources.get(id):null;
     const reason=!r?(this.expired.has(this.key(channel,to))?"EXPIRED_RECIPIENT":"UNKNOWN_RECIPIENT"):r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()?"EXPIRED_RECIPIENT":undefined;
     const destinationId=reason?this.defaults[channel]:r!.id;
     const m:Message={id:randomUUID(),sequence:++this.msgSeq,channel,destinationId,from,originalRecipient:to,body,subject,html,rawMime,attachments,receivedAt:new Date().toISOString(),captureReason:reason};
@@ -97,6 +120,6 @@ export class Sandbox {
       const raced=this.listMessages(id).find(fits);if(raced)finish(raced);
     });
   }
-  cleanup(){for(const r of [...this.resources.values()])if(r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()){this.resources.delete(r.id);this.addressIds.delete(this.key(r.channel,r.address));this.expired.set(this.key(r.channel,r.address),Date.now());for(const m of this.messages.values())if(m.destinationId===r.id)this.messages.delete(m.id);for(const o of this.observers.values())o.inboxes.delete(r.id);this.emitter.emit("resource.removed",r.id);this.log("recipient.expired",r.id)}for(const [id,o] of this.observers)if(o.expiresAt<=Date.now())this.observers.delete(id);
+  cleanup(){for(const r of [...this.resources.values()])if(r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()){this.resources.delete(r.id);for(const alias of this.resourceAliases.get(r.id)||[this.key(r.channel,r.address)])this.addressIds.delete(alias);this.resourceAliases.delete(r.id);this.expired.set(this.key(r.channel,r.address),Date.now());for(const m of this.messages.values())if(m.destinationId===r.id)this.messages.delete(m.id);for(const o of this.observers.values())o.inboxes.delete(r.id);this.emitter.emit("resource.removed",r.id);this.log("recipient.expired",r.id)}for(const [id,o] of this.observers)if(o.expiresAt<=Date.now())this.observers.delete(id);
     for(const [key,at] of this.expired)if(at<Date.now()-config.maxTtl*1000)this.expired.delete(key)}
 }

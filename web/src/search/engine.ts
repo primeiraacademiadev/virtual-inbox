@@ -1,16 +1,16 @@
 export type SearchSection={document:string;label:string;title:string;anchor:string;ordinal:number;text:string};
 export type SearchIndex={version:number;sections:SearchSection[]};
 export type SearchResult=SearchSection&{score:number;snippet:string};
-const aliases:Record<string,string[]>={
- piece:["attachment","file"],joint:["attachment"],piecejointe:["attachment","fichier"],fichier:["attachment","file"],boite:["inbox","mailbox"],attendre:["wait-for-message"],certificat:["tls","ca"],rechercher:["search"],boîte:["inbox"],correo:["email"],
- ssl:["tls","smtps","certificado"],starttls:["smtp","tls"],certificado:["tls","ca","certificate"],
- ficheiro:["attachment","anexo"],anexo:["attachment","ficheiro"],telemovel:["sms","phone"],
- esperar:["wait-for-message","long polling"],outlook:["smtp","tls"],smtp:["email","mail"]
+import type {Locale} from "../i18n/catalog";
+const aliases:Record<Locale,Record<string,string[]>>={
+ "pt-PT":{anexo:["attachment","ficheiro"],ficheiro:["attachment","anexo"],certificado:["tls","ca"],esperar:["wait-for-message","long polling"],telemovel:["sms","phone"],ssl:["tls","smtps"],smtp:["email"]},
+ en:{attachment:["file","anexo"],certificate:["tls","ca"],wait:["wait-for-message","long polling"],phone:["sms"],ssl:["tls","smtps"],smtp:["email"]},
+ fr:{piece:["attachment","fichier"],pieces:["attachment","fichier"],jointe:["attachment","fichier"],fichier:["attachment","file"],boite:["inbox","mailbox"],attendre:["wait-for-message"],certificat:["tls","ca"],ssl:["tls","smtps"],smtp:["email"]}
 };
 export function normalize(text:string){return text.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
-export function search(index:SearchIndex,query:string,limit=20):SearchResult[]{
+export function search(index:SearchIndex,query:string,limit=20,locale:Locale="en"):SearchResult[]{
  const original=normalize(query);if(!original)return [];
- const terms=[...new Set(original.split(/\s+/).flatMap(t=>[t,...(aliases[t]||[])]))].filter(Boolean);
+ const terms=[...new Set(original.split(/\s+/).flatMap(t=>[t,...(aliases[locale][t]||[])]))].filter(Boolean);
  return index.sections.map(section=>{
   const title=normalize(section.title),label=normalize(section.label),body=normalize(section.text);
   let score=title.includes(original)?35:0;

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync, copyFileSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync, copyFileSync, rmSync } from "node:fs";
 import { resolve, join, extname, sep, dirname } from "node:path";
 import { TLSSocket } from "node:tls";
 import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
@@ -171,6 +171,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
   const base=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),setting("PUBLIC_HOST","localhost")];
   const identity=ensureLocalTls(tlsDirectory,[...new Set([...base,...names])].join(","));
   const active=certificateManager.useGenerated(readFileSync(identity.cert),readFileSync(identity.key));
+  if(existsSync(managedIdentityFile)){copyFileSync(managedIdentityFile,managedIdentityFile+".previous");rmSync(managedIdentityFile,{force:true})}
   tlsIdentity=certificateManager.identity;
   mkdirSync(dirname(managedNamesFile),{recursive:true,mode:0o700});
   const temp=managedNamesFile+"."+randomUUID()+".tmp";

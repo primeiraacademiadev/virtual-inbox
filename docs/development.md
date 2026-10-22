@@ -68,3 +68,7 @@ npm audit --prefix web --audit-level=high
 ```
 
 Commit both generated `package-lock.json` and `web/package-lock.json`; then replace `npm install` in CI with `npm ci`. Do not use `npm audit fix --force` to bypass failing compatibility tests. Confirm SMTP delivery, MIME parsing, observer reconnection, and console functionality on Node 24 and Node 26.
+
+## MVP implementation update — 22 October 2026
+
+New code includes: central quota configuration, attachments through SMTP/store/API/console, SDK for automated tests, local CA generation with OpenSSL, TLS settings and public CA download, and authenticated administrative network settings. See [docs/backlog.md](backlog.md) for the end-user validation checklist. **The new code has not been compiled or exercised yet.**

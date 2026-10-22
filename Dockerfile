@@ -25,6 +25,7 @@ ENV NODE_ENV=production \
     DEMO_PORT=3001 \
     DEMO_HTTPS_PORT=3444 \
     TLS_MODE=auto \
+    TLS_SERVER_NAMES_FILE=/app/config/tls-names.json \
     TLS_CERTIFICATES_DIR=/app/data/certificates \
     TLS_MANAGED_IDENTITY_FILE=/app/data/certificates/imported-identity.json \
     NETWORK_SETTINGS_FILE=/app/data/network-settings.json
@@ -33,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
     && mkdir -p /app/data && chown node:node /app/data
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund --package-lock=false && npm cache clean --force
+COPY config ./config
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/web/dist ./web/dist
 USER node

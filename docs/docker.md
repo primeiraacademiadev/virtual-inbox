@@ -2,7 +2,7 @@
 
 CI checks Node 24 and 26, runs tests, TypeScript builds and npm audits. A separate `container.yml` workflow receives successful **push-to-main** CI completions via `workflow_run`, builds a multi-stage Node 26 image and publishes to `ghcr.io/primeiraacademiadev/virtual-inbox`.
 
-The image supports **linux/amd64 and linux/arm64**. Tags `main` and `sha-<full commit SHA>` are published; `latest` is deliberately withheld until an accepted release. A manual `workflow_dispatch` can also build/publish; it does not guarantee the selected commit passed CI and should be limited to maintainers.
+The image supports **linux/amd64 and linux/arm64**. Tags `main` and `sha-<full commit SHA>` are published; `latest` is deliberately withheld until an accepted release. Publication is **only** triggered by a successful CI run for a push to `main`; there is no manual publish bypass.
 
 ## Run locally
 

@@ -58,3 +58,5 @@
 .docMarkdown table{display:block;max-width:100%;overflow-x:auto}
 .docMarkdown blockquote{border-left:3px solid #72bbea;padding-left:14px;margin-left:0}
 @media(max-width:700px){.docJourneys{grid-template-columns:1fr}.docJourney{min-height:auto}}
+
+.searchTarget{outline:2px solid #84c5eb;outline-offset:6px;border-radius:3px;transition:outline-color .3s}

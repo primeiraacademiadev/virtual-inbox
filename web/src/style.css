@@ -66,3 +66,6 @@
 .copyField{display:flex;align-items:center;gap:8px}
 .copyField input{flex:1;min-width:0}
 .panelHead .copyMenu{flex-shrink:0}
+
+/* Locale selector remains usable in narrow headers */
+.languageSelector{display:inline-flex;flex-shrink:0}.languageSelector select{min-width:110px;width:auto;max-width:145px;cursor:pointer}.shell header{flex-wrap:nowrap}.shell header .tiny{white-space:nowrap}@media(max-width:650px){.languageSelector select{min-width:92px;max-width:115px}.shell header .tiny{display:none}}

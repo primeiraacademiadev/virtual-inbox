@@ -1,0 +1,13 @@
+{
+  "name": "@virtual-inbox/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./client.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "description": "TypeScript/Node SDK for ephemeral Virtual Inbox tests"
+}

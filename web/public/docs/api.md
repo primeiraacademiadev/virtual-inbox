@@ -1,66 +1,47 @@
-# Endpoints do Virtual Inbox
+# API — Gestão e observação
 
-Esta página contém **apenas a API de utilização e observação**. Os endpoints de demonstração não estão incluídos.
+Esta referência **não inclui endpoints exclusivos de demonstração/envio**.
 
-## Estado e configuração
+**Base:** `http://127.0.0.1:3000` ou `https://localhost:3443` (com TLS). Na consola compilada, os pedidos usam o prefixo `/api`.
 
-| Método | Endpoint | Descrição |
+## Destinatários e mensagens
+
+| Método | Endpoint | Operação |
 | --- | --- | --- |
-| GET | `/health` | Estado do servidor |
-| GET | `/connection-info` | Endereços, portas e estado de TLS |
-| GET | `/tls/certificate.pem` | Download do certificado público, se configurado |
+| POST | `/mailboxes` | Criar mailbox: `{address?,ttlSeconds?,observerId?}` |
+| POST | `/phone-numbers` | Criar número: `{phoneNumber?,ttlSeconds?,observerId?}` |
+| GET | `/mailboxes`, `/phone-numbers` | Listar |
+| GET / DELETE | `/mailboxes/:id`, `/phone-numbers/:id` | Consultar ou eliminar |
+| GET / DELETE | `/:collection/:id/messages` | Listar ou limpar mensagens |
+| GET / DELETE | `/:collection/:id/messages/:messageId` | Consultar ou eliminar mensagem |
+| POST | `/:collection/:id/wait-for-message` | Esperar por mensagem |
+| GET | `/mailboxes/:id/messages/:messageId/attachments/:attachmentId` | Descarregar anexo binário |
 
-## Inboxes de email
+`collection` é `mailboxes` ou `phone-numbers`. Os pedidos de espera aceitam `{after,timeoutMs,match:{from?,subjectContains?,bodyContains?}}`. Resposta 200 com mensagem ou 204 por timeout. O JSON contém apenas metadados dos anexos, não os bytes.
 
-| Método | Endpoint | Descrição |
+## Observadores, SSE e logs
+
+| Método | Endpoint | Operação |
 | --- | --- | --- |
-| POST | `/mailboxes` | Criar mailbox |
-| GET | `/mailboxes` | Listar mailboxes |
-| GET | `/mailboxes/:id` | Consultar mailbox |
-| DELETE | `/mailboxes/:id` | Eliminar mailbox |
-| GET | `/mailboxes/:id/messages` | Listar mensagens |
-| GET | `/mailboxes/:id/messages/:messageId` | Consultar mensagem |
-| DELETE | `/mailboxes/:id/messages/:messageId` | Eliminar mensagem |
-| DELETE | `/mailboxes/:id/messages` | Limpar mensagens |
-| POST | `/mailboxes/:id/wait-for-message` | Esperar por mensagem |
+| GET | `/observers/events` | Criar sessão GUID por SSE |
+| GET | `/observers/:guid/events` | Retomar SSE |
+| GET | `/observers/:guid` | Consultar inboxes observadas |
+| POST | `/observers/:guid/inboxes` | Associar inbox por `{inboxId}` |
+| DELETE | `/observers/:guid/inboxes/:inboxId` | Remover subscrição |
+| GET | `/logs` | Consultar buffer circular |
+| GET | `/logs/events` | SSE global |
 
-## Números SMS
+Os IDs SSE usam `runId:sequence`; `log.gap` exige reconciliação, e `log.reset` indica reinício.
 
-Os endpoints equivalentes aos de mailboxes estão disponíveis em `/phone-numbers`, incluindo operações sobre mensagens e espera.
+## Configuração e certificados
 
-## Observadores
-
-| Método | Endpoint | Descrição |
+| Método | Endpoint | Operação |
 | --- | --- | --- |
-| GET | `/observers/events` | Iniciar sessão SSE |
-| GET | `/observers/:guid/events` | Retomar sessão SSE |
-| GET | `/observers/:guid` | Obter projeção |
-| POST | `/observers/:guid/inboxes` | Observar inbox |
-| DELETE | `/observers/:guid/inboxes/:inboxId` | Deixar de observar |
+| GET | `/health` | Estado |
+| GET | `/connection-info` | Endereços, portas, certificado |
+| GET | `/tls/certificate.pem` | Certificado público |
+| GET | `/tls/ca.pem` | CA local pública (modo auto) |
+| PUT | `/admin/tls` | Importar PEM (HTTPS e token) |
+| PUT | `/admin/network` | Configurar endereços (HTTPS e token) |
 
-## Eventos
-
-| Método | Endpoint | Descrição |
-| --- | --- | --- |
-| GET | `/logs` | Consultar eventos circulares |
-| GET | `/logs/events` | Subscrever SSE global |
-
-**Nota de segurança:** a API não possui autenticação no MVP; usar apenas numa rede protegida.
-
-## Received email attachments
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/mailboxes/:id/messages/:messageId/attachments/:attachmentId` | Download attachment bytes |
-
-Message JSON contains attachment metadata (ID, name, MIME type, size) without file bytes.
-
-## TLS and administrative operations
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/tls/ca.pem` | Download public local CA certificate (auto mode only) |
-| PUT | `/admin/tls` | Admin HTTPS import of PEM certificate/key |
-| PUT | `/admin/network` | Admin HTTPS settings for hostnames and ports (restart needed) |
-
-All administrative modifications require `Authorization: Bearer <ADMIN_TOKEN>` over HTTPS. The private key is never downloadable.
+**Atenção:** a API de gestão é anónima neste MVP, exceto operações administrativas TLS/rede. Usa uma rede de confiança.

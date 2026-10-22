@@ -14,6 +14,9 @@ maxTtl:positive("MAX_INBOX_TTL_SECONDS",604800),
 observerTtl:positive("OBSERVER_SESSION_TTL_SECONDS",3600),
 waitMs:positive("MAX_WAIT_TIMEOUT_MS",120000),
 maxConnections:positive("MAX_CONNECTIONS",200),
+maxInboxes:positive("MAX_INBOX_COUNT",2000),
+maxObservers:positive("MAX_OBSERVER_COUNT",500),
+maxAttachments:positive("MAX_ATTACHMENTS_PER_MESSAGE",20),
 };
 export function getSize(bytes:Buffer|string){return Buffer.isBuffer(bytes)?bytes.length:Buffer.byteLength(bytes)}
 export function token(){return randomUUID()}

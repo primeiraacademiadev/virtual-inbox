@@ -12,7 +12,7 @@ COPY scripts ./scripts
 COPY README.md ./
 COPY docs ./docs
 COPY web ./web
-RUN npm run build && npm run build:console
+RUN npm run build
 
 FROM node:26-bookworm-slim AS runtime
 ENV NODE_ENV=production \

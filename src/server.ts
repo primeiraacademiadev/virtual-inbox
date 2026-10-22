@@ -198,6 +198,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
 }
 const http=createServer((req,res)=>{void handleRequest(req,res)});
 const demo=createServer((req,res)=>{void handleRequest(req,res,true)});
+http.maxConnections=config.maxConnections;demo.maxConnections=config.maxConnections;
 const smtpOptions={
  authOptional:true,
  disabledCommands:tlsIdentity?[]:["STARTTLS"],
@@ -221,6 +222,8 @@ const clean=setInterval(()=>sandbox.cleanup(),1000);clean.unref();
 http.listen(port,apiHost,()=>console.log("REST listening on "+port));
 const https=tlsIdentity?createHttpsServer(tlsIdentity,(req,res)=>{void handleRequest(req,res)}):null;
 const demoHttps=tlsIdentity?createHttpsServer(tlsIdentity,(req,res)=>{void handleRequest(req,res,true)}):null;
+if(https)https.maxConnections=config.maxConnections;
+if(demoHttps)demoHttps.maxConnections=config.maxConnections;
 https?.listen(httpsPort,apiHost,()=>console.log("HTTPS and web console listening on "+httpsPort));
 demoHttps?.listen(demoHttpsPort,apiHost,()=>console.log("HTTPS demo API listening on "+demoHttpsPort));
 demo.listen(demoPort,apiHost,()=>console.log("Demo API listening on "+demoPort));

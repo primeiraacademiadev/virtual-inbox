@@ -1,0 +1,104 @@
+{
+  "pt-PT": [
+    [
+      "Introdução",
+      "Instala Node.js 24+, npm e OpenSSL. Executa `npm install`, `npm install --prefix web`, `npm run build:console` e `npm run dev`. Abre `https://localhost:3443` depois de confiar na CA local."
+    ],
+    [
+      "Experimentar",
+      "Na consola, cria uma inbox, seleciona-a e envia uma mensagem. O email utiliza SMTP na porta 2525. O SMS é simulado na API de demonstração, porta 3001/3444. Podes juntar anexos."
+    ],
+    [
+      "Integração como mock",
+      "Configura SMTP STARTTLS na porta 2525 ou SMTPS na 2465. Para SMS, usa `POST http://localhost:3001/sms/messages` com JSON contendo `from`, `to` e `body`. Regista o destinatário previamente. Em Docker, `localhost` refere-se ao próprio contentor."
+    ],
+    [
+      "SDK e automação",
+      "Importa `VirtualInboxClient` de `sdk/client.ts`, cria uma inbox com `withInbox`, desencadeia o envio na aplicação testada e verifica com `wait(inbox, {subjectContains:\"OTP\"}, 15000)`. O `finally` elimina a inbox."
+    ],
+    [
+      "API de gestão",
+      "`POST /mailboxes`, `POST /phone-numbers`, `GET /mailboxes/:id/messages`, `POST /mailboxes/:id/wait-for-message`, `GET /observers/events`, `GET /logs/events`, `GET /connection-info`, `PUT /admin/tls`, `PUT /admin/network`. A API de demonstração corre noutra porta."
+    ],
+    [
+      "TLS e certificados",
+      "HTTPS 3443, SMTP STARTTLS 2525, SMTPS 2465. `TLS_MODE=auto` cria uma CA com OpenSSL. Descarrega apenas a CA pública (`/tls/ca.pem`). Importações PEM e alterações de rede exigem HTTPS e ADMIN_TOKEN; entram em vigor após reinício."
+    ],
+    [
+      "Arquitetura",
+      "Servidor Node.js de processo único, React e estado efémero em memória. SMTP e SMS HTTP recebem mensagens; as sessões GUID e SSE permitem observar inboxes. Não existem Redis, Kafka ou base de dados."
+    ],
+    [
+      "Desenvolvimento",
+      "Domínio em `src/core.ts`, adaptadores em `src/server.ts`, limites em `src/config.ts`, consola em `web/src` e SDK em `sdk/client.ts`. Executa os testes e builds no ambiente de validação."
+    ]
+  ],
+  "en": [
+    [
+      "Getting started",
+      "Install Node.js 24+, npm and OpenSSL. Run `npm install`, `npm install --prefix web`, `npm run build:console`, then `npm run dev`. Open `https://localhost:3443` after trusting the local CA."
+    ],
+    [
+      "Try it",
+      "Create and select an inbox in the console, then send a message. Email uses SMTP port 2525. SMS uses the simulated demo API on port 3001/3444. Email supports attachments."
+    ],
+    [
+      "Mock integration",
+      "Use SMTP STARTTLS on port 2525 or SMTPS on port 2465. For SMS, `POST http://localhost:3001/sms/messages` with JSON fields `from`, `to`, and `body`. Register the destination first. In Docker, `localhost` refers to the container itself."
+    ],
+    [
+      "Test automation SDK",
+      "Import `VirtualInboxClient` from `sdk/client.ts`, use `withInbox` to create a temporary recipient, trigger the system under test and assert with `wait(inbox, {subjectContains:\"OTP\"}, 15000)`. Cleanup runs in `finally`."
+    ],
+    [
+      "Management API",
+      "`POST /mailboxes`, `POST /phone-numbers`, `GET /mailboxes/:id/messages`, `POST /mailboxes/:id/wait-for-message`, `GET /observers/events`, `GET /logs/events`, `GET /connection-info`, `PUT /admin/tls`, `PUT /admin/network`. Demo sending uses separate ports."
+    ],
+    [
+      "TLS and certificates",
+      "HTTPS 3443, SMTP STARTTLS 2525, SMTPS 2465. `TLS_MODE=auto` creates a development CA using OpenSSL. Download only the public CA (`/tls/ca.pem`). PEM imports and network changes require HTTPS and ADMIN_TOKEN, effective after restart."
+    ],
+    [
+      "Architecture",
+      "Single-process Node.js server, React console and ephemeral in-memory state. SMTP and SMS HTTP ingest messages; GUID sessions and SSE expose observed inboxes. No Redis, Kafka or database."
+    ],
+    [
+      "Development",
+      "Domain: `src/core.ts`; adapters: `src/server.ts`; limits: `src/config.ts`; UI: `web/src`; SDK: `sdk/client.ts`. Run tests and builds in the acceptance environment."
+    ]
+  ],
+  "fr": [
+    [
+      "Prise en main",
+      "Installez Node.js 24+, npm et OpenSSL. Exécutez `npm install`, `npm install --prefix web`, `npm run build:console` puis `npm run dev`. Ouvrez `https://localhost:3443` après avoir approuvé l’autorité locale."
+    ],
+    [
+      "Découvrir",
+      "Créez et sélectionnez une boîte dans la console, puis envoyez un message. Les e-mails utilisent SMTP sur le port 2525. Les SMS passent par l’API simulée de démonstration sur le port 3001/3444. Les pièces jointes sont acceptées."
+    ],
+    [
+      "Intégrer comme simulateur",
+      "Utilisez SMTP STARTTLS sur le port 2525 ou SMTPS sur 2465. Pour les SMS, `POST http://localhost:3001/sms/messages` avec les champs JSON `from`, `to` et `body`. Enregistrez d’abord le destinataire. Dans Docker, `localhost` désigne le conteneur lui-même."
+    ],
+    [
+      "SDK d’automatisation",
+      "Importez `VirtualInboxClient` depuis `sdk/client.ts`, utilisez `withInbox` pour créer un destinataire provisoire, déclenchez l’application testée et vérifiez avec `wait(inbox, {subjectContains:\"OTP\"}, 15000)`. Le nettoyage est assuré dans `finally`."
+    ],
+    [
+      "API de gestion",
+      "`POST /mailboxes`, `POST /phone-numbers`, `GET /mailboxes/:id/messages`, `POST /mailboxes/:id/wait-for-message`, `GET /observers/events`, `GET /logs/events`, `GET /connection-info`, `PUT /admin/tls`, `PUT /admin/network`. Les envois de démonstration utilisent des ports distincts."
+    ],
+    [
+      "TLS et certificats",
+      "HTTPS 3443, SMTP STARTTLS 2525, SMTPS 2465. `TLS_MODE=auto` génère une autorité de développement avec OpenSSL. Téléchargez uniquement le certificat public de l’autorité (`/tls/ca.pem`). L’importation PEM et les changements réseau nécessitent HTTPS et ADMIN_TOKEN et prennent effet après redémarrage."
+    ],
+    [
+      "Architecture",
+      "Serveur Node.js à processus unique, console React et état éphémère en mémoire. SMTP et SMS HTTP reçoivent les messages ; les sessions GUID et SSE permettent leur observation. Sans Redis, Kafka ni base de données."
+    ],
+    [
+      "Développement",
+      "Domaine : `src/core.ts` ; adaptateurs : `src/server.ts` ; limites : `src/config.ts` ; interface : `web/src` ; SDK : `sdk/client.ts`. Exécutez tests et compilations dans l’environnement de validation."
+    ]
+  ]
+}

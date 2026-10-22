@@ -1,8 +1,10 @@
 import {useEffect,useRef,useState} from "react";
+import {useI18n} from "../../i18n/context";
 import {copyText} from "./clipboard";
 import "./clipboard.css";
 type State="idle"|"pending"|"success"|"error";
-export function CopyButton({value,label="Copiar",className=""}:{value:string;label?:string;className?:string}){
+export function CopyButton({value,label,className=""}:{value:string;label?:string;className?:string}){
+ const {t}=useI18n();label=label||t("copy");
  const [state,setState]=useState<State>("idle");
  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const generation=useRef(0);
@@ -16,6 +18,6 @@ export function CopyButton({value,label="Copiar",className=""}:{value:string;lab
   catch{if(current===generation.current)setState("error")}
   if(current===generation.current)timer.current=setTimeout(()=>setState("idle"),2200);
  }
- const text=state==="success"?"✓ Copiado!":state==="error"?"Falha ao copiar":state==="pending"?"A copiar…":label;
- return <span className={"copyControl "+className}><button type="button" disabled={!value||state==="pending"} title={label} aria-label={state==="idle"?label:text} onClick={()=>void copy()} className={"copyButton copy-"+state}>{text}</button><span className="srOnly" role="status" aria-live="polite" aria-atomic="true">{state==="success"?label+": copiado para a área de transferência":state==="error"?"Não foi possível copiar "+label.toLowerCase():""}</span></span>;
+ const text=state==="success"?"✓ "+t("copied"):state==="error"?t("copyFailed"):state==="pending"?t("copying"):label;
+ return <span className={"copyControl "+className}><button type="button" disabled={!value||state==="pending"} title={label} aria-label={state==="idle"?label:text} onClick={()=>void copy()} className={"copyButton copy-"+state}>{text}</button><span className="srOnly" role="status" aria-live="polite" aria-atomic="true">{state==="success"?label+": "+t("copied"):state==="error"?t("copyFailed")+": "+label.toLowerCase():""}</span></span>;
 }

@@ -37,3 +37,14 @@ No public email or real carrier SMS delivery; no inbound DNS MX configuration. U
 ## Contributing
 
 Before changing core data structures or public API contracts, validate the change with the project owner. Keep components segregated and add regression tests for altered behavior.
+
+
+## UI and dependency maintenance (22 October 2026)
+
+- Nodemailer upgraded from major 6 to major 10; `@types/nodemailer` removed because the current package includes types. Supported runtime is Node.js 20+.
+- SMTP self-send remains a local SMTP transport, with file/URL access disabled for demo messages.
+- The inbox's list and message detail scroll independently of the log panel; split view uses constrained flex heights.
+- Composing opens an overlay above the inbox/log workspace, with its own scrollable content and accessible sticky actions.
+- The collapsed navigation no longer renders a separate clipped plus button: group and inbox actions are exposed contextually on hover or focus.
+- Before release, verify keyboard focus navigation and touchscreen access to contextual actions. Tooltip hover alone is insufficient for touchscreen users.
+- Regression checks: split-mode inbox scroll with 50+ messages; detail scroll with long MIME text; send form submit and cancel at small viewport heights; collapsed bar with both inbox groups and unread badges; SMTP demo after dependency major upgrade; run `npm audit --omit=dev`.

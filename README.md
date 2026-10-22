@@ -76,3 +76,14 @@ Early MVP implementation. Not a public SMTP relay or a real SMS provider. Data i
 The server can terminate TLS itself for HTTPS (default port **3443**), SMTP STARTTLS (default port **2525**), and implicit SMTPS (default port **2465**), using the same PEM identity. Set both `TLS_CERT_FILE` and `TLS_KEY_FILE`; see [TLS setup](docs/tls.md).
 
 The console includes **Ligações e TLS**, **Documentação**, and **API** pages. The API page excludes demonstration-only endpoints; it is a user-facing endpoint reference. The TLS page offers download of the **public certificate only**. Web upload or export of a private key is deliberately unavailable until authenticated administrator controls exist.
+
+## Current additional capabilities
+
+- SMTP MIME attachments are preserved as binary buffers. Message API lists attachment metadata; file bytes are downloaded from `/mailboxes/:id/messages/:messageId/attachments/:attachmentId`.
+- Email demo composer can send files; SMS remains text only.
+- Local TLS mode is automatic with OpenSSL installed; public CA certificate and server certificate are downloadable from **Ligações e TLS**.
+- Admins can import a PEM identity or change addresses/ports via the console with an `ADMIN_TOKEN` over HTTPS. Changes take effect after restart.
+- Runtime limits and resource quotas are configurable through environment variables; see [sample configuration](.env.example).
+- Test runners can use the [TypeScript SDK](sdk/client.ts) and [SDK guide](docs/sdk.md).
+
+**Validation handoff:** source changes have been published without executing build, integration tests, package audit or TLS interoperability checks, as agreed. See [acceptance checklist](docs/backlog.md).

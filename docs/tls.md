@@ -8,7 +8,7 @@ As três terminações TLS são efetuadas pelo próprio servidor Node.js:
 - **SMTP + STARTTLS:** `SMTP_PORT`, valor por omissão 2525
 - **SMTPS (TLS implícito):** `SMTPS_PORT`, valor por omissão 2465
 
-O HTTP local permanece configurável com `PORT` (omissão 3000). Por omissão, todos os listeners usam loopback.
+A consola compilada em `web/dist` é servida diretamente pelo HTTPS do Node.js; executar `npm run build:console` antes de iniciar o backend. O HTTP local permanece configurável com `PORT` (omissão 3000). A API de demonstração fica num listener distinto: HTTP `DEMO_PORT` (3001) e HTTPS `DEMO_HTTPS_PORT` (3444). Por omissão, todos os listeners usam loopback.
 
 ## Ativar
 
@@ -37,3 +37,9 @@ A interface apresenta os certificados atualmente configurados, mas **não aceita
 ## Endpoints e isolamento
 
 Os endpoints de demonstração continuam separados logicamente dos endpoints de gestão; o isolamento físico numa porta própria continua por implementar. Não exponhas estes endpoints publicamente sem controlo de acesso.
+
+## Endereços e gestão
+
+O nome público anunciado aos clientes é `PUBLIC_HOST` (omissão `localhost`); as interfaces de escuta são `HOST` e `SMTP_HOST` (omissão `127.0.0.1`). Os nomes SAN do certificado têm de corresponder ao host efetivamente utilizado. Estes valores são atualmente configurados por ambiente e visualizados, mas não editados, na consola. A alteração por interface web requer autenticação administrativa e gestão segura de reinício.
+
+Para desenvolvimento da consola, o Vite usa as portas locais 3000 (`/api`) e 3001 (`/demo`). Na versão compilada e servida pelo Node, os endpoints da API usam `/api`, enquanto o envio de demonstração é dirigido ao listener HTTPS próprio na porta 3444.

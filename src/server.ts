@@ -180,7 +180,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
     if(path[3]&&path[4]==="attachments"&&path[5]&&method==="GET"){
       const m=sandbox.listMessages(id).find(x=>x.id===path[3]);const attachment=m?.attachments?.find(a=>a.id===path[5]);
       if(!attachment)throw new Fault(404,"Attachment not found");
-      res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename="download"`});return res.end(attachment.content);
+      res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename*=UTF-8\'\'${encodeURIComponent(attachment.filename.replace(/[\\r\\n]/g,""))}`});return res.end(attachment.content);
     }
     if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,publicMessage(m))}
     if(path[3]&&method==="DELETE"){sandbox.removeMessage(id,path[3]);return json(res,204,{})}

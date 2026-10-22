@@ -1,63 +1,43 @@
-# TLS e configuração de clientes
+# TLS, certificates and client connections
 
-## Estratégia
+**Audience:** developers and administrators setting up trusted local SMTP/HTTPS or bringing their own identity.
 
-As três terminações TLS são efetuadas pelo próprio servidor Node.js:
+## TLS terminates in Node.js
 
-- **HTTPS:** `HTTPS_PORT`, valor por omissão 3443
-- **SMTP + STARTTLS:** `SMTP_PORT`, valor por omissão 2525
-- **SMTPS (TLS implícito):** `SMTPS_PORT`, valor por omissão 2465
+| Listener | Default port | Encryption |
+| --- | --- | --- |
+| Management and compiled console | 3443 | HTTPS |
+| SMTP receiver | 2525 | SMTP, advertises STARTTLS when TLS configured |
+| Secure SMTP receiver | 2465 | Implicit TLS (SMTPS) |
+| Demo input | 3444 | HTTPS, when TLS configured |
+| Local management / demo | 3000 / 3001 | HTTP, loopback by default |
 
-A consola compilada em `web/dist` é servida diretamente pelo HTTPS do Node.js; executar `npm run build:console` antes de iniciar o backend. O HTTP local permanece configurável com `PORT` (omissão 3000). A API de demonstração fica num listener distinto: HTTP `DEMO_PORT` (3001) e HTTPS `DEMO_HTTPS_PORT` (3444). Por omissão, todos os listeners usam loopback.
+No TLS proxy is required. The same server identity is used for HTTPS, STARTTLS and SMTPS. Listener bind hosts and advertised hostname can be configured separately.
 
-## Ativar
+## Choose your certificate mode
 
-A aplicação carrega a mesma identidade PEM para os três listeners. Define simultaneamente:
+**Auto (default):** `TLS_MODE=auto` invokes a locally installed **OpenSSL executable** to generate a development CA and a 30-day server certificate. The CA is retained and the server certificate renewed near expiry. Set `TLS_SERVER_NAMES` to the DNS names/IP addresses that clients actually use *before* generation. Public CA download: `GET /tls/ca.pem`; public server certificate: `GET /tls/certificate.pem`. Both links are in **Ligações e TLS**.
 
-```sh
-TLS_CERT_FILE=/secrets/server.crt
-TLS_KEY_FILE=/secrets/server.key
-PUBLIC_HOST=localhost
-```
+**External:** set `TLS_MODE=external`, `TLS_CERT_FILE=/path/server.pem` and `TLS_KEY_FILE=/path/server-key.pem`. The Node process must have permission to read the private key. Use an externally trusted certificate for public-facing URLs.
 
-Para gerar uma identidade de desenvolvimento, com OpenSSL disponível:
+**Off:** set `TLS_MODE=off` for trusted local testing only. HTTPS, STARTTLS and SMTPS listeners are not created.
 
-```sh
-openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 30 -keyout server.key -out server.crt -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-```
+In auto mode, private CA and server keys live under `TLS_CERTIFICATES_DIR` (default `./data/certificates`); this directory is excluded from Git. **Never share the private CA key with a client**.
 
-Coloca a chave privada num diretório com permissões restritas e **fora do controlo de versões**. Não instales nem descarregues a chave privada no computador do cliente; só o certificado público `GET /tls/certificate.pem` deve ser distribuído.
+## Configure clients
 
-O certificado autoassinado só é confiável quando explicitamente instalado como âncora de confiança no cliente. Para exposição pública, prefere certificados emitidos por CA reconhecida.
+Use the host and port displayed in the console's **Ligações e TLS** page. For SMTP STARTTLS, select explicit TLS/STARTTLS on port 2525; for SMTPS, select implicit SSL/TLS on port 2465. The client must trust the certificate chain and use a host matching the certificate SAN. A local CA requires importing the **public** CA certificate into the appropriate client trust store. Do not disable certificate verification as a permanent workaround.
 
-## Importação administrativa pela consola
+## Import certificates or edit host/port settings
 
-A consola permite importar ficheiros PEM quando o operador fornece um token administrativo. Configura `ADMIN_TOKEN` com um segredo forte no ambiente do processo e configura previamente `TLS_CERT_FILE` e `TLS_KEY_FILE`. A API `PUT /api/admin/tls` aceita `cert` e `key` (PEM) **apenas através de HTTPS**, valida que a chave corresponde ao certificado e escreve os ficheiros com permissões restritas. A identidade importada torna-se ativa após reiniciar o processo. A chave privada nunca pode ser descarregada pela API ou pela consola. O token não é persistido no browser.
+Both administrative operations require a strong `ADMIN_TOKEN` and a working HTTPS connection.
 
-## Endpoints e isolamento
+- `PUT /admin/tls` receives a PEM `cert` and `key`, checks that they correspond, and writes a protected managed identity file (`TLS_MANAGED_IDENTITY_FILE`). It does not return the key. A backup copy named `.previous` is retained.
+- `PUT /admin/network` stores allowed advertised-host, bind-host and listener-port settings in `NETWORK_SETTINGS_FILE`.
+- Both operations respond that **restart is required**. The console exposes these controls under **Ligações e TLS**. There is no PKCS#12 UI import.
 
-Os endpoints de demonstração continuam separados logicamente dos endpoints de gestão; o isolamento físico numa porta própria continua por implementar. Não exponhas estes endpoints publicamente sem controlo de acesso.
+Imported identity is stored atomically in one JSON file, taking precedence after restart over `auto` or `external` identity material. Treat that JSON and its backup as private-key secrets.
 
-## Endereços e gestão
+**Security limits:** ordinary management endpoints are unauthenticated in this MVP. Use loopback or a controlled internal network. For public deployment, add authentication, HTTPS policy and abuse protection.
 
-O nome público anunciado aos clientes é `PUBLIC_HOST` (omissão `localhost`); as interfaces de escuta são `HOST` e `SMTP_HOST` (omissão `127.0.0.1`). Os nomes SAN do certificado têm de corresponder ao host efetivamente utilizado. Estes valores são atualmente configurados por ambiente e visualizados, mas não editados, na consola. A alteração por interface web requer autenticação administrativa e gestão segura de reinício.
-
-Para desenvolvimento da consola, o Vite usa as portas locais 3000 (`/api`) e 3001 (`/demo`). Na versão compilada e servida pelo Node, os endpoints da API usam `/api`, enquanto o envio de demonstração é dirigido ao listener HTTPS próprio na porta 3444.
-
-**Nota de segurança:** a atualização de dois ficheiros PEM não constitui uma transação de filesystem atómica entre ambos; mantém uma cópia de recuperação antes da rotação. É necessário validar reinício e recuperação operacional antes de usar em ambientes públicos.
-
-## Automatic local CA
-
-The default `TLS_MODE=auto` generates a local development CA and a server certificate with SAN entries drawn from `TLS_SERVER_NAMES` (default `localhost,127.0.0.1`). The implementation invokes OpenSSL at first start, so **OpenSSL must be installed and in PATH**. The certificates are generated under `TLS_CERTIFICATES_DIR` (default `./data/certificates`), and are excluded from version control. Server certificates are regenerated near expiration. The local CA private key must be treated as a secret.
-
-The public CA may be downloaded from the console under **Ligações e TLS**, or by `GET /tls/ca.pem`. Clients should trust only that CA certificate explicitly; never disable certificate verification by default.
-
-## Changing addresses through the console
-
-Network host and port fields can be edited in **Ligações e TLS** after setting `ADMIN_TOKEN`. `PUT /admin/network` writes a restricted-permission JSON file configured through `NETWORK_SETTINGS_FILE` (default `./data/network-settings.json`). Values are applied after restarting the Node process. A changed public hostname must also be present in the certificate SANs, otherwise TLS verification will fail.
-
-No self-service PKCS#12 parser has been implemented: external identities are PEM certificate/key pairs. TLS off mode is available with `TLS_MODE=off` only for trusted local testing.
-
-## Atomic managed identity rotation
-
-Certificate import writes a single JSON PEM identity at `TLS_MANAGED_IDENTITY_FILE` (default `./data/certificates/imported-identity.json`), with mode 0600, a temporary file and an atomic rename. The previous identity is copied to `.previous` for local manual recovery. On restart the managed identity takes precedence over auto-generated or external PEM files. Do not expose or commit either JSON file: each contains the **private** server key. The import endpoint does not return the key. Rotations are not applied to open sockets until restart.
+[Return to integration guide](integration.md) · [API reference](api.md)

@@ -31,3 +31,13 @@ npm run build
 Then inspect `coverage/lcov.info`. The Sonar scanner and Quality Gate require a configured server and token. No real SonarQube scan has been verified at the time of this change.
 
 For SonarQube Cloud, additional organization-level settings are required; this baseline targets SonarQube Server.
+
+## Security hardening notes (October 2026)
+
+The CI now uses checked-in root and console npm lockfiles and `npm ci --ignore-scripts`; the Docker builder/runtime do the same. A future dependency requiring installation hooks should be reviewed and explicitly permitted rather than turning scripts on globally.
+
+The main HTTP listener permits literal IP addresses and single-label container DNS names in the `Host` header, while retaining strict checks for dotted domains not explicitly allowed. This supports normal Compose/CI access without treating arbitrary public domains as trusted. Browser `Origin` still requires same-origin or explicit authorization.
+
+Root and console lockfiles must be updated together with their manifests. The external dependency vulnerability advisory for `node-forge` remains tracked and should not be masked by `npm audit` flags.
+
+Quality items beyond this maintenance pass: isolated HTTP router tests, consolidation of network configuration precedence, and full verification of the new CI and Docker builds.

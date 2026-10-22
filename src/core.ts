@@ -8,7 +8,7 @@ export type Attachment = { id:string; filename:string; contentType:string; size:
 export type Message = { id: string; sequence: number; channel: Channel; destinationId: string; from: string; originalRecipient: string; subject?: string; body: string; html?: string; rawMime?: string; attachments?:Attachment[]; receivedAt: string; captureReason?: string };
 export type Event = { id: string; type: string; at: string; resourceId?: string; messageId?: string; data?: Record<string,unknown> };
 export const classify = (s:string): Channel | null => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?"email":/^\+[1-9]\d{6,14}$/.test(s)?"sms":null;
-export class Fault extends Error { constructor(public status:number,message:string){super(message)} }
+export class Fault extends Error { constructor(public status:number,message:string,public code?:string){super(message)} }
 export class Sandbox {
   readonly runId=randomUUID();
   readonly emitter=new EventEmitter();
@@ -33,12 +33,12 @@ export class Sandbox {
     this.events.push(e);if(this.events.length>this.capacity)this.events.shift();
     this.emitter.emit("event",e);return e;
   }
-  resource(id:string){const r=this.resources.get(id);if(!r||r.expiresAt&&Date.parse(r.expiresAt)<=Date.now())throw new Fault(404,"Inbox not found");return r}
+  resource(id:string){const r=this.resources.get(id);if(!r||r.expiresAt&&Date.parse(r.expiresAt)<=Date.now())throw new Fault(404,"Inbox not found","INBOX_NOT_FOUND");return r}
   list(channel?:Channel){return [...this.resources.values()].filter(r=>(!channel||r.channel===channel)&&(!r.expiresAt||Date.parse(r.expiresAt)>Date.now()))}
   find(channel:Channel,address:string){const id=this.addressIds.get(this.key(channel,address));return id?this.resource(id):undefined}
   create(channel:Channel,address?:string,ttlSeconds=config.defaultTtl,observerId?:string){
-    if(!Number.isInteger(ttlSeconds)||ttlSeconds<1||ttlSeconds>config.maxTtl)throw new Fault(400,"Invalid TTL");
-    if(this.resources.size>=config.maxInboxes+2)throw new Fault(507,"Inbox capacity reached");
+    if(!Number.isInteger(ttlSeconds)||ttlSeconds<1||ttlSeconds>config.maxTtl)throw new Fault(400,"Invalid TTL","INVALID_TTL");
+    if(this.resources.size>=config.maxInboxes+2)throw new Fault(507,"Inbox capacity reached","CAPACITY_EXCEEDED");
     const addr=address?.trim()||(channel==="email"?"inbox-"+randomUUID().slice(0,10)+"@sandbox.test":"+999"+String(Math.floor(Math.random()*1e9)).padStart(9,"0"));
     if(classify(addr)!==channel)throw new Fault(400,"Invalid identifier");
     if(this.addressIds.has(this.key(channel,addr)))throw new Fault(409,"Identifier already exists");
@@ -57,13 +57,13 @@ export class Sandbox {
   deliver(channel:Channel,from:string,to:string,body:string,subject?:string,html?:string,rawMime?:string,attachments:Attachment[]=[]){
     if(!from||!to||typeof body!=="string")throw new Fault(400,"From, to and body required");
     const maxMimeBytes=config.smtpBytes;
-    if(body.length>config.bodyChars||rawMime&&Buffer.from(rawMime,"base64").length>maxMimeBytes)throw new Fault(413,"Payload too large");
+    if(body.length>config.bodyChars||rawMime&&Buffer.from(rawMime,"base64").length>maxMimeBytes)throw new Fault(413,"Payload too large","MESSAGE_TOO_LARGE");
     if(channel==="sms"&&Buffer.byteLength(body)>config.smsBytes)throw new Fault(413,"SMS exceeds maximum size");
     if(attachments.length>config.maxAttachments)throw new Fault(413,"Too many attachments");
     if(attachments.some(a=>a.size>config.attachmentBytes))throw new Fault(413,"Attachment too large");
-    if(this.messages.size>=config.messages)throw new Fault(507,"Message capacity reached");
+    if(this.messages.size>=config.messages)throw new Fault(507,"Message capacity reached","CAPACITY_EXCEEDED");
     const storedBytes=[...this.messages.values()].reduce((n,m)=>n+Buffer.byteLength(m.body)+(m.rawMime?Buffer.byteLength(m.rawMime):0)+(m.attachments||[]).reduce((t,a)=>t+a.size,0),0);
-    if(storedBytes+Buffer.byteLength(body)+(rawMime?Buffer.byteLength(rawMime):0)+attachments.reduce((n,a)=>n+a.size,0)>config.storedBytes)throw new Fault(507,"In-memory storage capacity reached");
+    if(storedBytes+Buffer.byteLength(body)+(rawMime?Buffer.byteLength(rawMime):0)+attachments.reduce((n,a)=>n+a.size,0)>config.storedBytes)throw new Fault(507,"In-memory storage capacity reached","CAPACITY_EXCEEDED");
     const id=this.addressIds.get(this.key(channel,to));const r=id?this.resources.get(id):null;
     const reason=!r?(this.expired.has(this.key(channel,to))?"EXPIRED_RECIPIENT":"UNKNOWN_RECIPIENT"):r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()?"EXPIRED_RECIPIENT":undefined;
     const destinationId=reason?this.defaults[channel]:r!.id;
@@ -73,9 +73,9 @@ export class Sandbox {
     this.emitter.emit("message",m);return m;
   }
   listMessages(id:string){this.resource(id);return [...this.messages.values()].filter(m=>m.destinationId===id).sort((a,b)=>a.sequence-b.sequence)}
-  removeMessage(id:string,messageId:string){this.resource(id);const m=this.messages.get(messageId);if(!m||m.destinationId!==id)throw new Fault(404,"Message not found");this.messages.delete(messageId);this.log("message.deleted",id,messageId)}
+  removeMessage(id:string,messageId:string){this.resource(id);const m=this.messages.get(messageId);if(!m||m.destinationId!==id)throw new Fault(404,"Message not found","MESSAGE_NOT_FOUND");this.messages.delete(messageId);this.log("message.deleted",id,messageId)}
   clearMessages(id:string){for(const m of this.listMessages(id))this.removeMessage(id,m.id)}
-  newObserver(){if(this.observers.size>=config.maxObservers)throw new Fault(507,"Observer capacity reached");const id=randomUUID();this.observers.set(id,{id,expiresAt:Date.now()+config.observerTtl*1000,inboxes:new Set()});return this.snapshot(id)}
+  newObserver(){if(this.observers.size>=config.maxObservers)throw new Fault(507,"Observer capacity reached","CAPACITY_EXCEEDED");const id=randomUUID();this.observers.set(id,{id,expiresAt:Date.now()+config.observerTtl*1000,inboxes:new Set()});return this.snapshot(id)}
   observer(id:string){const o=this.observers.get(id);if(!o||o.expiresAt<=Date.now())throw new Fault(404,"Observer not found");o.expiresAt=Date.now()+3600000;return o}
   snapshot(id:string){const o=this.observer(id);return {observerId:id,inboxes:[...o.inboxes].flatMap(i=>{try{return [this.resource(i)]}catch{return []}})}}
   watch(id:string,resourceId:string){const o=this.observer(id),r=this.resource(resourceId);o.inboxes.add(r.id);return {recipient:r,messages:this.listMessages(r.id)}}

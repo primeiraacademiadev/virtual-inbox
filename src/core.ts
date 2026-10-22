@@ -52,7 +52,8 @@ export class Sandbox {
   }
   deliver(channel:Channel,from:string,to:string,body:string,subject?:string,html?:string,rawMime?:string){
     if(!from||!to||typeof body!=="string")throw new Fault(400,"From, to and body required");
-    if(body.length>262144||rawMime&&rawMime.length>1048576)throw new Fault(413,"Payload too large");
+    const maxMimeBytes=Number(process.env.MAX_SMTP_MESSAGE_BYTES||20*1024*1024);
+    if(body.length>Number(process.env.MAX_MESSAGE_BODY_CHARS||2*1024*1024)||rawMime&&Buffer.byteLength(rawMime,"utf8")>maxMimeBytes)throw new Fault(413,"Payload too large");
     const id=this.addressIds.get(this.key(channel,to));const r=id?this.resources.get(id):null;
     const reason=!r?"UNKNOWN_RECIPIENT":r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()?"EXPIRED_RECIPIENT":undefined;
     const destinationId=reason?this.defaults[channel]:r!.id;

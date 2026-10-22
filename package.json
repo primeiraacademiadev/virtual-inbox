@@ -8,20 +8,21 @@
     "build": "tsc",
     "test": "node --import tsx --test test/*.test.ts",
     "dev:console": "npm run dev --prefix web",
-    "build:console": "npm install --prefix web && npm run build --prefix web"
+    "build:console": "npm run build --prefix web",
+    "audit": "npm audit --audit-level=high && npm audit --prefix web --audit-level=high"
   },
   "dependencies": {
-    "smtp-server": "^3.14.0",
-    "postal-mime": "^2.4.0",
-    "nodemailer": "^10.1.0"
+    "smtp-server": "^3.19.23",
+    "postal-mime": "^4.0.11",
+    "nodemailer": "^10.2.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/smtp-server": "^3.5.10",
-    "typescript": "^5.8.0",
-    "tsx": "^4.20.0"
+    "@types/node": "^24.19.2",
+    "@types/smtp-server": "^3.5.13",
+    "typescript": "^7.0.2",
+    "tsx": "^4.23.15"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   }
 }

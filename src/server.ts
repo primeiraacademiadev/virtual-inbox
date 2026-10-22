@@ -64,7 +64,7 @@ function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data,(_key,value)=>_key==="content"&&Buffer.isBuffer(value)?undefined:value))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
-function publicMessage(m:import("./core.js").Message){const {attachments=[],...other}=m;return {...other,attachments:attachments.map(({id,filename,contentType,size})=>({id,filename,contentType,size}))}}
+function publicMessage(m:import("./core.js").Message){const {attachments=[],rawMime:_rawMime,...other}=m;return {...other,attachments:attachments.map(({id,filename,contentType,size})=>({id,filename,contentType,size}))}}
 function sse(res:ServerResponse,event:string,data:unknown,id?:string){if(res.writableEnded)return;res.write((id?"id: "+id+"\n":"")+"event: "+event+"\n"+"data: "+JSON.stringify(data)+"\n\n")}
 function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const o=observerId?sandbox.snapshot(observerId):sandbox.newObserver();

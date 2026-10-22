@@ -56,7 +56,7 @@ export class Sandbox {
   deliver(channel:Channel,from:string,to:string,body:string,subject?:string,html?:string,rawMime?:string,attachments:Attachment[]=[]){
     if(!from||!to||typeof body!=="string")throw new Fault(400,"From, to and body required");
     const maxMimeBytes=config.smtpBytes;
-    if(body.length>config.bodyChars||rawMime&&Buffer.byteLength(rawMime,"utf8")>maxMimeBytes)throw new Fault(413,"Payload too large");
+    if(body.length>config.bodyChars||rawMime&&Buffer.from(rawMime,"base64").length>maxMimeBytes)throw new Fault(413,"Payload too large");
     if(channel==="sms"&&Buffer.byteLength(body)>config.smsBytes)throw new Fault(413,"SMS exceeds maximum size");
     if(attachments.some(a=>a.size>config.attachmentBytes))throw new Fault(413,"Attachment too large");
     if(this.messages.size>=config.messages)throw new Fault(507,"Message capacity reached");

@@ -7,9 +7,11 @@ import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, ra
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
-import { Sandbox, Fault, classify, type Channel, type Event } from "./core.js";
+import { Sandbox, Fault, classify, type Channel, type Event, type Attachment } from "./core.js";
+import {config} from "./config.js";
+import {randomBytes} from "node:crypto";
 
-export const sandbox = new Sandbox(Number(process.env.LOG_CAPACITY || 2000));
+export const sandbox = new Sandbox(config.logs);
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
 const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
 const demoPort=Number(process.env.DEMO_PORT || 3001),demoHttpsPort=Number(process.env.DEMO_HTTPS_PORT || 3444);
@@ -24,7 +26,7 @@ if(tlsIdentity){
 const addressHost=process.env.PUBLIC_HOST||"localhost";
 const apiHost=process.env.HOST||"127.0.0.1";
 const smtpHost=process.env.SMTP_HOST||"127.0.0.1";
-const smtpMessageLimit=Number(process.env.MAX_SMTP_MESSAGE_BYTES||20*1024*1024);
+const smtpMessageLimit=config.smtpBytes;
 const frontendRoot=resolve(process.cwd(),"web/dist");
 function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]) {
   if(!existsSync(join(frontendRoot,"index.html")))return false;
@@ -39,7 +41,7 @@ function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]
 }
 
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data))}
-async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>1_100_000)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
+async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
 function sse(res:ServerResponse,event:string,data:unknown,id?:string){if(res.writableEnded)return;res.write((id?"id: "+id+"\n":"")+"event: "+event+"\n"+"data: "+JSON.stringify(data)+"\n\n")}
 function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
@@ -115,7 +117,8 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    const recipient=sandbox.resource(path[1]);if(recipient.channel!=="email")throw new Fault(400,"Not an email inbox");
    const b=await body(req);
    const client=nodemailer.createTransport({host:"127.0.0.1",port:smtpPort,secure:false,ignoreTLS:true,disableFileAccess:true,disableUrlAccess:true});
-   await client.sendMail({from:b.from||"demo@sandbox.test",to:recipient.address,subject:b.subject||"Demo",text:b.body||""});
+   const attachments=(Array.isArray(b.attachments)?b.attachments:[]).map((a:any)=>{if(typeof a.filename!=="string"||typeof a.contentBase64!=="string"||!/^[a-zA-Z0-9+/]*={0,2}$/.test(a.contentBase64))throw new Fault(400,"Invalid attachment");const bytes=Buffer.from(a.contentBase64,"base64");if(bytes.length>config.attachmentBytes)throw new Fault(413,"Attachment too large");return {filename:a.filename,content:bytes,contentType:a.contentType||"application/octet-stream"}});
+   await client.sendMail({from:b.from||"demo@sandbox.test",to:recipient.address,subject:b.subject||"Demo",text:b.body||"",attachments});
    return json(res,202,{accepted:true});
  }
  const channel=channels[path[0]];
@@ -124,6 +127,11 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
   if(!id){if(method==="GET")return json(res,200,sandbox.list(channel));if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId))}}
   if(id&&path.length===2){if(method==="GET")return json(res,200,sandbox.resource(id));if(method==="DELETE"){sandbox.deleteResource(id);return json(res,204,{})}}
   if(id&&path[2]==="messages"){
+    if(path[3]&&path[4]==="attachments"&&path[5]&&method==="GET"){
+      const m=sandbox.listMessages(id).find(x=>x.id===path[3]);const attachment=m?.attachments?.find(a=>a.id===path[5]);
+      if(!attachment)throw new Fault(404,"Attachment not found");
+      res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename="download"`});return res.end(attachment.content);
+    }
     if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,m)}
     if(path[3]&&method==="DELETE"){sandbox.removeMessage(id,path[3]);return json(res,204,{})}
     if(method==="GET")return json(res,200,sandbox.listMessages(id));
@@ -152,7 +160,8 @@ const smtpOptions={
    for await(const chunk of stream){const buf=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=buf.length;if(size>smtpMessageLimit)throw new Fault(413,"MIME too large");chunks.push(buf)}
    const raw=Buffer.concat(chunks);const parsed=await new PostalMime().parse(raw);
    const sender=session.envelope.mailFrom && typeof session.envelope.mailFrom!=="boolean"?session.envelope.mailFrom.address:"unknown@sandbox.test";
-   for(const recipient of session.envelope.rcptTo)sandbox.deliver("email",sender,recipient.address,parsed.text||"",parsed.subject,parsed.html||undefined,raw.toString("utf-8"));
+   const attachments:Attachment[]=(parsed.attachments||[]).map(a=>({id:randomUUID(),filename:a.filename||"attachment",contentType:a.mimeType||"application/octet-stream",size:a.content.length,content:Buffer.from(a.content)}));
+   for(const recipient of session.envelope.rcptTo)sandbox.deliver("email",sender,recipient.address,parsed.text||"",parsed.subject,parsed.html||undefined,raw.toString("base64"),attachments);
    callback(null,"Accepted");
  })().catch(e=>callback(e instanceof Error?e:new Error(String(e))));
 }};

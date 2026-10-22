@@ -84,7 +84,12 @@ function errorCode(status:number,message:string):string{
  if(status===400)return "INVALID_REQUEST";
  return "INTERNAL_ERROR";
 }
-const allowedOrigins=new Set(["http://127.0.0.1:5173","http://localhost:5173","https://127.0.0.1:5174","https://localhost:5174",...(process.env.HTTP_ALLOWED_ORIGINS||"").split(",")].map(x=>x.trim()).filter(Boolean));
+const trustedHosts=[addressHost,apiHost,"localhost","127.0.0.1","::1"];
+const allowedOrigins=new Set([
+ ...trustedHosts.flatMap(host=>["http://"+host+":"+port,"https://"+host+":"+httpsPort,"http://"+host+":"+demoPort,"https://"+host+":"+demoHttpsPort]),
+ "http://127.0.0.1:5173","http://localhost:5173","https://127.0.0.1:5174","https://localhost:5174",
+ ...(process.env.HTTP_ALLOWED_ORIGINS||"").split(",")
+].map(x=>x.trim()).filter(Boolean));
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8",});res.end(JSON.stringify(data,(_key,value)=>_key==="content"&&Buffer.isBuffer(value)?undefined:value))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};

@@ -57,3 +57,7 @@ The public CA may be downloaded from the console under **Ligações e TLS**, or 
 Network host and port fields can be edited in **Ligações e TLS** after setting `ADMIN_TOKEN`. `PUT /admin/network` writes a restricted-permission JSON file configured through `NETWORK_SETTINGS_FILE` (default `./data/network-settings.json`). Values are applied after restarting the Node process. A changed public hostname must also be present in the certificate SANs, otherwise TLS verification will fail.
 
 No self-service PKCS#12 parser has been implemented: external identities are PEM certificate/key pairs. TLS off mode is available with `TLS_MODE=off` only for trusted local testing.
+
+## Atomic managed identity rotation
+
+Certificate import writes a single JSON PEM identity at `TLS_MANAGED_IDENTITY_FILE` (default `./data/certificates/imported-identity.json`), with mode 0600, a temporary file and an atomic rename. The previous identity is copied to `.previous` for local manual recovery. On restart the managed identity takes precedence over auto-generated or external PEM files. Do not expose or commit either JSON file: each contains the **private** server key. The import endpoint does not return the key. Rotations are not applied to open sockets until restart.

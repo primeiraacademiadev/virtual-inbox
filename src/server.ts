@@ -190,7 +190,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  const channel=channels[path[0]];
  if(channel){
   const id=path[1];
-  if(!id){if(method==="GET")return json(res,200,sandbox.list(channel));if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId,b.generation))}}
+  if(!id){if(method==="GET"){const address=new URL(req.url||"/","http://localhost").searchParams.get("address");if(address){let match;try{match=sandbox.find(channel,address)}catch{}return json(res,200,match?[match]:[])}return json(res,200,sandbox.list(channel))}if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId,b.generation))}}
   if(id&&path.length===2){if(method==="GET")return json(res,200,sandbox.resource(id));if(method==="DELETE"){sandbox.deleteResource(id);return json(res,204,{})}}
   if(id&&path[2]==="messages"){
     if(path[3]&&path[4]==="attachments"&&path[5]&&method==="GET"){

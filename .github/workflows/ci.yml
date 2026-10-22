@@ -3,15 +3,27 @@ on:
   push:
   pull_request:
 jobs:
-  test:
+  build-test-audit:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['24', '26']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: npm install
-      - run: npm test
-      - run: npm run build
-      - run: npm install --prefix web
-      - run: npm run build:console
+          node-version: ${{ matrix.node }}
+      - name: Install backend
+        run: npm install --package-lock=true
+      - name: Backend tests
+        run: npm test
+      - name: Backend build
+        run: npm run build
+      - name: Backend dependency audit
+        run: npm audit --audit-level=high
+      - name: Install console
+        run: npm install --prefix web --package-lock=true
+      - name: Console build
+        run: npm run build:console
+      - name: Console dependency audit
+        run: npm audit --prefix web --audit-level=high

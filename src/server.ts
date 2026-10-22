@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync, copyFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve, join, extname, sep, dirname } from "node:path";
 import { TLSSocket } from "node:tls";
@@ -138,7 +138,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    mkdirSync(dirname(managedIdentityFile),{recursive:true,mode:0o700});
    const versioned=managedIdentityFile+"."+randomUUID()+".tmp";
    writeFileSync(versioned,JSON.stringify({cert:payload.cert,key:payload.key}),{mode:0o600,flag:"wx"});
-   if(existsSync(managedIdentityFile))renameSync(managedIdentityFile,managedIdentityFile+".previous");
+   if(existsSync(managedIdentityFile))copyFileSync(managedIdentityFile,managedIdentityFile+".previous");
    renameSync(versioned,managedIdentityFile);
    sandbox.log("tls.identity.uploaded",undefined,undefined,{subject:crt.subject,validTo:crt.validTo});
    return json(res,202,{accepted:true,restartRequired:true,subject:crt.subject,validTo:crt.validTo});

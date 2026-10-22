@@ -23,3 +23,16 @@
 .navWithTools:hover .hoverTools,.navWithTools:focus-within .hoverTools{display:flex}
 .sidebar.closed .inboxGroup{overflow:visible}
 @media(max-width:650px){.composeOverlay{padding:6px}.composeOverlay .compose{width:100%}}
+
+/* Main navigation and Markdown knowledge pages */
+.topNav{display:flex;gap:7px;padding:7px 12px;border-bottom:1px solid #34435d;flex-wrap:wrap}
+.topNav button{font-size:13px;padding:7px 12px}
+.information{padding:20px 24px;overflow:auto;min-height:0;flex:1;max-width:1000px;width:100%;margin:0 auto}
+.information table{width:100%;border-collapse:collapse;margin:16px 0}
+.information th,.information td{border-bottom:1px solid #34435d;padding:10px;text-align:left}
+.information a{color:#85cbfb;text-decoration:underline}
+.docMarkdown{line-height:1.65;overflow-wrap:anywhere}
+.docMarkdown pre{background:#1c2b40;padding:14px;border-radius:8px;overflow:auto}
+.docMarkdown code{font-family:monospace}
+.docMarkdown h2,.docMarkdown h3{margin-top:1.6em}
+@media(max-width:650px){.information{padding:12px}.topNav{gap:3px;padding:6px}.topNav button{padding:6px}}

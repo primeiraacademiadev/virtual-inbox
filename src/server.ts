@@ -271,6 +271,22 @@ if(tlsIdentity){
   if(smtps)refresh(smtps);
  });
 }
+if(tlsMode==="external"&&tlsCertPath&&tlsKeyPath){
+ let previousFingerprint=certificateManager.info()?.fingerprint256;
+ const externalRefresh=setInterval(()=>{
+  if(certificateManager.activeSource!=="external")return;
+  try{
+   const cert=readFileSync(tlsCertPath),key=readFileSync(tlsKeyPath);
+   const fingerprint=new X509Certificate(cert).fingerprint256;
+   if(fingerprint===previousFingerprint)return;
+   certificateManager.useExternal(cert,key);
+   tlsIdentity=certificateManager.identity;
+   previousFingerprint=fingerprint;
+   sandbox.log("tls.external.refreshed");
+  }catch(error){console.error("External TLS certificate refresh rejected:",error)}
+ },10000);
+ externalRefresh.unref();
+}
 const clean=setInterval(()=>sandbox.cleanup(),1000);clean.unref();
 http.listen(port,apiHost,()=>console.log("REST listening on "+port));
 const https=tlsIdentity?createHttpsServer(tlsIdentity,(req,res)=>{void handleRequest(req,res)}):null;

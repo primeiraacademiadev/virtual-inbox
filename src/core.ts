@@ -8,7 +8,7 @@ export type Recipient = { id: string; channel: Channel; address: string; created
 export type Attachment = { id:string; filename:string; contentType:string; size:number; content:Buffer };
 export type Message = { id: string; sequence: number; channel: Channel; destinationId: string; from: string; originalRecipient: string; subject?: string; body: string; html?: string; rawMime?: string; attachments?:Attachment[]; receivedAt: string; captureReason?: string };
 export type Event = { id: string; type: string; at: string; resourceId?: string; messageId?: string; data?: Record<string,unknown> };
-export const classify = (s:string): Channel | null => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?"email":/^\+[1-9]\d{6,14}$/.test(s)?"sms":null;
+export const classify = (s:string): Channel | null => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?"email":/^(?:\+[1-9]\d{6,14}|\d{9,15})$/.test(s)?"sms":null;
 export class Fault extends Error { constructor(public status:number,message:string,public code?:string){super(message)} }
 export class Sandbox {
   readonly runId=randomUUID();

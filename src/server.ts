@@ -6,6 +6,7 @@ import { TLSSocket } from "node:tls";
 import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
+import {normalizeMimeAttachments,sanitizeDownloadName} from "./mime/attachments.js";
 import nodemailer from "nodemailer";
 import { Sandbox, Fault, classify, type Channel, type Event, type Attachment } from "./core.js";
 import {config} from "./config.js";
@@ -205,7 +206,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
     if(path[3]&&path[4]==="attachments"&&path[5]&&method==="GET"){
       const m=sandbox.listMessages(id).find(x=>x.id===path[3]);const attachment=m?.attachments?.find(a=>a.id===path[5]);
       if(!attachment)throw new Fault(404,"Attachment not found");
-      res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename*=UTF-8\'\'${encodeURIComponent(attachment.filename.replace(/[\r\n]/g,""))}`});return res.end(attachment.content);
+      res.writeHead(200,{"Content-Type":attachment.contentType,"Content-Length":attachment.size,"X-Content-Type-Options":"nosniff","Content-Disposition":`attachment; filename*=UTF-8\'\'${encodeURIComponent(sanitizeDownloadName(attachment.filename))}`});return res.end(attachment.content);
     }
     if(path[3]&&method==="GET"){const m=sandbox.listMessages(id).find(m=>m.id===path[3]);if(!m)throw new Fault(404,"Message not found");return json(res,200,publicMessage(m))}
     if(path[3]&&method==="DELETE"){sandbox.removeMessage(id,path[3]);return json(res,204,{})}
@@ -236,7 +237,7 @@ const smtpOptions={
    for await(const chunk of stream){const buf=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=buf.length;if(size>smtpMessageLimit)throw new Fault(413,"MIME too large");chunks.push(buf)}
    const raw=Buffer.concat(chunks);const parsed=await new PostalMime().parse(raw);
    const sender=session.envelope.mailFrom && typeof session.envelope.mailFrom!=="boolean"?session.envelope.mailFrom.address:"unknown@sandbox.test";
-   const attachments:Attachment[]=(parsed.attachments||[]).map(a=>({id:randomUUID(),filename:a.filename||"attachment",contentType:a.mimeType||"application/octet-stream",size:Buffer.from(a.content).byteLength,content:Buffer.from(a.content)}));
+   const attachments:Attachment[]=normalizeMimeAttachments(parsed.attachments||[]);
    for(const recipient of session.envelope.rcptTo)sandbox.deliver("email",sender,recipient.address,parsed.text||"",parsed.subject,parsed.html||undefined,raw.toString("base64"),attachments);
    callback(null,"Accepted");
  })().catch(e=>callback(e instanceof Error?e:new Error(String(e))));

@@ -69,3 +69,10 @@ The wait returns the message as JSON when found or HTTP 204 on timeout. Reading 
 ## Status
 
 Early MVP implementation. Not a public SMTP relay or a real SMS provider. Data is ephemeral; restarting the process deletes inboxes, observer sessions, messages and logs. Review [known limitations](docs/development.md) before exposing it outside localhost.
+
+
+## TLS and built-in documentation
+
+The server can terminate TLS itself for HTTPS (default port **3443**), SMTP STARTTLS (default port **2525**), and implicit SMTPS (default port **2465**), using the same PEM identity. Set both `TLS_CERT_FILE` and `TLS_KEY_FILE`; see [TLS setup](docs/tls.md).
+
+The console includes **Ligações e TLS**, **Documentação**, and **API** pages. The API page excludes demonstration-only endpoints; it is a user-facing endpoint reference. The TLS page offers download of the **public certificate only**. Web upload or export of a private key is deliberately unavailable until authenticated administrator controls exist.

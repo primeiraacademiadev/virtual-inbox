@@ -1,7 +1,7 @@
 import forge from "node-forge";
 import {existsSync,mkdirSync,readFileSync,writeFileSync,chmodSync} from "node:fs";
 import {join} from "node:path";
-import {X509Certificate,randomBytes} from "node:crypto";
+import {X509Certificate,randomBytes,createHash} from "node:crypto";
 import {isIP} from "node:net";
 
 function newCertificate(commonName:string,days:number){
@@ -30,7 +30,9 @@ export function ensureLocalTls(directory:string,namesText:string){
   save(caKey,forge.pki.privateKeyToPem(keys.privateKey),0o600);
   save(caCert,forge.pki.certificateToPem(cert),0o644);
  }
- const renew=!existsSync(serverKey)||!existsSync(serverCert)||Date.parse(new X509Certificate(readFileSync(serverCert)).validTo)<Date.now()+7*86_400_000;
+ const fingerprintFile=join(directory,"server-names.sha256");
+ const namesHash=createHash("sha256").update([...new Set(names)].sort().join(",")).digest("hex");
+ const renew=!existsSync(serverKey)||!existsSync(serverCert)||!existsSync(fingerprintFile)||readFileSync(fingerprintFile,"utf8")!==namesHash||Date.parse(new X509Certificate(readFileSync(serverCert)).validTo)<Date.now()+7*86_400_000;
  if(renew){
   const ca=forge.pki.certificateFromPem(readFileSync(caCert,"utf8"));
   const caPrivate=forge.pki.privateKeyFromPem(readFileSync(caKey,"utf8"));
@@ -45,6 +47,7 @@ export function ensureLocalTls(directory:string,namesText:string){
   cert.sign(caPrivate,forge.md.sha256.create());
   save(serverKey,forge.pki.privateKeyToPem(keys.privateKey),0o600);
   save(serverCert,forge.pki.certificateToPem(cert),0o644);
+  save(fingerprintFile,namesHash,0o600);
  }
  return {cert:serverCert,key:serverKey,ca:caCert};
 }

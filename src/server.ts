@@ -127,10 +127,11 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  if(!isAllowedOrigin(req.headers.origin,req.headers.host,allowedOrigins))throw new Fault(403,"Origin not allowed");
  applyCors(req,res,allowedOrigins);
  const rawPath=new URL(req.url||"/","http://localhost").pathname.split("/").filter(Boolean),method=req.method||"GET";
- const path=!demoOnly&&rawPath[0]==="api"?rawPath.slice(1):rawPath;
+ const sameOriginDemo=!demoOnly&&rawPath[0]==="demo";
+ const path=(!demoOnly&&["api","demo"].includes(rawPath[0]))?rawPath.slice(1):rawPath;
  if(method==="OPTIONS")return json(res,204,{});
  const demoEndpoint=(path[0]==="mailboxes"&&!!path[1]&&path[2]==="demo-send")||(path[0]==="sms"&&path[1]==="messages");
- if(demoEndpoint!==demoOnly){if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;throw new Fault(404,"Route not available on this listener")}
+ if(demoEndpoint!==(demoOnly||sameOriginDemo)){if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&rawPath[0]!=="demo"&&serveFrontend(req,res,rawPath))return;throw new Fault(404,"Route not available on this listener")}
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
  if(path[0]==="identity-generation"&&path[1]==="options"&&method==="GET")return json(res,200,generationOptions());
  if(path[0]==="admin"&&path[1]==="network"&&method==="PUT"){

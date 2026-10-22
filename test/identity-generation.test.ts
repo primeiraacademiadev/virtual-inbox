@@ -35,3 +35,18 @@ test("manual identifier bypasses generator and defaults remain discoverable",()=
  assert.equal(r.address,"manual@example.test");
  assert.equal(generationOptions().defaults.locale,process.env.IDENTITY_DEFAULT_LOCALE||"pt-PT");
 });
+
+test("generated collision is retried and new identifier is reserved atomically",()=>{
+ let attempts=0;
+ const sandbox=new Sandbox(10,()=>++attempts<3?"same.person@sandbox.test":"second.person@sandbox.test");
+ const first=sandbox.create("email");
+ const second=sandbox.create("email");
+ assert.equal(first.address,"same.person@sandbox.test");
+ assert.equal(second.address,"second.person@sandbox.test");
+ assert.equal(attempts,3);
+});
+test("exhausted collision retries return a stable error code",()=>{
+ const sandbox=new Sandbox(10,()=>"always.same@sandbox.test");
+ sandbox.create("email");
+ assert.throws(()=>sandbox.create("email"),(error:unknown)=>!!error&&typeof error==="object"&&"code" in error&&error.code==="IDENTITY_GENERATION_EXHAUSTED");
+});

@@ -1,4 +1,4 @@
-import {X509Certificate,createPrivateKey,createPublicKey} from "node:crypto";
+import {X509Certificate,createPrivateKey,createPublicKey,randomUUID} from "node:crypto";
 import {createSecureContext} from "node:tls";
 import {readFileSync,writeFileSync,renameSync,copyFileSync,existsSync,mkdirSync,rmSync} from "node:fs";
 import {dirname} from "node:path";
@@ -40,14 +40,17 @@ export class CertificateManager{
  activate(cert:string,key:string){
   const next=validateIdentity(cert,key);
   mkdirSync(dirname(this.uploadPath),{recursive:true,mode:0o700});
-  const temporary=this.uploadPath+"."+Date.now()+".tmp";
+  const temporary=this.uploadPath+"."+randomUUID()+".tmp";
   writeFileSync(temporary,JSON.stringify({cert,key}),{mode:0o600,flag:"wx"});
+  const previous=this.active,previousSource=this.source;
+  let applied=false;
   try{
-   const info=this.apply(next,"uploaded");
+   const info=this.apply(next,"uploaded");applied=true;
    if(existsSync(this.uploadPath))copyFileSync(this.uploadPath,this.uploadPath+".previous");
    renameSync(temporary,this.uploadPath);
    return info;
   }catch(error){
+   if(applied&&previous)try{this.apply(previous,previousSource)}catch{}
    try{rmSync(temporary,{force:true})}catch{}
    throw error;
   }

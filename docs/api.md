@@ -60,3 +60,15 @@ Observer sessions expire after approximately one hour without activity; reconnec
 Observer SSE emits `log` for global observability and `inbox.notification` for message changes on observed inboxes. Notifications carry message ID and metadata, not the full message body. Fetch the message via REST.
 
 HTTP API is intentionally unauthenticated and should be used only on trusted networks.
+
+## Attachments
+
+Messages received over SMTP expose `attachments` metadata in the API JSON: `[{id,filename,contentType,size}]`. The content is held as binary in memory and is **not** serialized into the message JSON. Download each attachment via `GET /mailboxes/:id/messages/:messageId/attachments/:attachmentId`. Attachments expire and are deleted with the inbox. Raw MIME is retained internally as base64.
+
+The demo mail endpoint (on the separate demo listener only) accepts an `attachments` array with `filename`, `contentType`, and `contentBase64`.
+
+## Connection settings and certificates
+
+`GET /connection-info` returns host names, listener ports, certificate metadata, and effective network settings. `GET /tls/certificate.pem` downloads the server public certificate; when `TLS_MODE=auto`, `GET /tls/ca.pem` downloads the local CA public certificate. Neither endpoint ever returns private keys.
+
+Administrative HTTPS-only endpoints (require `Authorization: Bearer <ADMIN_TOKEN>`): `PUT /admin/tls` to import a PEM pair; `PUT /admin/network` to persist host and port settings. Both require server restart to activate.

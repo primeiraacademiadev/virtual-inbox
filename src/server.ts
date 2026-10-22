@@ -9,6 +9,7 @@ import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { Sandbox, Fault, classify, type Channel, type Event, type Attachment } from "./core.js";
 import {config} from "./config.js";
+import {generationOptions} from "./identity-generation/generator.js";
 import {ensureLocalTls} from "./tls/local-certificates.js";
 
 export const sandbox = new Sandbox(config.logs);
@@ -127,6 +128,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  const demoEndpoint=(path[0]==="mailboxes"&&!!path[1]&&path[2]==="demo-send")||(path[0]==="sms"&&path[1]==="messages");
  if(demoEndpoint!==demoOnly){if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;throw new Fault(404,"Route not available on this listener")}
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
+ if(path[0]==="identity-generation"&&path[1]==="options"&&method==="GET")return json(res,200,generationOptions());
  if(path[0]==="admin"&&path[1]==="network"&&method==="PUT"){
   if(!adminAllowed(req))throw new Fault(403,"Administrative HTTPS token required");
   const values=await body(req);
@@ -197,7 +199,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  const channel=channels[path[0]];
  if(channel){
   const id=path[1];
-  if(!id){if(method==="GET")return json(res,200,sandbox.list(channel));if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId))}}
+  if(!id){if(method==="GET")return json(res,200,sandbox.list(channel));if(method==="POST"){const b=await body(req);return json(res,201,sandbox.create(channel,channel==="email"?b.address:b.phoneNumber,b.ttlSeconds,b.observerId,b.generation))}}
   if(id&&path.length===2){if(method==="GET")return json(res,200,sandbox.resource(id));if(method==="DELETE"){sandbox.deleteResource(id);return json(res,204,{})}}
   if(id&&path[2]==="messages"){
     if(path[3]&&path[4]==="attachments"&&path[5]&&method==="GET"){

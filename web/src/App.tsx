@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
 type Page="workspace"|"connections"|"documentation"|"api";
-async function postDemo(path:string,data:unknown){const endpoint=location.port==="5173"?"/demo"+path:(location.protocol==="https:"?"https://"+location.hostname+":3444":"http://"+location.hostname+":3001")+path;
+async function postDemo(path:string,data:unknown,ports?:{demoPort?:number;demoHttpsPort?:number}){const endpoint=location.port==="5173"?"/demo"+path:(location.protocol==="https:"?"https://"+location.hostname+":"+(ports?.demoHttpsPort||3444):"http://"+location.hostname+":"+(ports?.demoPort||3001))+path;
  const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!response.ok)throw new Error("Demo send failed: "+response.status);return response.json()}
 const base=(c:Channel)=>c==="email"?"/mailboxes":"/phone-numbers";
 export default function App(){
@@ -61,7 +61,7 @@ export default function App(){
  const focus=(id:string)=>{setSelected(id);setView(v=>v==="inbox"&&id===selected?"split":"inbox");setCompose(false);setDetail(null)};
  async function addExisting(){if(!observer)return;const type=classify(identifier.trim());if(!type){setError("Formato inválido.");return}try{const all=await request<Recipient[]>(base(type));const r=all.find(x=>x.address.toLowerCase()===identifier.trim().toLowerCase());if(!r){setMissing(true);return}await post("/observers/"+observer+"/inboxes",{inboxId:r.id});await syncObserver(observer);focus(r.id);setModal(null)}catch(e){setError(String(e))}}
  async function create(){if(!observer||!modal)return;const c=identifier.trim()?classify(identifier.trim()):modal;if(!c)return;try{const r=await post<Recipient>(base(c),{...(identifier.trim()?{[c==="email"?"address":"phoneNumber"]:identifier.trim()}:{}),ttlSeconds:Number(ttl),observerId:observer});await syncObserver(observer);setSelected(r.id);setView("inbox");setModal(null);setMissing(false);setIdentifier("");setCompose(false)}catch(e){setError(String(e))}}
- async function send(){if(!active)return;try{if(active.channel==="sms")await postDemo("/sms/messages",{from:sender,to:active.address,body});else await postDemo("/mailboxes/"+active.id+"/demo-send",{from:sender,subject,body});await refresh(active.id,active.channel);setCompose(false)}catch(e){setError(String(e))}}
+ async function send(){if(!active)return;try{if(active.channel==="sms")await postDemo("/sms/messages",{from:sender,to:active.address,body},connection?.http);else await postDemo("/mailboxes/"+active.id+"/demo-send",{from:sender,subject,body},connection?.http);await refresh(active.id,active.channel);setCompose(false)}catch(e){setError(String(e))}}
  async function deleteMessage(m:Message){if(!active)return;try{await del(base(active.channel)+"/"+active.id+"/messages/"+m.id);setDetail(null);await refresh(active.id,active.channel)}catch(e){setError(String(e))}}
  async function removeInbox(){if(!active||!observer)return;try{if(!active.system&&confirm("Eliminar definitivamente esta inbox e as mensagens?"))await del(base(active.channel)+"/"+active.id);else await del("/observers/"+observer+"/inboxes/"+active.id);await syncObserver(observer);setSelected(null);setView("logs")}catch(e){setError(String(e))}}
  async function importCertificate(){

@@ -212,7 +212,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  }
  if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;
  throw new Fault(404,"Route not found");
- }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message,errorCode:errorCode(fault.status,fault.message),errorParams:{}})}
+ }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message,errorCode:fault.code||errorCode(fault.status,fault.message),errorParams:{}})}
 }
 const http=createServer((req,res)=>{void handleRequest(req,res)});
 const demo=createServer((req,res)=>{void handleRequest(req,res,true)});

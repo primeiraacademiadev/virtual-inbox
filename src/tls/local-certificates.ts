@@ -31,7 +31,7 @@ export function ensureLocalTls(directory:string,namesText:string){
   save(caCert,forge.pki.certificateToPem(cert),0o644);
  }
  const fingerprintFile=join(directory,"server-names.sha256");
- const namesHash=createHash("sha256").update([...new Set(names)].sort().join(",")).digest("hex");
+ const namesHash=createHash("sha256").update([...new Set(names)].sort((a,b)=>a.localeCompare(b)).join(",")).digest("hex");
  const renew=!existsSync(serverKey)||!existsSync(serverCert)||!existsSync(fingerprintFile)||readFileSync(fingerprintFile,"utf8")!==namesHash||Date.parse(new X509Certificate(readFileSync(serverCert)).validTo)<Date.now()+7*86_400_000;
  if(renew){
   const ca=forge.pki.certificateFromPem(readFileSync(caCert,"utf8"));

@@ -12,7 +12,8 @@
     "audit": "npm audit --audit-level=high && npm audit --prefix web --audit-level=high",
     "dev:console:https": "npm run dev:https --prefix web",
     "build:server": "tsc",
-    "predev": "npm run build:console"
+    "predev": "npm run build:console",
+    "test:coverage": "c8 --reporter=lcov --reporter=text node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "smtp-server": "^3.19.23",
@@ -25,7 +26,8 @@
     "@types/smtp-server": "^3.5.13",
     "typescript": "^6.0.0",
     "tsx": "^4.23.15",
-    "@types/node-forge": "^1.3.11"
+    "@types/node-forge": "^1.3.11",
+    "c8": "^10.1.3"
   },
   "engines": {
     "node": ">=24"

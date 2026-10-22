@@ -2,7 +2,7 @@ import {randomInt,randomUUID} from "node:crypto";
 import pt from "./catalogs/pt-PT.json" with {type:"json"};
 import en from "./catalogs/en-US.json" with {type:"json"};
 import fr from "./catalogs/fr-FR.json" with {type:"json"};
-import {Fault,type Channel} from "../core.js";
+import {Fault,type Channel} from "../domain-types.js";
 
 export const locales=["pt-PT","en-US","fr-FR"] as const;
 export type IdentityLocale=typeof locales[number];

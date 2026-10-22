@@ -14,16 +14,55 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Install backend
-        run: npm install --package-lock=true
-      - name: Backend tests
+        run: npm install --no-fund
+      - name: Install console
+        run: npm install --prefix web --no-fund
+      - name: Tests
         run: npm test
-      - name: Backend build
+      - name: Integrated backend and console build
         run: npm run build
       - name: Backend dependency audit
         run: npm audit --audit-level=high
-      - name: Install console
-        run: npm install --prefix web --package-lock=true
-      - name: Console build
-        run: npm run build:console
       - name: Console dependency audit
         run: npm audit --prefix web --audit-level=high
+
+  sonar:
+    name: SonarQube analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        with:
+          node-version: '26'
+      - name: Install dependencies
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        run: |
+          npm install --no-fund
+          npm install --prefix web --no-fund
+      - name: Run tests with LCOV
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        run: npm run test:coverage
+      - name: SonarQube scan
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: SonarQube Quality Gate
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Missing SonarQube credentials
+        if: env.SONAR_HOST_URL == '' || env.SONAR_TOKEN == ''
+        run: echo "::notice::SonarQube scan skipped. Add SONAR_HOST_URL and SONAR_TOKEN repository secrets."

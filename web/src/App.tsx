@@ -1,3 +1,4 @@
+import {MarkdownView} from "./components/documentation/MarkdownView";
 import {eventLabel,captureReasonLabel} from "./i18n/domain";
 import {localizeError} from "./i18n/errors";
 import {useI18n} from "./i18n/context";
@@ -5,8 +6,6 @@ import {LanguageSelector} from "./i18n/LanguageSelector";
 import {CopyButton} from "./components/clipboard/CopyButton";
 import {CopyMenu} from "./components/clipboard/CopyMenu";
 import {DocumentSearch,type SearchDestination} from "./search/DocumentSearch";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {useCallback,useEffect,useMemo,useState,useRef} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
@@ -17,6 +16,7 @@ const base=(c:Channel)=>c==="email"?"/mailboxes":"/phone-numbers";
 export default function App(){
  const {locale,t,formatDate,formatNumber}=useI18n();
  const [page,setPage]=useState<Page>("workspace");
+ const [menuOpen,setMenuOpen]=useState(false);
  const [connection,setConnection]=useState<any>(null);
  const [adminToken,setAdminToken]=useState("");
  const [tlsCertFile,setTlsCertFile]=useState<File|null>(null);
@@ -57,6 +57,8 @@ export default function App(){
  useEffect(()=>{const controller=new AbortController();setApiText("");fetch("/wiki/"+locale+"/api.md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setApiText(text)}).catch(()=>{if(!controller.signal.aborted)setApiText(t("unavailable"))});return()=>controller.abort()},[locale,t]);
  useEffect(()=>{const controller=new AbortController();setDocText("");fetch("/wiki/"+locale+"/"+docPage+".md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setDocText(text)}).catch(()=>{if(!controller.signal.aborted)setDocText(t("unavailable"))});return()=>controller.abort()},[docPage,locale,t]);
  useEffect(()=>{if(!jump||page!=="documentation"&&page!=="api")return;const timeout=setTimeout(()=>{const root=document.querySelector(".information .docMarkdown");const heading=root?.querySelectorAll("h1,h2,h3")[Math.max(0,jump.ordinal-1)] as HTMLElement|undefined;heading?.scrollIntoView({behavior:"smooth",block:"start"});if(heading){heading.classList.add("searchTarget");setTimeout(()=>heading.classList.remove("searchTarget"),1600)}setJump(null)},130);return()=>clearTimeout(timeout)},[jump,docText,apiText,page]);
+ function openPage(next:Page){setPage(next);setMenuOpen(false)}
+ function openDocument(id:string){if(id==="api"){openPage("api")}else{setDocPage(id);openPage("documentation")}}
  function navigateSearch(target:SearchDestination){setJump(target);if(target.document==="api")setPage("api");else{setDocPage(target.document);setPage("documentation")}}
  const active=inboxes.find(x=>x.id===selected)||null;
  const refresh=useCallback(async(id:string,c:Channel)=>{try{const m=await request<Message[]>(base(c)+"/"+id+"/messages");setMessages(p=>({...p,[id]:m}))}catch{}},[]);
@@ -105,10 +107,9 @@ export default function App(){
  }
  const filteredLogs=useMemo(()=>logs.filter(x=>JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),[logs,logFilter]);
  return <div className="shell">
- <header><button aria-label={t("toggleMenu")} onClick={()=>setCollapsed(v=>!v)}>☰</button><strong>✉ Virtual Inbox</strong><div className="spacer"/><span className="tiny">{connected?t("connected"):t("disconnected")}</span><LanguageSelector/><span className="tiny">{t("session")} {observer.slice(0,8)||t("connecting")}</span><CopyButton value={observer} label={t("copySession")}/></header>
- <nav className="topNav"><button onClick={()=>setPage("workspace")}>{t("inboxes")}</button><button onClick={()=>setPage("connections")}>{t("tls")}</button><button onClick={()=>setPage("documentation")}>{t("documentation")}</button><button onClick={()=>setPage("api")}>{t("api")}</button></nav>
+ <header><div className="appNavigation"><button aria-label={t("toggleMenu")} aria-expanded={menuOpen} aria-controls="primary-nav-menu" onClick={()=>setMenuOpen(v=>!v)}>☰</button>{menuOpen&&<nav id="primary-nav-menu" className="hamburgerMenu" aria-label={t("documentation")}><button onClick={()=>openPage("workspace")}>{t("inboxes")}</button><button onClick={()=>openPage("connections")}>{t("tls")}</button><button onClick={()=>openPage("documentation")}>{t("documentation")}</button><button onClick={()=>openPage("api")}>{t("api")}</button></nav>}</div><strong>✉ Virtual Inbox</strong><div className="spacer"/><span className="tiny">{connected?t("connected"):t("disconnected")}</span><LanguageSelector/><span className="tiny">{t("session")} {observer.slice(0,8)||t("connecting")}</span><CopyButton value={observer} label={t("copySession")}/></header>
  {page==="workspace"&&<div className="workspace">
- <aside className={"sidebar"+(collapsed?" closed":"")}>
+ <aside className={"sidebar"+(collapsed?" closed":"")}><div className="sidebarControls"><button type="button" className="sidebarToggle" title={t("toggleMenu")} aria-label={t("toggleMenu")} aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}>{collapsed?"»":"«"}{!collapsed&&<span>{t("toggleMenu")}</span>}</button></div>
  {(["email","sms"] as Channel[]).map(c=><section key={c} className="inboxGroup">
  <div className="groupHead">
  <div className="navWithTools">
@@ -136,8 +137,8 @@ export default function App(){
  <label>{t("adminToken")}<input type="password" value={adminToken} onChange={e=>setAdminToken(e.target.value)} autoComplete="off"/></label>
  <button onClick={()=>void importCertificate()} disabled={!tlsCertFile||!tlsKeyFile||!adminToken}>{t("install")}</button>
  {tlsStatus&&<p role="status">{tlsStatus}</p>}</div></main>}
- {page==="documentation"&&<main className="information"><h2>{t("documentation")}</h2><DocumentSearch onNavigate={navigateSearch}/><p className="muted">{t("documentationHelp")}</p><div className="docJourneys">{[["demo",t("try"),t("tryDescription")],["integration",t("mock"),t("mockDescription")],["sdk",t("testing"),t("testingDescription")]].map(([id,title,description])=><button className={"docJourney"+(docPage===id?" active":"")} key={id} onClick={()=>setDocPage(id)}><strong>{title}</strong><small>{description}</small></button>)}</div><div className="docPicker"><span>{t("reference")}</span>{[["overview",t("intro")],["tls",t("tls")],["architecture",t("architecture")],["development",t("development")]].map(([id,title])=><button aria-pressed={docPage===id} key={id} onClick={()=>setDocPage(id)}>{title}</button>)}</div><article className="docMarkdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{a:({href,children})=><a href={href?.startsWith("http")?href:"#"} onClick={e=>{if(!href||href.startsWith("http"))return;e.preventDefault();const pageId=href.replace(/^\.\.\//,"").replace(/^docs\//,"").replace(/\.md(#.*)?$/,"");if(["README","overview"].includes(pageId))setDocPage("overview");else if(["demo","integration","sdk","tls","architecture","development"].includes(pageId))setDocPage(pageId);else if(pageId==="api")setPage("api");else window.open("https://github.com/primeiraacademiadev/virtual-inbox/blob/main/"+href.replace(/^\.\.\//,""),"_blank","noopener,noreferrer")}}>{children}</a>}}>{docText}</ReactMarkdown></article></main>}
- {page==="api"&&<main className="information"><h2>{t("apiTitle")}</h2><DocumentSearch onNavigate={navigateSearch}/><p>{t("apiNote")}</p><article className="docMarkdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{apiText}</ReactMarkdown></article></main>}
+ {page==="documentation"&&<main className="information"><h2>{t("documentation")}</h2><DocumentSearch onNavigate={navigateSearch}/><p className="muted">{t("documentationHelp")}</p><div className="docJourneys">{[["demo",t("try"),t("tryDescription")],["integration",t("mock"),t("mockDescription")],["sdk",t("testing"),t("testingDescription")]].map(([id,title,description])=><button className={"docJourney"+(docPage===id?" active":"")} key={id} onClick={()=>setDocPage(id)}><strong>{title}</strong><small>{description}</small></button>)}</div><div className="docPicker"><span>{t("reference")}</span>{[["overview",t("intro")],["tls",t("tls")],["architecture",t("architecture")],["development",t("development")]].map(([id,title])=><button aria-pressed={docPage===id} key={id} onClick={()=>setDocPage(id)}>{title}</button>)}</div><article className="docMarkdown"><MarkdownView markdown={docText} onDocument={openDocument}/></article></main>}
+ {page==="api"&&<main className="information"><h2>{t("apiTitle")}</h2><DocumentSearch onNavigate={navigateSearch}/><p>{t("apiNote")}</p><article className="docMarkdown"><MarkdownView markdown={apiText} onDocument={openDocument}/></article></main>}
  {modal&&<div className="modalBackdrop"><div className="modal"><h2>{t("addInbox")}</h2><label>{t("identifier")}<input autoFocus value={identifier} placeholder={modal==="email"?"test@sandbox.test":"+351900000001"} onChange={e=>{setIdentifier(e.target.value);setMissing(false);setError("")}}/></label>{identifier.trim()&&<span className={classify(identifier.trim())?"success":"error"}>{classify(identifier.trim())==="email"?"✓ Email":classify(identifier.trim())==="sms"?"✓ SMS":"Identificador inválido"}</span>}<div className="row"><button className="clock" title={t("configureTtl")} onClick={()=>setTtlOpen(v=>!v)}>⏱</button>{ttlOpen&&<label>{t("ttl")}<input type="number" min="1" max="604800" value={ttl} onChange={e=>setTtl(e.target.value)}/></label>}</div>{missing&&<p>{t("missingInbox")}</p>}{error&&<p className="error">{error}</p>}<div className="actions"><button onClick={()=>setModal(null)}>{t("cancel")}</button><button disabled={!!identifier.trim()&&!classify(identifier.trim())} onClick={()=>void (missing||!identifier.trim()?create():addExisting())}>{missing?t("create"):identifier.trim()?t("addInbox"):t("createRandom")}</button></div></div></div>}
  </div>
 }

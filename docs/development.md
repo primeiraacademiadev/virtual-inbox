@@ -1,74 +1,59 @@
-# Development and constraints
+# Development, operations and known limitations
 
-## Local workflow
+**Audience:** maintainers and engineers evaluating the implementation. This describes source that has been committed, not certified test results.
+
+## Repository layout
+
+- `src/server.ts`: HTTP/HTTPS, SMTP/STARTTLS, SMTPS, SSE, demo listeners and admin configuration routes
+- `src/core.ts`: in-memory resource/message registry, attachments, waiters, observer sessions and event journal
+- `src/config.ts`: operational limits read from environment
+- `web/src/`: React console and typed management API client
+- `web/public/docs/api.md`: curated API-only reference (deliberately excludes demo sender endpoints)
+- `docs/`: canonical Markdown guides
+- `scripts/sync-docs.mjs`: copies canonical Markdown into `web/public/wiki/` before Vite dev/build
+- `sdk/client.ts`: TypeScript client helper for test runners
+- `test/`: initial Node test sources; tests remain to be executed and expanded
+
+## Developer start
+
+Require Node.js 24+ and npm; OpenSSL on PATH for default `TLS_MODE=auto`.
 
 ```sh
 npm install
-npm test
-npm run build
+npm install --prefix web
+npm run build:console
 npm run dev
 ```
 
-In a second terminal, run `npm install --prefix web && npm run dev:console`. Run `npm run build:console` to compile production frontend output; it is not yet automatically served from the Node process.
+For frontend hot reload, run `npm run dev:console` separately. The compiled console is served by the Node HTTPS listener, when TLS enabled.
 
-## Testing target
+## Dependency and reproducibility status
 
-Validate: create; attach observer; SMTP delivery; SMS delivery; wait predicates; non-consuming reads; individual DELETE; resource cascade; TTL; anomaly capture; SSE reconnect with Last-Event-ID; ring-buffer gap/reset; independent observers; browser console manual send; and consistency of badge state.
+The package manifests have been updated but **there are no committed npm lockfiles yet**. On a machine with npm registry access, resolve dependencies, commit `package-lock.json` and `web/package-lock.json`, then change CI to `npm ci`. Do not assert build, audit or compatibility success before those commands run. The CI workflow proposes Node 24 and Node 26, but green results are not confirmed.
 
-The repository contains initial Node unit tests in `test/core.test.ts`. Test execution/CI status must be verified separately from the source code. This is not a claim of full integration-test coverage.
+## State and quotas
 
-## Security and deployment constraints
+All state is in a single Node process. Resources, messages, attachment buffers, observer sessions, log entries and expiration tombstones are ephemeral. Environment settings are documented in [../.env.example](../.env.example), including SMTP message bytes, per-attachment size/count, HTTP/SMS body sizes, memory/message counts, observer count/TTL, inbox count/TTL, timeout and server connection limits.
 
-The server binds HTTP and SMTP to loopback by default. It has **no authentication**; do not expose ports to the public internet without gateway authentication, network restriction, HTTPS and connection/content rate limits. SMTP AUTH is optional and STARTTLS disabled for local testing; **not suitable as a public-facing mail transport**.
+The SMTP cap defaults to 20 MiB **for the entire MIME message**, not each decoded attachment. The HTTP body cap supports encoded demo attachments. Resource expiration removes messages and detaches observers; a bounded tombstone cache distinguishes recently expired addresses from unknown recipients.
 
-No public email or real carrier SMS delivery; no inbound DNS MX configuration. Use your app-under-test's SMTP configuration to point to the sandbox server and use its HTTP SMS adapter.
+## TLS and administrative configuration
 
-## Current limitations and follow-up
+Node terminates TLS on HTTPS, SMTP STARTTLS and implicit SMTPS. In local auto mode the application invokes OpenSSL to create and reuse a development CA, and reissues server certificates near expiry. Importing an external PEM pair or changing advertised host/ports uses an administrative bearer token over HTTPS, stored locally and applied after restart. The ordinary management API remains unauthenticated.
 
-- Data and sessions disappear on restart.
-- TTL is periodic, with an additional expiry check on resource lookup; after the cleanup sweep, recipients are unknown rather than classified as previously expired.
-- Bounded circular logs, but message store needs global capacity enforcement before internet exposure.
-- SSE replay uses the circular log; snapshots may be necessary on gaps. The browser console additionally refreshes observed inboxes periodically as a recovery mechanism.
-- Observer sessions and log subscriptions are designed for one Node process.
-- OpenAPI generation, a standalone published SDK, browser E2E, exhaustive SMTP MIME/attachment handling and shared browser read state remain future enhancements.
-- IMAP, POP3, JMAP, SMPP, Redis and production-grade auth are not in this MVP.
-- Copyright is reserved: no open-source or commercial redistribution rights are granted by this repository.
+## Security boundaries and limitations
 
-## Contributing
+- Bind to trusted networks only; no public SMTP relay or carrier SMS.
+- TLS CA **private key** and imported identity JSON contain secrets; keep outside Git, secure file permissions and restrict filesystem access.
+- Imported TLS identity has a local `.previous` backup; recovery and rollback have not been exercised.
+- SSE global logs are bounded; clients must reconcile message snapshots on gaps or run changes.
+- The current React console does not implement a general-purpose identity or user management system.
+- Memory quota checks are currently derived from stored messages and can become expensive at high volume.
+- MIME attachment bytes are held in memory, not persisted; binary uploads and large email paths need acceptance testing.
+- IMAP, POP3, RCS, Redis, Kafka, multi-instance deployments and fully authenticated public API access are outside the agreed MVP.
 
-Before changing core data structures or public API contracts, validate the change with the project owner. Keep components segregated and add regression tests for altered behavior.
+## User acceptance and test coverage
 
+Execution is reserved for the project owner. Follow [backlog / acceptance checklist](backlog.md), including TypeScript compilation, npm audit, SMTP and TLS handshake interoperability, MIME attachment roundtrips, SSE reconnections, browser keyboard/mobile navigation and host/port configuration.
 
-## UI and dependency maintenance (22 October 2026)
-
-- Nodemailer upgraded from major 6 to major 10; `@types/nodemailer` removed because the current package includes types. Supported runtime is Node.js 20+.
-- SMTP self-send remains a local SMTP transport, with file/URL access disabled for demo messages.
-- The inbox's list and message detail scroll independently of the log panel; split view uses constrained flex heights.
-- Composing opens an overlay above the inbox/log workspace, with its own scrollable content and accessible sticky actions.
-- The collapsed navigation no longer renders a separate clipped plus button: group and inbox actions are exposed contextually on hover or focus.
-- Before release, verify keyboard focus navigation and touchscreen access to contextual actions. Tooltip hover alone is insufficient for touchscreen users.
-- Regression checks: split-mode inbox scroll with 50+ messages; detail scroll with long MIME text; send form submit and cancel at small viewport heights; collapsed bar with both inbox groups and unread badges; SMTP demo after dependency major upgrade; run `npm audit --omit=dev`.
-
-## Dependency refresh — 22 October 2026
-
-Runtime minimum is Node.js **24**. Node.js **26** is supported as a second CI matrix target. Updated package declarations: `smtp-server ^3.19.23`, `postal-mime ^4.0.11`, `nodemailer ^10.2.0`, `typescript ^7.0.2`, `tsx ^4.23.15`, `@types/node ^24.19.2`, `@types/smtp-server ^3.5.13`, `react/react-dom ^19.3.1`, and `vite ^8.3.0`. React type definitions are aligned to the 19.3 line.
-
-**Validation caveat:** The manifests were updated via GitHub, but no npm install, build, audit or regression test has been executed by this update. The npm registry was not accessible from the execution environment. The repository did not contain lockfiles when the upgrade began.
-
-To complete verification with npm registry access, from the repository root:
-
-```sh
-npm install --package-lock=true
-npm install --prefix web --package-lock=true
-npm test
-npm run build
-npm run build:console
-npm audit --audit-level=high
-npm audit --prefix web --audit-level=high
-```
-
-Commit both generated `package-lock.json` and `web/package-lock.json`; then replace `npm install` in CI with `npm ci`. Do not use `npm audit fix --force` to bypass failing compatibility tests. Confirm SMTP delivery, MIME parsing, observer reconnection, and console functionality on Node 24 and Node 26.
-
-## MVP implementation update — 22 October 2026
-
-New code includes: central quota configuration, attachments through SMTP/store/API/console, SDK for automated tests, local CA generation with OpenSSL, TLS settings and public CA download, and authenticated administrative network settings. See [docs/backlog.md](backlog.md) for the end-user validation checklist. **The new code has not been compiled or exercised yet.**
+**No deployment was performed.**

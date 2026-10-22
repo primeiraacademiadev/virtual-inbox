@@ -166,8 +166,9 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
   if(!adminAllowed(req))throw new Fault(403,"Administrative HTTPS token required");
   if(tlsMode!=="auto")throw new Fault(409,"SAN regeneration requires TLS_MODE=auto");
   const payload=await body(req);
-  const names=[...(payload.dns||[]),...(payload.ips||[])];
-  if(!Array.isArray(payload.dns)||!Array.isArray(payload.ips)||names.length>50||names.some((name:unknown)=>typeof name!=="string"||!/^[a-zA-Z0-9.:-]+$/.test(name)))throw new Fault(400,"Invalid SAN names");
+  if(!payload||!Array.isArray(payload.dns)||!Array.isArray(payload.ips))throw new Fault(400,"Invalid SAN names");
+  const names=[...payload.dns,...payload.ips];
+  if(names.length>50||names.some((name:unknown)=>typeof name!=="string"||!/^[a-zA-Z0-9.:-]+$/.test(name)))throw new Fault(400,"Invalid SAN names");
   const base=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),setting("PUBLIC_HOST","localhost")];
   const identity=ensureLocalTls(tlsDirectory,[...new Set([...base,...names])].join(","));
   const active=certificateManager.useGenerated(readFileSync(identity.cert),readFileSync(identity.key));

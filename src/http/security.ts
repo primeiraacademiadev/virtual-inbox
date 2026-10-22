@@ -1,7 +1,7 @@
 import type {IncomingMessage,ServerResponse} from "node:http";
 
 export function isAllowedHost(host:string|undefined,configuredHosts:readonly string[]):boolean{
- if(!host||host.includes(",")||/[\\\s/@?#]/.test(host))return false;
+ if(!host||host.includes(",")||host.includes("/")||/[\\\s@?#]/.test(host))return false;
  try{
   const parsed=new URL("http://"+host);
   if(parsed.username||parsed.password)return false;

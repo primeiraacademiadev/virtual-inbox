@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
@@ -14,6 +15,7 @@ export default function App(){
  const [tlsKeyFile,setTlsKeyFile]=useState<File|null>(null);
  const [tlsStatus,setTlsStatus]=useState("");
  const [docText,setDocText]=useState("");
+ const [docPage,setDocPage]=useState("overview");
  const [apiText,setApiText]=useState("");
  const [observer,setObserver]=useState(()=>sessionStorage.getItem("virtual-inbox-observer")||"");
  const [inboxes,setInboxes]=useState<Recipient[]>([]);
@@ -37,7 +39,8 @@ export default function App(){
  const [logs,setLogs]=useState<EventEntry[]>([]);
  const [logFilter,setLogFilter]=useState("");
  const [connected,setConnected]=useState(false);
- useEffect(()=>{void request<any>("/connection-info").then(setConnection).catch(()=>{});fetch("/docs/guide.md").then(r=>r.ok?r.text():"Documentation unavailable").then(setDocText).catch(()=>{});fetch("/docs/api.md").then(r=>r.ok?r.text():"API reference unavailable").then(setApiText).catch(()=>{})},[]);
+ useEffect(()=>{void request<any>("/connection-info").then(setConnection).catch(()=>{});fetch("/docs/api.md").then(r=>r.ok?r.text():"API reference unavailable").then(setApiText).catch(()=>{})},[]);
+ useEffect(()=>{fetch("/wiki/"+docPage+".md").then(r=>r.ok?r.text():"Documentation unavailable").then(setDocText).catch(()=>setDocText("Documentation unavailable"))},[docPage]);
  const active=inboxes.find(x=>x.id===selected)||null;
  const refresh=useCallback(async(id:string,c:Channel)=>{try{const m=await request<Message[]>(base(c)+"/"+id+"/messages");setMessages(p=>({...p,[id]:m}))}catch{}},[]);
  const syncObserver=useCallback(async(id:string)=>{const snapshot=await request<Observer>("/observers/"+id);setInboxes(snapshot.inboxes);for(const r of snapshot.inboxes)void refresh(r.id,r.channel)},[refresh]);
@@ -107,8 +110,8 @@ export default function App(){
  <label>Token administrativo<input type="password" value={adminToken} onChange={e=>setAdminToken(e.target.value)} autoComplete="off"/></label>
  <button onClick={()=>void importCertificate()} disabled={!tlsCertFile||!tlsKeyFile||!adminToken}>Validar e instalar (requer reinício)</button>
  {tlsStatus&&<p role="status">{tlsStatus}</p>}</div></main>}
- {page==="documentation"&&<main className="information"><h2>Documentação de utilização</h2><article className="docMarkdown"><ReactMarkdown>{docText}</ReactMarkdown></article></main>}
- {page==="api"&&<main className="information"><h2>API pública da sandbox</h2><p>Exclui endpoints de demonstração.</p><article className="docMarkdown"><ReactMarkdown>{apiText}</ReactMarkdown></article></main>}
+ {page==="documentation"&&<main className="information"><h2>Documentação de utilização</h2><div className="docPicker">{[["overview","Introdução"],["demo","Demonstração"],["architecture","Arquitetura"],["development","Desenvolvimento"],["tls","TLS"]].map(([id,title])=><button key={id} onClick={()=>setDocPage(id)}>{title}</button>)}</div><article className="docMarkdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{docText}</ReactMarkdown></article></main>}
+ {page==="api"&&<main className="information"><h2>API pública da sandbox</h2><p>Exclui endpoints de demonstração.</p><article className="docMarkdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{apiText}</ReactMarkdown></article></main>}
  {modal&&<div className="modalBackdrop"><div className="modal"><h2>Adicionar inbox</h2><label>Identificador (vazio = aleatório)<input autoFocus value={identifier} placeholder={modal==="email"?"teste@sandbox.test":"+351900000001"} onChange={e=>{setIdentifier(e.target.value);setMissing(false);setError("")}}/></label>{identifier.trim()&&<span className={classify(identifier.trim())?"success":"error"}>{classify(identifier.trim())==="email"?"✓ Email":classify(identifier.trim())==="sms"?"✓ SMS":"Identificador inválido"}</span>}<div className="row"><button className="clock" title="Configurar TTL" onClick={()=>setTtlOpen(v=>!v)}>⏱</button>{ttlOpen&&<label>TTL (segundos)<input type="number" min="1" max="604800" value={ttl} onChange={e=>setTtl(e.target.value)}/></label>}</div>{missing&&<p>Esta inbox não existe. Pretendes criá-la?</p>}{error&&<p className="error">{error}</p>}<div className="actions"><button onClick={()=>setModal(null)}>Cancelar</button><button disabled={!!identifier.trim()&&!classify(identifier.trim())} onClick={()=>void (missing||!identifier.trim()?create():addExisting())}>{missing?"Criar":identifier.trim()?"Adicionar":"Criar aleatória"}</button></div></div></div>}
  </div>
 }

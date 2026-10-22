@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useState,useRef} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
 type Page="workspace"|"connections"|"documentation"|"api";
@@ -21,6 +21,8 @@ export default function App(){
  const [apiText,setApiText]=useState("");
  const [observer,setObserver]=useState(()=>sessionStorage.getItem("virtual-inbox-observer")||"");
  const [inboxes,setInboxes]=useState<Recipient[]>([]);
+ const inboxesRef=useRef<Recipient[]>([]);
+ useEffect(()=>{inboxesRef.current=inboxes},[inboxes]);
  const [selected,setSelected]=useState<string|null>(null);
  const [view,setView]=useState<View>("split");
  const [collapsed,setCollapsed]=useState(false);
@@ -52,14 +54,15 @@ export default function App(){
   const path=observer?"/api/observers/"+observer+"/events":"/api/observers/events";
   activeSse=new EventSource(path);setConnected(false);
   const handleSession=(ev:MessageEvent)=>{const data=JSON.parse(ev.data) as Observer; if(closed)return;setObserver(data.observerId);sessionStorage.setItem("virtual-inbox-observer",data.observerId);setInboxes(data.inboxes);data.inboxes.forEach(r=>void refresh(r.id,r.channel))};
-  const handleLog=(ev:MessageEvent)=>{const entry=JSON.parse(ev.data) as EventEntry;setLogs(p=>p.some(x=>x.id===entry.id)?p:[...p.slice(-499),entry]);if(entry.resourceId&&entry.type.startsWith("message.")){const r=inboxes.find(x=>x.id===entry.resourceId);if(r)void refresh(r.id,r.channel)}};
+  const handleLog=(ev:MessageEvent)=>{const entry=JSON.parse(ev.data) as EventEntry;setLogs(p=>p.some(x=>x.id===entry.id)?p:[...p.slice(-499),entry]);if(entry.resourceId&&entry.type.startsWith("message.")){const r=inboxesRef.current.find(x=>x.id===entry.resourceId);if(r)void refresh(r.id,r.channel)}};
   activeSse.addEventListener("session.initialized",handleSession);
   activeSse.addEventListener("session.restored",handleSession);
   activeSse.addEventListener("log",handleLog);
   activeSse.addEventListener("inbox.notification",handleLog);
   activeSse.addEventListener("log.gap",()=>{if(observer)void syncObserver(observer)});
+  activeSse.addEventListener("log.reset",()=>{setLogs([]);if(observer)void syncObserver(observer)});
   activeSse.onopen=()=>setConnected(true);
-  activeSse.onerror=()=>setConnected(false);
+  activeSse.onerror=()=>{setConnected(false);if(observer){void request<Observer>("/observers/"+observer).catch((e:Error & {status?:number})=>{if(e.status===404){sessionStorage.removeItem("virtual-inbox-observer");setObserver("");setInboxes([])}})}};
   return()=>{closed=true;activeSse?.close()};
  },[observer,refresh,syncObserver]);
  useEffect(()=>{if(!observer)return;const poll=setInterval(()=>{void syncObserver(observer)},15000);return()=>clearInterval(poll)},[observer,syncObserver]);

@@ -106,7 +106,7 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const emitted=new Set(replay.events.map(x=>x.id));
  for(const e of buffered)if(!emitted.has(e.id))callback(e);
  heartbeat=setInterval(()=>{if(!active())stop();else if(!res.writableEnded)res.write(": heartbeat\n\n")},20000);
- req.on("close",stop);
+ res.on("close",stop);
 }
 async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=false){
  try{

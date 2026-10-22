@@ -10,6 +10,7 @@ import { Sandbox, Fault, classify, type Channel, type Event } from "./core.js";
 export const sandbox = new Sandbox(Number(process.env.LOG_CAPACITY || 2000));
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
 const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
+const demoPort=Number(process.env.DEMO_PORT || 3001);
 const tlsCertPath=process.env.TLS_CERT_FILE,tlsKeyPath=process.env.TLS_KEY_FILE;
 if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
 const tlsIdentity=tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
@@ -50,13 +51,15 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const heartbeat=setInterval(()=>res.write(": heartbeat\n\n"),20000);
  req.on("close",()=>{clearInterval(heartbeat);sandbox.emitter.off("event",callback)});
 }
-const http=createServer(async(req,res)=>{
+async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=false){
  try{
  const path=new URL(req.url||"/","http://localhost").pathname.split("/").filter(Boolean),method=req.method||"GET";
  if(method==="OPTIONS")return json(res,204,{});
+ const demoEndpoint=(path[0]==="mailboxes"&&!!path[1]&&path[2]==="demo-send")||(path[0]==="sms"&&path[1]==="messages");
+ if(demoEndpoint!==demoOnly)throw new Fault(404,"Route not available on this listener");
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
  if(path[0]==="connection-info"&&method==="GET"){
-  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem"}:null});
+  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem"}:null});
  }
  if(path[0]==="tls"&&path[1]==="certificate.pem"&&method==="GET"){
    if(!tlsIdentity)throw new Fault(404,"TLS is not configured");
@@ -99,7 +102,9 @@ const http=createServer(async(req,res)=>{
  }
  throw new Fault(404,"Route not found");
  }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message})}
-});
+}
+const http=createServer((req,res)=>{void handleRequest(req,res)});
+const demo=createServer((req,res)=>{void handleRequest(req,res,true)});
 const smtpOptions={
  authOptional:true,
  disabledCommands:tlsIdentity?[]:["STARTTLS"],
@@ -120,8 +125,9 @@ const smtp=new SMTPServer(smtpOptions);
 const smtps=tlsIdentity?new SMTPServer({...smtpOptions,secure:true}):null;
 const clean=setInterval(()=>sandbox.cleanup(),1000);clean.unref();
 http.listen(port,apiHost,()=>console.log("REST listening on "+port));
-const https=tlsIdentity?createHttpsServer(tlsIdentity,http.listeners("request")[0] as any):null;
+const https=tlsIdentity?createHttpsServer(tlsIdentity,(req,res)=>{void handleRequest(req,res)}):null;
 https?.listen(httpsPort,apiHost,()=>console.log("HTTPS listening on "+httpsPort));
+demo.listen(demoPort,apiHost,()=>console.log("Demo API listening on "+demoPort));
 smtp.listen(smtpPort,smtpHost,()=>console.log("SMTP listening on "+smtpPort));
 smtps?.listen(smtpsPort,smtpHost,()=>console.log("SMTPS listening on "+smtpsPort));
-process.on("SIGINT",()=>{http.close();https?.close();smtp.close();smtps?.close();process.exit(0)});
+process.on("SIGINT",()=>{http.close();https?.close();demo.close();smtp.close();smtps?.close();process.exit(0)});

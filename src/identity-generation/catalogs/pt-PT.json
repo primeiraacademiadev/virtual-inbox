@@ -1,0 +1,59 @@
+{
+  "locale": "pt-PT",
+  "firstNames": [
+    "Maria",
+    "Francisco",
+    "Leonor",
+    "João",
+    "Inês",
+    "Afonso",
+    "Matilde",
+    "Tomás",
+    "Carolina",
+    "Miguel",
+    "Duarte",
+    "Alice",
+    "Lourenço",
+    "Beatriz",
+    "Sofia",
+    "Tiago",
+    "Mariana",
+    "Pedro",
+    "Ana",
+    "Rafael"
+  ],
+  "lastNames": [
+    "Silva",
+    "Santos",
+    "Ferreira",
+    "Pereira",
+    "Oliveira",
+    "Costa",
+    "Rodrigues",
+    "Martins",
+    "Sousa",
+    "Fernandes",
+    "Gonçalves",
+    "Carvalho",
+    "Almeida",
+    "Lopes",
+    "Marques",
+    "Ribeiro",
+    "Pinto",
+    "Teixeira",
+    "Moreira",
+    "Mendes"
+  ],
+  "phone": {
+    "countryCode": "351",
+    "nationalLength": 9,
+    "mobilePrefixes": [
+      "91",
+      "92",
+      "93",
+      "96"
+    ],
+    "trunk": "",
+    "pattern": "401"
+  }
+}

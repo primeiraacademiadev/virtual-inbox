@@ -10,7 +10,7 @@ import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { Sandbox, Fault, classify, type Channel, type Event, type Attachment } from "./core.js";
 import {config} from "./config.js";
-import {randomBytes} from "node:crypto";
+import { isIP } from "node:net";
 
 export const sandbox = new Sandbox(config.logs);
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
@@ -29,7 +29,7 @@ if(tlsMode==="auto"){
   const csr=join(tlsDirectory,"server.csr"),ext=join(tlsDirectory,"server.ext");
   const names=(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(",").map(x=>x.trim()).filter(Boolean);
   if(names.some(x=>!/^[a-zA-Z0-9.:-]+$/.test(x)))throw Error("Invalid TLS_SERVER_NAMES");
-  writeFileSync(ext,"subjectAltName="+names.map(x=>/^\\d+\\.\\d+\\.\\d+\\.\\d+$/.test(x)?"IP:"+x:"DNS:"+x).join(",")+"\\nextendedKeyUsage=serverAuth\\n",{mode:0o600});
+  writeFileSync(ext,"subjectAltName="+names.map(x=>isIP(x)?"IP:"+x:"DNS:"+x).join(",")+"\nextendedKeyUsage=serverAuth\n",{mode:0o600});
   execFileSync("openssl",["req","-new","-newkey","rsa:3072","-nodes","-keyout",keyFile,"-out",csr,"-subj","/CN="+names[0]]);
   execFileSync("openssl",["x509","-req","-in",csr,"-CA",caCrt,"-CAkey",caKey,"-CAcreateserial","-out",certFile,"-days","30","-sha256","-extfile",ext]);
   chmodSync(keyFile,0o600);chmodSync(caKey,0o600);

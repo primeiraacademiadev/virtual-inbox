@@ -25,3 +25,7 @@ The index uses the curated API content visible in the console, **not** the large
 This implementation is **source-only and unvalidated**, in keeping with the owner's plan to run validation at home. Index generation, TypeScript compilation, browser keyboard/focus behavior, long-document scrolling and small-screen placement still need acceptance checks. New documentation headings are indexed at the next frontend build.
 
 To extend synonyms, edit only `web/src/search/engine.ts`; to add documents, edit only `scripts/build-doc-search.mjs` and `scripts/sync-docs.mjs`.
+
+## Multilingual indexes
+
+For every frontend build, `scripts/sync-docs.mjs` copies independently editable Markdown from `docs/i18n/pt-PT`, `docs/i18n/en`, and `docs/i18n/fr`. The indexer writes `/wiki/<locale>/search-index.json` for each language. The React search component loads only the selected language's index; the engine uses per-language search aliases. Logical document IDs remain invariant when users change the console language. The original root `/wiki/search-index.json` path is obsolete.

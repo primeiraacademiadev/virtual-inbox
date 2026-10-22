@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Locally generated security material and docs copy
+data/certificates/
+web/public/wiki/

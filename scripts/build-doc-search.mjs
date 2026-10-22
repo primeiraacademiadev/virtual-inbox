@@ -8,7 +8,7 @@ const sources=[
 ];
 const index=[];
 for(const [doc,label] of sources){
- const markdown=readFileSync(join(root,"web/public/wiki",doc+".md"),"utf8");
+ const markdown=readFileSync(doc==="api"?join(root,"web/public/docs/api.md"):join(root,"web/public/wiki",doc+".md"),"utf8");
  const lines=markdown.split(/\r?\n/);
  let section={title:label,heading:label,body:[],anchor:"",ordinal:0};
  let ordinal=0;

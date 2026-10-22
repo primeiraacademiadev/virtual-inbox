@@ -69,3 +69,16 @@
 
 /* Locale selector remains usable in narrow headers */
 .languageSelector{display:inline-flex;flex-shrink:0}.languageSelector select{min-width:110px;width:auto;max-width:145px;cursor:pointer}.shell header{flex-wrap:nowrap}.shell header .tiny{white-space:nowrap}@media(max-width:650px){.languageSelector select{min-width:92px;max-width:115px}.shell header .tiny{display:none}}
+
+/* Primary navigation is a hamburger popover; sidebar collapse stays in the sidebar. */
+.appNavigation{position:relative;z-index:200;flex-shrink:0}
+.hamburgerMenu{position:absolute;top:calc(100% + 8px);left:0;display:flex;flex-direction:column;gap:4px;min-width:210px;padding:10px;background:#152438;border:1px solid #475e7d;border-radius:10px;box-shadow:0 12px 30px #0009}
+.hamburgerMenu button{width:100%;text-align:left;border:0;background:transparent}
+.hamburgerMenu button:hover,.hamburgerMenu button:focus-visible{background:#304861}
+.sidebarControls{display:flex;justify-content:flex-end;flex-shrink:0}
+.sidebarToggle{width:100%;display:flex;align-items:center;justify-content:flex-end;gap:8px;background:transparent;border:0;padding:7px 8px}
+.sidebar.closed .sidebarToggle{justify-content:center}
+.sidebar{overflow:visible}
+.sidebar .inboxGroup{min-height:0}
+.sidebar:not(.closed){overflow-y:auto}
+@media(max-width:650px){.hamburgerMenu{min-width:190px}}

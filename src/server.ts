@@ -118,7 +118,7 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
 }
 async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=false){
  try{
- if(!isAllowedHost(req.headers.host,[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(",")]))throw new Fault(421,"Unrecognized Host");
+ if(!isAllowedHost(req.headers.host,[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(","),...((certificateManager.info()?.subjectAltName||"").match(/(?:DNS|IP Address):[^,]+/g)||[]).map(x=>x.slice(x.indexOf(":")+1).trim())]))throw new Fault(421,"Unrecognized Host");
  if(!isAllowedOrigin(req.headers.origin,req.headers.host,allowedOrigins))throw new Fault(403,"Origin not allowed");
  applyCors(req,res,allowedOrigins);
  const rawPath=new URL(req.url||"/","http://localhost").pathname.split("/").filter(Boolean),method=req.method||"GET";

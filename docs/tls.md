@@ -41,3 +41,41 @@ Imported identity is stored atomically in one JSON file, taking precedence after
 **Security limits:** ordinary management endpoints are unauthenticated in this MVP. Use loopback or a controlled internal network. For public deployment, add authentication, HTTPS policy and abuse protection.
 
 [Return to integration guide](integration.md) · [API reference](api.md)
+
+## Portable certificate management (October 2026)
+
+The service runs standalone or in any normal Docker container. Kubernetes is not required. All HTTP/HTTPS and SMTP/STARTTLS/SMTPS listeners use one shared active TLS identity.
+
+### Certificate sources
+
+- `TLS_MODE=auto`: generate a private development CA and signed leaf on disk. Leaf lifetime is 30 days; regeneration runs at startup when fewer than 7 days remain or the configured SAN set changes. The CA is local and **is not publicly trusted**.
+- `TLS_MODE=external`: supply `TLS_CERT_FILE` and `TLS_KEY_FILE` containing PEM material, e.g. mounted read-only secret files or local paths. The server checks every 10 seconds for changed certificate fingerprint, validates the new certificate/key and changes active listeners without restarting. Invalid replacements are rejected and the existing identity stays active.
+- Console upload: supply a PEM certificate chain and corresponding private key under **Connections and TLS** with `ADMIN_TOKEN` over HTTPS. The manager applies the validated identity to HTTP TLS listeners and SMTP TLS contexts immediately, persists the uploaded material under `TLS_MANAGED_IDENTITY_FILE` and returns `restartRequired:false`.
+
+The REST message capture API remains unauthenticated as designed. Certificate upload and SAN regeneration are administrative actions and require an HTTPS bearer token.
+
+### SAN sources
+
+Set `TLS_SERVER_NAMES=localhost,127.0.0.1,demo.example.test` or provide `TLS_SERVER_NAMES_FILE` with JSON:
+
+```json
+{"dns":["localhost","demo.example.test"],"ips":["127.0.0.1","::1"]}
+```
+
+`PUBLIC_HOST` is also included automatically if suitable. Bind address `0.0.0.0` is excluded. In automatic mode, DNS/IP names can also be entered on the **Connections and TLS** page, then regenerated and activated without restarting. The browser saves those names in `TLS_MANAGED_NAMES_FILE`; the list is combined with configured defaults at startup.
+
+`GET /tls/status` returns the active certificate metadata (source, issuer, subject, SAN, validity and SHA-256 fingerprint), never private-key material.
+
+### Development consoles
+
+The compiled console is served on HTTP 3000 and HTTPS 3443 alongside the main API. The demo API is available on HTTP 3001 and HTTPS 3444. SMTP uses port 2525 with optional STARTTLS and SMTPS uses 2465. Ports are configurable.
+
+Vite is a separate development tool: `npm run dev:console` gives HTTP on port 5173; after starting the backend, `npm run dev:console:https` gives HTTPS on port 5174 using the same generated certificate files. Run both commands in different terminals to have both development endpoints simultaneously.
+
+### Keystore, truststore and public trust
+
+The server identity (private key + leaf + chain) is a logical *keystore* represented by PEM files. The OS image already contains public trusted CA roots for outbound TLS; a separate custom truststore is **not required** for the current inbound services. Secrets or mounts are provider mechanisms, not deployment requirements. A publicly trusted server certificate must be issued for a real domain by a publicly trusted CA; copying public CA certificates into the image cannot make a locally signed server certificate browser-trusted. Never bake private keys into a distributed image.
+
+### Verification
+
+After fetching the latest code, run `npm run build`, `npm test`, `npm run build:console`, and `docker build -t virtual-inbox:local .`. Exercise HTTPS, SMTP STARTTLS, SMTPS and certificate rotation end-to-end. These builds and integration checks have **not yet been executed** for this TLS change.

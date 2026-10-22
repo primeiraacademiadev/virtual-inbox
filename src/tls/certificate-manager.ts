@@ -21,6 +21,7 @@ export class CertificateManager{
   this.active=initial?validateIdentity(initial.cert,initial.key):null;this.source=source;
  }
  get identity(){return this.active}
+ get activeSource(){return this.source}
  info():IdentityInfo|null{
   if(!this.active)return null;
   const cert=new X509Certificate(this.active.cert);
@@ -35,6 +36,7 @@ export class CertificateManager{
   return this.info();
  }
  useGenerated(cert:string|Buffer,key:string|Buffer){return this.apply(validateIdentity(cert,key),"automatic")}
+ useExternal(cert:string|Buffer,key:string|Buffer){return this.apply(validateIdentity(cert,key),"external")}
  activate(cert:string,key:string){
   const next=validateIdentity(cert,key);
   mkdirSync(dirname(this.uploadPath),{recursive:true,mode:0o700});

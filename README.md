@@ -55,3 +55,15 @@ Inbox, observer, message, attachment and log data are **in-memory only** and dis
 The console offers **Português (Portugal)** (`pt-PT`), **English** (`en`) and **Français** (`fr`). On first visit the browser's language is used, with English as fallback; a manual choice persists in local storage. The console switches language immediately, and the Documentation and API views load the matching Markdown and search index under `/wiki/<locale>/`. The full legacy technical manuals in `docs/` remain authoritative engineering source material; the localized console guides currently cover the key journeys in a concise format. See [internationalization design and coverage](docs/i18n.md).
 
 For clients using the REST API, errors retain `error` for backward compatibility and also include `errorCode` and `errorParams`. These stable identifiers, HTTP status codes, route names, JSON keys, event types and UUIDs are not translated.
+
+## Configurable recipient generation
+
+When an inbox identifier is left empty, the Node server generates an address using the defaults in `.env.example`. Supported locales are `pt-PT`, `en-US` and `fr-FR`; email strategies include first/last, last/first, three names, random suffix and fully random. Phones use country-specific mobile-number formats ending in `401`, with optional international prefix and a separately selectable synthetic test-data mode. Addresses are retried on collision while the inbox `id` remains a stable UUID.
+
+The browser displays inline controls immediately below the identifier field: locale flag, strategy, SAFE and phone prefix. Settings (but never the identifier) persist per browser tab session and follow a change in console language. See [Identity generation](docs/identity-generation.md).
+
+`GET /identity-generation/options` returns supported locales, strategies and server defaults. For lookup without listing every inbox, `GET /mailboxes?address=...` and `GET /phone-numbers?address=...` return a one-item array or an empty array; national and international forms are matched where the locale profile makes them equivalent.
+
+## Browser origin security
+
+The API deliberately does not require login for local integration tests. To prevent unrelated browser pages from reading captured messages, browser CORS is restricted to same-origin, the local Vite development origins and any origins listed in `HTTP_ALLOWED_ORIGINS`. `Host` is checked against the configured public/bind hostnames, loopback and `HTTP_ALLOWED_HOSTS`. See `.env.example`.

@@ -6,7 +6,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "predev": "node ../scripts/sync-docs.mjs",
-    "prebuild": "node ../scripts/sync-docs.mjs"
+    "prebuild": "node ../scripts/sync-docs.mjs",
+    "dev:https": "vite --host 127.0.0.1 --config vite.https.config.ts"
   },
   "dependencies": {
     "react": "^19.3.1",

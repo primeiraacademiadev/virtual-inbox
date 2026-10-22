@@ -57,3 +57,7 @@ Node terminates TLS on HTTPS, SMTP STARTTLS and implicit SMTPS. In local auto mo
 Execution is reserved for the project owner. Follow [backlog / acceptance checklist](backlog.md), including TypeScript compilation, npm audit, SMTP and TLS handshake interoperability, MIME attachment roundtrips, SSE reconnections, browser keyboard/mobile navigation and host/port configuration.
 
 **No deployment was performed.**
+
+## Console navigation (22 October 2026)
+
+The header hamburger now opens a page menu (Inboxes, Connections/TLS, Documentation, API); the former second-row top navigation is removed. Inbox sidebar collapse/expand is controlled independently within the sidebar. Relative `.md` links in both the API and Documentation views use `web/src/components/documentation/MarkdownView.tsx` to navigate among localized documents without leaving the React console. Absolute HTTP(S) links remain external. Verify keyboard, mobile and browser navigation during acceptance; no browser test has been run for this change.

@@ -3,7 +3,7 @@ export const positive=(key:string,fallback:number)=>{const value=Number(process.
 export const config={
 smtpBytes:positive("MAX_SMTP_MESSAGE_BYTES",20*1024*1024),
 attachmentBytes:positive("MAX_ATTACHMENT_BYTES",20*1024*1024),
-httpBytes:positive("MAX_HTTP_BODY_BYTES",24*1024*1024),
+httpBytes:positive("MAX_HTTP_BODY_BYTES",32*1024*1024),
 smsBytes:positive("MAX_SMS_BODY_BYTES",64*1024),
 bodyChars:positive("MAX_MESSAGE_BODY_CHARS",2*1024*1024),
 messages:positive("MAX_MESSAGE_COUNT",10000),

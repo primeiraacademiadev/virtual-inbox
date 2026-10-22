@@ -33,13 +33,15 @@ if(!["auto","external","off"].includes(tlsMode))throw Error("Invalid TLS_MODE");
 if(tlsMode==="auto"){
  const file=process.env.TLS_SERVER_NAMES_FILE;
  const fileNames=file?JSON.parse(readFileSync(resolve(file),"utf8")) as {dns?:string[];ips?:string[]}:null;
- const names=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),...(fileNames?.dns||[]),...(fileNames?.ips||[]),setting("PUBLIC_HOST","localhost")].map(x=>x.trim()).filter(x=>x&&x!=="0.0.0.0");
+ const managedNames=existsSync(resolve(process.env.TLS_MANAGED_NAMES_FILE||join(tlsDirectory,"names.json")))?JSON.parse(readFileSync(resolve(process.env.TLS_MANAGED_NAMES_FILE||join(tlsDirectory,"names.json")),"utf8")) as {dns?:string[];ips?:string[]}:null;
+ const names=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),...(fileNames?.dns||[]),...(fileNames?.ips||[]),...(managedNames?.dns||[]),...(managedNames?.ips||[]),setting("PUBLIC_HOST","localhost")].map(x=>x.trim()).filter(x=>x&&x!=="0.0.0.0");
  const identity=ensureLocalTls(tlsDirectory,[...new Set(names)].join(","));
  process.env.TLS_CERT_FILE=identity.cert;
  process.env.TLS_KEY_FILE=identity.key;
 }
 const tlsCertPath=tlsMode==="off"?undefined:process.env.TLS_CERT_FILE,tlsKeyPath=tlsMode==="off"?undefined:process.env.TLS_KEY_FILE;
 if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
+const managedNamesFile=resolve(process.env.TLS_MANAGED_NAMES_FILE||join(tlsDirectory,"names.json"));
 const managedIdentityFile=resolve(process.env.TLS_MANAGED_IDENTITY_FILE||join(tlsDirectory,"imported-identity.json"));
 const importedIdentity=tlsMode!=="off"&&existsSync(managedIdentityFile)?JSON.parse(readFileSync(managedIdentityFile,"utf8")) as {cert:string;key:string}:null;
 const initialTlsIdentity=importedIdentity?{cert:Buffer.from(importedIdentity.cert),key:Buffer.from(importedIdentity.key),minVersion:"TLSv1.2" as const}:tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
@@ -160,6 +162,23 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
 
  }
 
+ if(path[0]==="admin"&&path[1]==="tls"&&path[2]==="names"&&method==="PUT"){
+  if(!adminAllowed(req))throw new Fault(403,"Administrative HTTPS token required");
+  if(tlsMode!=="auto")throw new Fault(409,"SAN regeneration requires TLS_MODE=auto");
+  const payload=await body(req);
+  const names=[...(payload.dns||[]),...(payload.ips||[])];
+  if(!Array.isArray(payload.dns)||!Array.isArray(payload.ips)||names.length>50||names.some((name:unknown)=>typeof name!=="string"||!/^[a-zA-Z0-9.:-]+$/.test(name)))throw new Fault(400,"Invalid SAN names");
+  const base=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),setting("PUBLIC_HOST","localhost")];
+  const identity=ensureLocalTls(tlsDirectory,[...new Set([...base,...names])].join(","));
+  const active=certificateManager.useGenerated(readFileSync(identity.cert),readFileSync(identity.key));
+  tlsIdentity=certificateManager.identity;
+  mkdirSync(dirname(managedNamesFile),{recursive:true,mode:0o700});
+  const temp=managedNamesFile+"."+randomUUID()+".tmp";
+  writeFileSync(temp,JSON.stringify({dns:payload.dns,ips:payload.ips},null,2),{mode:0o600,flag:"wx"});
+  renameSync(temp,managedNamesFile);
+  sandbox.log("tls.names.updated",undefined,undefined,{names});
+  return json(res,200,{restartRequired:false,active,names});
+ }
  if(path[0]==="tls"&&path[1]==="status"&&method==="GET")return json(res,200,{active:certificateManager.info()});
  if(path[0]==="connection-info"&&method==="GET"){
   return json(res,200,{host:addressHost,networkSettings:{PUBLIC_HOST:addressHost,HOST:apiHost,SMTP_HOST:smtpHost,PORT:String(port),HTTPS_PORT:String(httpsPort),SMTP_PORT:String(smtpPort),SMTPS_PORT:String(smtpsPort),DEMO_PORT:String(demoPort),DEMO_HTTPS_PORT:String(demoHttpsPort)},http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{...certificateManager.info(),download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});

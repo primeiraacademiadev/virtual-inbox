@@ -61,6 +61,19 @@ export default function App(){
  const [sender,setSender]=useState("demo@example.test");
  const [subject,setSubject]=useState(()=>t("sampleSubject"));
  const [body,setBody]=useState(()=>t("sampleBody"));
+ const sampleLocaleRef=useRef(locale);
+ useEffect(()=>{
+  if(sampleLocaleRef.current===locale)return;
+  const previous=sampleLocaleRef.current;
+  sampleLocaleRef.current=locale;
+  const samples:Record<string,{subject:string;body:string}>={
+   "pt-PT":{subject:"Mensagem de demonstração",body:"Esta é uma mensagem de teste."},
+   "en":{subject:"Demo message",body:"This is a test message."},
+   "fr":{subject:"Message de démonstration",body:"Ceci est un message de test."}
+  };
+  setSubject(current=>current===samples[previous]?.subject?t("sampleSubject"):current);
+  setBody(current=>current===samples[previous]?.body?t("sampleBody"):current);
+ },[locale,t]);
  const [outgoingFiles,setOutgoingFiles]=useState<File[]>([]);
  const [messages,setMessages]=useState<Record<string,Message[]>>({});
  const [seen,setSeen]=useState<Record<string,string[]>>({});

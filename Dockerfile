@@ -2,9 +2,9 @@
 FROM node:26-bookworm-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --no-audit --no-fund --package-lock=false
+RUN npm ci --no-audit --no-fund --ignore-scripts
 COPY web/package*.json ./web/
-RUN npm install --prefix web --no-audit --no-fund --package-lock=false
+RUN npm ci --prefix web --no-audit --no-fund --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
 COPY test ./test
@@ -33,7 +33,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app/data && chown node:node /app/data
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund --package-lock=false && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund --ignore-scripts && npm cache clean --force
 COPY config ./config
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/web/dist ./web/dist

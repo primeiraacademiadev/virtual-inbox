@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import {config} from "./config.js";
 
 export type Channel = "email" | "sms";
 export type Recipient = { id: string; channel: Channel; address: string; createdAt: string; expiresAt: string | null; system?: boolean };
-export type Message = { id: string; sequence: number; channel: Channel; destinationId: string; from: string; originalRecipient: string; subject?: string; body: string; html?: string; rawMime?: string; receivedAt: string; captureReason?: string };
+export type Attachment = { id:string; filename:string; contentType:string; size:number; content:Buffer };
+export type Message = { id: string; sequence: number; channel: Channel; destinationId: string; from: string; originalRecipient: string; subject?: string; body: string; html?: string; rawMime?: string; attachments?:Attachment[]; receivedAt: string; captureReason?: string };
 export type Event = { id: string; type: string; at: string; resourceId?: string; messageId?: string; data?: Record<string,unknown> };
 export const classify = (s:string): Channel | null => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?"email":/^\+[1-9]\d{6,14}$/.test(s)?"sms":null;
 export class Fault extends Error { constructor(public status:number,message:string){super(message)} }
@@ -15,10 +17,11 @@ export class Sandbox {
   readonly observers=new Map<string,{id:string;expiresAt:number;inboxes:Set<string>}>();
   readonly events:Event[]=[];
   private seq=0;
+  private expired=new Map<string,number>();
   private msgSeq=0;
   private addressIds=new Map<string,string>();
   readonly defaults:Record<Channel,string>;
-  constructor(readonly capacity=2000) {
+  constructor(readonly capacity=config.logs) {
     this.emitter.setMaxListeners(0);
     this.defaults={email:this.addSystem("email","anomalies@sandbox.test"),sms:this.addSystem("sms","+999000000000")};
   }
@@ -33,8 +36,8 @@ export class Sandbox {
   resource(id:string){const r=this.resources.get(id);if(!r||r.expiresAt&&Date.parse(r.expiresAt)<=Date.now())throw new Fault(404,"Inbox not found");return r}
   list(channel?:Channel){return [...this.resources.values()].filter(r=>(!channel||r.channel===channel)&&(!r.expiresAt||Date.parse(r.expiresAt)>Date.now()))}
   find(channel:Channel,address:string){const id=this.addressIds.get(this.key(channel,address));return id?this.resource(id):undefined}
-  create(channel:Channel,address?:string,ttlSeconds=1800,observerId?:string){
-    if(!Number.isInteger(ttlSeconds)||ttlSeconds<1||ttlSeconds>604800)throw new Fault(400,"Invalid TTL");
+  create(channel:Channel,address?:string,ttlSeconds=config.defaultTtl,observerId?:string){
+    if(!Number.isInteger(ttlSeconds)||ttlSeconds<1||ttlSeconds>config.maxTtl)throw new Fault(400,"Invalid TTL");
     const addr=address?.trim()||(channel==="email"?"inbox-"+randomUUID().slice(0,10)+"@sandbox.test":"+999"+String(Math.floor(Math.random()*1e9)).padStart(9,"0"));
     if(classify(addr)!==channel)throw new Fault(400,"Invalid identifier");
     if(this.addressIds.has(this.key(channel,addr)))throw new Fault(409,"Identifier already exists");
@@ -50,14 +53,19 @@ export class Sandbox {
     for(const o of this.observers.values())o.inboxes.delete(id);
     this.emitter.emit("resource.removed",id);this.log("recipient.deleted",id);
   }
-  deliver(channel:Channel,from:string,to:string,body:string,subject?:string,html?:string,rawMime?:string){
+  deliver(channel:Channel,from:string,to:string,body:string,subject?:string,html?:string,rawMime?:string,attachments:Attachment[]=[]){
     if(!from||!to||typeof body!=="string")throw new Fault(400,"From, to and body required");
-    const maxMimeBytes=Number(process.env.MAX_SMTP_MESSAGE_BYTES||20*1024*1024);
-    if(body.length>Number(process.env.MAX_MESSAGE_BODY_CHARS||2*1024*1024)||rawMime&&Buffer.byteLength(rawMime,"utf8")>maxMimeBytes)throw new Fault(413,"Payload too large");
+    const maxMimeBytes=config.smtpBytes;
+    if(body.length>config.bodyChars||rawMime&&Buffer.byteLength(rawMime,"utf8")>maxMimeBytes)throw new Fault(413,"Payload too large");
+    if(channel==="sms"&&Buffer.byteLength(body)>config.smsBytes)throw new Fault(413,"SMS exceeds maximum size");
+    if(attachments.some(a=>a.size>config.attachmentBytes))throw new Fault(413,"Attachment too large");
+    if(this.messages.size>=config.messages)throw new Fault(507,"Message capacity reached");
+    const storedBytes=[...this.messages.values()].reduce((n,m)=>n+Buffer.byteLength(m.body)+(m.rawMime?Buffer.byteLength(m.rawMime):0)+(m.attachments||[]).reduce((t,a)=>t+a.size,0),0);
+    if(storedBytes+Buffer.byteLength(body)+(rawMime?Buffer.byteLength(rawMime):0)+attachments.reduce((n,a)=>n+a.size,0)>config.storedBytes)throw new Fault(507,"In-memory storage capacity reached");
     const id=this.addressIds.get(this.key(channel,to));const r=id?this.resources.get(id):null;
-    const reason=!r?"UNKNOWN_RECIPIENT":r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()?"EXPIRED_RECIPIENT":undefined;
+    const reason=!r?(this.expired.has(this.key(channel,to))?"EXPIRED_RECIPIENT":"UNKNOWN_RECIPIENT"):r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()?"EXPIRED_RECIPIENT":undefined;
     const destinationId=reason?this.defaults[channel]:r!.id;
-    const m:Message={id:randomUUID(),sequence:++this.msgSeq,channel,destinationId,from,originalRecipient:to,body,subject,html,rawMime,receivedAt:new Date().toISOString(),captureReason:reason};
+    const m:Message={id:randomUUID(),sequence:++this.msgSeq,channel,destinationId,from,originalRecipient:to,body,subject,html,rawMime,attachments,receivedAt:new Date().toISOString(),captureReason:reason};
     this.messages.set(m.id,m);
     this.log(reason?"message.captured":"message.received",destinationId,m.id,{reason});
     this.emitter.emit("message",m);return m;
@@ -65,7 +73,7 @@ export class Sandbox {
   listMessages(id:string){this.resource(id);return [...this.messages.values()].filter(m=>m.destinationId===id).sort((a,b)=>a.sequence-b.sequence)}
   removeMessage(id:string,messageId:string){this.resource(id);const m=this.messages.get(messageId);if(!m||m.destinationId!==id)throw new Fault(404,"Message not found");this.messages.delete(messageId);this.log("message.deleted",id,messageId)}
   clearMessages(id:string){for(const m of this.listMessages(id))this.removeMessage(id,m.id)}
-  newObserver(){const id=randomUUID();this.observers.set(id,{id,expiresAt:Date.now()+3600000,inboxes:new Set()});return this.snapshot(id)}
+  newObserver(){const id=randomUUID();this.observers.set(id,{id,expiresAt:Date.now()+config.observerTtl*1000,inboxes:new Set()});return this.snapshot(id)}
   observer(id:string){const o=this.observers.get(id);if(!o||o.expiresAt<=Date.now())throw new Fault(404,"Observer not found");o.expiresAt=Date.now()+3600000;return o}
   snapshot(id:string){const o=this.observer(id);return {observerId:id,inboxes:[...o.inboxes].flatMap(i=>{try{return [this.resource(i)]}catch{return []}})}}
   watch(id:string,resourceId:string){const o=this.observer(id),r=this.resource(resourceId);o.inboxes.add(r.id);return {recipient:r,messages:this.listMessages(r.id)}}
@@ -73,7 +81,7 @@ export class Sandbox {
   replay(after?:string){let events=this.events,gap=false,reset=false;if(after){const [run,n]=after.split(":");if(run!==this.runId)reset=true;else{const seq=Number(n);gap=!!events.length&&seq<Number(events[0].id.split(":")[1])-1;events=events.filter(e=>Number(e.id.split(":")[1])>seq)}}return {events,gap,reset,runId:this.runId,oldest:this.events[0]?.id,latest:this.events.at(-1)?.id}}
   wait(id:string,{after=0,timeoutMs=10000,match={}}:{after?:number;timeoutMs?:number;match?:{from?:string;bodyContains?:string;subjectContains?:string}},signal?:AbortSignal):Promise<Message|null>{
     this.resource(id);
-    if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>120000)throw new Fault(400,"Invalid timeout");
+    if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>config.waitMs)throw new Fault(400,"Invalid timeout");
     const fits=(m:Message)=>m.destinationId===id&&m.sequence>after&&(!match.from||m.from===match.from)&&(!match.bodyContains||m.body.includes(match.bodyContains))&&(!match.subjectContains||(m.subject||"").includes(match.subjectContains));
     const found=this.listMessages(id).find(fits);if(found)return Promise.resolve(found);
     return new Promise(resolve=>{
@@ -87,5 +95,6 @@ export class Sandbox {
       const raced=this.listMessages(id).find(fits);if(raced)finish(raced);
     });
   }
-  cleanup(){for(const r of [...this.resources.values()])if(r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()){this.resources.delete(r.id);this.addressIds.delete(this.key(r.channel,r.address));for(const m of this.messages.values())if(m.destinationId===r.id)this.messages.delete(m.id);for(const o of this.observers.values())o.inboxes.delete(r.id);this.emitter.emit("resource.removed",r.id);this.log("recipient.expired",r.id)}for(const [id,o] of this.observers)if(o.expiresAt<=Date.now())this.observers.delete(id)}
+  cleanup(){for(const r of [...this.resources.values()])if(r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()){this.resources.delete(r.id);this.addressIds.delete(this.key(r.channel,r.address));this.expired.set(this.key(r.channel,r.address),Date.now());for(const m of this.messages.values())if(m.destinationId===r.id)this.messages.delete(m.id);for(const o of this.observers.values())o.inboxes.delete(r.id);this.emitter.emit("resource.removed",r.id);this.log("recipient.expired",r.id)}for(const [id,o] of this.observers)if(o.expiresAt<=Date.now())this.observers.delete(id);
+    for(const [key,at] of this.expired)if(at<Date.now()-config.maxTtl*1000)this.expired.delete(key)}
 }

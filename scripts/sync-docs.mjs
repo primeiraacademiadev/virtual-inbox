@@ -17,3 +17,5 @@ const documents=[
 ];
 for(const [source,target] of documents)copyFileSync(join(projectRoot,source),join(destination,target));
 console.log("Wiki documentation synchronized from repository Markdown");
+\nimport {execFileSync} from "node:child_process";
+execFileSync(process.execPath,[join(projectRoot,"scripts/build-doc-search.mjs")],{stdio:"inherit"});

@@ -1,8 +1,13 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
+type Page="workspace"|"connections"|"documentation"|"api";
 const base=(c:Channel)=>c==="email"?"/mailboxes":"/phone-numbers";
 export default function App(){
+ const [page,setPage]=useState<Page>("workspace");
+ const [connection,setConnection]=useState<any>(null);
+ const [docText,setDocText]=useState("");
+ const [apiText,setApiText]=useState("");
  const [observer,setObserver]=useState(()=>sessionStorage.getItem("virtual-inbox-observer")||"");
  const [inboxes,setInboxes]=useState<Recipient[]>([]);
  const [selected,setSelected]=useState<string|null>(null);
@@ -25,6 +30,7 @@ export default function App(){
  const [logs,setLogs]=useState<EventEntry[]>([]);
  const [logFilter,setLogFilter]=useState("");
  const [connected,setConnected]=useState(false);
+ useEffect(()=>{void request<any>("/connection-info").then(setConnection).catch(()=>{});fetch("/docs/guide.md").then(r=>r.ok?r.text():"Documentation unavailable").then(setDocText).catch(()=>{});fetch("/docs/api.md").then(r=>r.ok?r.text():"API reference unavailable").then(setApiText).catch(()=>{})},[]);
  const active=inboxes.find(x=>x.id===selected)||null;
  const refresh=useCallback(async(id:string,c:Channel)=>{try{const m=await request<Message[]>(base(c)+"/"+id+"/messages");setMessages(p=>({...p,[id]:m}))}catch{}},[]);
  const syncObserver=useCallback(async(id:string)=>{const snapshot=await request<Observer>("/observers/"+id);setInboxes(snapshot.inboxes);for(const r of snapshot.inboxes)void refresh(r.id,r.channel)},[refresh]);
@@ -54,7 +60,8 @@ export default function App(){
  const filteredLogs=useMemo(()=>logs.filter(x=>JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),[logs,logFilter]);
  return <div className="shell">
  <header><button aria-label="Alternar menu" onClick={()=>setCollapsed(v=>!v)}>☰</button><strong>✉ Virtual Inbox</strong><div className="spacer"/><span className="tiny">{connected?"● SSE ligado":"○ SSE desligado"}</span><span className="tiny">Sessão: {observer.slice(0,8)||"a ligar..."}</span></header>
- <div className="workspace">
+ <nav className="topNav"><button onClick={()=>setPage("workspace")}>Inboxes</button><button onClick={()=>setPage("connections")}>Ligações e TLS</button><button onClick={()=>setPage("documentation")}>Documentação</button><button onClick={()=>setPage("api")}>API</button></nav>
+ {page==="workspace"&&<div className="workspace">
  <aside className={"sidebar"+(collapsed?" closed":"")}>
  {(["email","sms"] as Channel[]).map(c=><section key={c} className="inboxGroup">
  <div className="groupHead">
@@ -75,7 +82,10 @@ export default function App(){
  {active&&compose&&<div className="composeOverlay"><div className="compose"><strong>Enviar para {active.address}</strong><label>Remetente<input value={sender} onChange={e=>setSender(e.target.value)}/></label>{active.channel==="email"&&<label>Assunto<input value={subject} onChange={e=>setSubject(e.target.value)}/></label>}<label>Mensagem<textarea rows={3} value={body} onChange={e=>setBody(e.target.value)}/></label><div className="actions"><button onClick={()=>setCompose(false)}>Cancelar</button><button onClick={()=>void send()}>Enviar</button></div></div></div>}
  <div className="panelBody inboxScroll">{active&&<div className="messages">{(messages[active.id]||[]).slice().reverse().map(m=><button key={m.id} className={"msg"+(!(seen[active.id]||[]).includes(m.id)?" unread":"")} onClick={()=>{setDetail(m);setSeen(p=>({...p,[active.id]:[...new Set([...(p[active.id]||[]),m.id])]}))}}><div className="msgTitle">{m.subject||m.body.slice(0,65)||"(sem conteúdo)"} <span className="tiny">{new Date(m.receivedAt).toLocaleTimeString()}</span></div><div className="tiny">{m.from}{m.captureReason?" · "+m.captureReason:""}</div></button>)}{detail&&detail.destinationId===active.id&&<div className="detail"><div className="actions"><button onClick={()=>void deleteMessage(detail)}>Eliminar mensagem</button><button onClick={()=>setDetail(null)}>Fechar</button></div><p><b>De:</b> {detail.from}</p><p><b>Para:</b> {detail.originalRecipient}</p><p><b>Assunto:</b> {detail.subject||"—"}</p><div>{detail.body}</div></div>}</div>}</div>{active&&!compose&&<button className="fab" aria-label="Enviar mensagem" title="Enviar para esta inbox" onClick={()=>setCompose(v=>!v)}>{compose?"×":"+"}</button>}</section>}
  {view!=="inbox"&&<section className="panel"><div className="panelHead"><strong>Live Logs</strong><div className="spacer"/><button onClick={()=>setView("inbox")} title="Minimizar logs">▾</button></div><div className="logFilters"><input aria-label="Filtrar logs" placeholder="Filtrar eventos, recurso, nível..." value={logFilter} onChange={e=>setLogFilter(e.target.value)}/><button onClick={()=>setLogs([])}>Limpar vista</button></div><div className="panelBody">{filteredLogs.slice().reverse().map(e=><div className="logRow" key={e.id}><span>{new Date(e.at).toLocaleTimeString()}</span>{e.type} <span>{e.resourceId?.slice(0,8)||""}</span></div>)}</div></section>}
- </main></div>
+ </main></div>}
+ {page==="connections"&&<main className="information"><h2>Ligações e certificados</h2><p>O TLS termina no servidor Node.js para HTTPS, STARTTLS e SMTPS.</p><h3>Configuração dos clientes</h3><table><thead><tr><th>Protocolo</th><th>Servidor</th><th>Porta</th><th>Segurança</th></tr></thead><tbody><tr><td>HTTPS API</td><td>{connection?.host||"localhost"}</td><td>{connection?.http?.httpsPort||"—"}</td><td>TLS</td></tr><tr><td>SMTP</td><td>{connection?.host||"localhost"}</td><td>{connection?.smtp?.plainPort||2525}</td><td>{connection?.smtp?.starttls?"STARTTLS disponível":"Sem STARTTLS"}</td></tr><tr><td>SMTPS</td><td>{connection?.host||"localhost"}</td><td>{connection?.smtp?.implicitTlsPort||"—"}</td><td>TLS implícito</td></tr><tr><td>SMS API</td><td>{connection?.host||"localhost"}</td><td>{connection?.http?.httpsPort||connection?.http?.port||3000}</td><td>HTTP(S)</td></tr></tbody></table><h3>Certificado instalado</h3>{connection?.certificate?<><p>Emissor: {connection.certificate.issuer}</p><p>Validade: {connection.certificate.validTo}</p><p>SHA-256: {connection.certificate.fingerprint256}</p><a href={"/api"+connection.certificate.download} download>Descarregar certificado público (PEM)</a></>:<p>TLS não está configurado. Define TLS_CERT_FILE e TLS_KEY_FILE no servidor e reinicia a aplicação.</p>}<p className="tiny">A chave privada nunca é disponibilizada para download. A importação de chaves pela web fica desativada até existir autenticação administrativa.</p></main>}
+ {page==="documentation"&&<main className="information"><h2>Documentação de utilização</h2><pre className="docMarkdown">{docText}</pre></main>}
+ {page==="api"&&<main className="information"><h2>API pública da sandbox</h2><p>Exclui endpoints de demonstração.</p><pre className="docMarkdown">{apiText}</pre></main>}
  {modal&&<div className="modalBackdrop"><div className="modal"><h2>Adicionar inbox</h2><label>Identificador (vazio = aleatório)<input autoFocus value={identifier} placeholder={modal==="email"?"teste@sandbox.test":"+351900000001"} onChange={e=>{setIdentifier(e.target.value);setMissing(false);setError("")}}/></label>{identifier.trim()&&<span className={classify(identifier.trim())?"success":"error"}>{classify(identifier.trim())==="email"?"✓ Email":classify(identifier.trim())==="sms"?"✓ SMS":"Identificador inválido"}</span>}<div className="row"><button className="clock" title="Configurar TTL" onClick={()=>setTtlOpen(v=>!v)}>⏱</button>{ttlOpen&&<label>TTL (segundos)<input type="number" min="1" max="604800" value={ttl} onChange={e=>setTtl(e.target.value)}/></label>}</div>{missing&&<p>Esta inbox não existe. Pretendes criá-la?</p>}{error&&<p className="error">{error}</p>}<div className="actions"><button onClick={()=>setModal(null)}>Cancelar</button><button disabled={!!identifier.trim()&&!classify(identifier.trim())} onClick={()=>void (missing||!identifier.trim()?create():addExisting())}>{missing?"Criar":identifier.trim()?"Adicionar":"Criar aleatória"}</button></div></div></div>}
  </div>
 }

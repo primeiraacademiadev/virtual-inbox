@@ -12,4 +12,3 @@ web/public/wiki
 *.tsbuildinfo
 Dockerfile*
 docker-compose*
-README.md

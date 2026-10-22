@@ -32,7 +32,7 @@ O certificado autoassinado só é confiável quando explicitamente instalado com
 
 ## Importação administrativa pela consola
 
-A interface apresenta os certificados atualmente configurados, mas **não aceita upload da chave privada enquanto não houver autenticação/autorização administrativa e HTTPS confiável**. Por enquanto, os ficheiros PEM são configurados no servidor e este é reiniciado. Isto impede que qualquer utilizador anónimo possa substituir a identidade TLS.
+A consola permite importar ficheiros PEM quando o operador fornece um token administrativo. Configura `ADMIN_TOKEN` com um segredo forte no ambiente do processo e configura previamente `TLS_CERT_FILE` e `TLS_KEY_FILE`. A API `PUT /api/admin/tls` aceita `cert` e `key` (PEM) **apenas através de HTTPS**, valida que a chave corresponde ao certificado e escreve os ficheiros com permissões restritas. A identidade importada torna-se ativa após reiniciar o processo. A chave privada nunca pode ser descarregada pela API ou pela consola. O token não é persistido no browser.
 
 ## Endpoints e isolamento
 
@@ -43,3 +43,5 @@ Os endpoints de demonstração continuam separados logicamente dos endpoints de 
 O nome público anunciado aos clientes é `PUBLIC_HOST` (omissão `localhost`); as interfaces de escuta são `HOST` e `SMTP_HOST` (omissão `127.0.0.1`). Os nomes SAN do certificado têm de corresponder ao host efetivamente utilizado. Estes valores são atualmente configurados por ambiente e visualizados, mas não editados, na consola. A alteração por interface web requer autenticação administrativa e gestão segura de reinício.
 
 Para desenvolvimento da consola, o Vite usa as portas locais 3000 (`/api`) e 3001 (`/demo`). Na versão compilada e servida pelo Node, os endpoints da API usam `/api`, enquanto o envio de demonstração é dirigido ao listener HTTPS próprio na porta 3444.
+
+**Nota de segurança:** a atualização de dois ficheiros PEM não constitui uma transação de filesystem atómica entre ambos; mantém uma cópia de recuperação antes da rotação. É necessário validar reinício e recuperação operacional antes de usar em ambientes públicos.

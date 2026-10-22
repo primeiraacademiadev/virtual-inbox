@@ -10,6 +10,7 @@ import {normalizeMimeAttachments,sanitizeDownloadName} from "./mime/attachments.
 import nodemailer from "nodemailer";
 import { Sandbox, Fault, classify, type Channel, type Event, type Attachment } from "./core.js";
 import {config} from "./config.js";
+import {isAllowedHost,isAllowedOrigin,applyCors} from "./http/security.js";
 import {generationOptions} from "./identity-generation/generator.js";
 import {ensureLocalTls} from "./tls/local-certificates.js";
 
@@ -76,19 +77,6 @@ function errorCode(status:number,message:string):string{
  return "INTERNAL_ERROR";
 }
 const allowedOrigins=new Set(["http://127.0.0.1:5173","http://localhost:5173",...(process.env.HTTP_ALLOWED_ORIGINS||"").split(",")].map(x=>x.trim()).filter(Boolean));
-function originAllowed(req:IncomingMessage){
- const origin=req.headers.origin;if(!origin)return true;
- try{const parsed=new URL(origin);const host=String(req.headers.host||"").toLowerCase();return ((parsed.protocol==="http:"||parsed.protocol==="https:")&&parsed.host.toLowerCase()===host)||allowedOrigins.has(origin)}catch{return false}
-}
-function hostAllowed(req:IncomingMessage){
- const host=String(req.headers.host||"");if(!host||host.includes(",")||/[\\\s]/.test(host))return false;
- try{const url=new URL("http://"+host);const hostname=url.hostname.replace(/^\[|\]$/g,"").toLowerCase();
- const configured=[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","[::1]","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(",")].map(x=>x.trim().replace(/^\[|\]$/g,"").toLowerCase());
- return configured.includes(hostname)}catch{return false}
-}
-function applyCors(req:IncomingMessage,res:ServerResponse){
- const origin=req.headers.origin;if(origin&&originAllowed(req)){res.setHeader("Access-Control-Allow-Origin",origin);res.setHeader("Vary","Origin");res.setHeader("Access-Control-Allow-Headers","Content-Type,Last-Event-ID,Authorization");res.setHeader("Access-Control-Allow-Methods","GET,POST,PUT,DELETE,OPTIONS")}
-}
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8",});res.end(JSON.stringify(data,(_key,value)=>_key==="content"&&Buffer.isBuffer(value)?undefined:value))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
@@ -122,9 +110,9 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
 }
 async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=false){
  try{
- if(!hostAllowed(req))throw new Fault(421,"Unrecognized Host");
- if(!originAllowed(req))throw new Fault(403,"Origin not allowed");
- applyCors(req,res);
+ if(!isAllowedHost(req.headers.host,[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(",")]))throw new Fault(421,"Unrecognized Host");
+ if(!isAllowedOrigin(req.headers.origin,req.headers.host,allowedOrigins))throw new Fault(403,"Origin not allowed");
+ applyCors(req,res,allowedOrigins);
  const rawPath=new URL(req.url||"/","http://localhost").pathname.split("/").filter(Boolean),method=req.method||"GET";
  const path=!demoOnly&&rawPath[0]==="api"?rawPath.slice(1):rawPath;
  if(method==="OPTIONS")return json(res,204,{});

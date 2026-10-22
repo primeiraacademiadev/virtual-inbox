@@ -46,3 +46,15 @@
 .tlsImport label{display:grid;gap:6px}
 .detail{max-height:65vh;overflow-y:auto;overflow-x:hidden}
 @media(max-width:650px){.composeOverlay{left:6px;right:6px;top:110px;bottom:8px}.workspace:has(.sidebar.closed) .composeOverlay{left:6px}}
+
+/* Task-oriented documentation navigation */
+.docJourneys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0 22px}
+.docJourney{display:flex;flex-direction:column;text-align:left;gap:7px;padding:17px;min-height:106px;border:1px solid #46617d;background:#1a2b42}
+.docJourney strong{font-size:15px}
+.docJourney small{color:#afc2db;line-height:1.4;font-size:12px}
+.docJourney.active{border-color:#72bbea;background:#264563}
+.docPicker{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.docMarkdown{max-width:82ch;line-height:1.7}
+.docMarkdown table{display:block;max-width:100%;overflow-x:auto}
+.docMarkdown blockquote{border-left:3px solid #72bbea;padding-left:14px;margin-left:0}
+@media(max-width:700px){.docJourneys{grid-template-columns:1fr}.docJourney{min-height:auto}}

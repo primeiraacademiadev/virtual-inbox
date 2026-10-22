@@ -1,0 +1,2 @@
+import {labels,locales,useI18n} from "./context";
+export function LanguageSelector(){const {locale,setLocale,t}=useI18n();return <label className="languageSelector"><span className="srOnly">{t("locale")}</span><select aria-label={t("locale")} value={locale} onChange={e=>setLocale(e.target.value as typeof locale)}>{locales.map(code=><option key={code} value={code}>{labels[code]}</option>)}</select></label>}

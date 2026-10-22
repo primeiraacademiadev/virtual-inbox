@@ -3,7 +3,8 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {classify,del,post,request,type Channel,type EventEntry,type Message,type Observer,type Recipient} from "./api";
 type View="split"|"inbox"|"logs";
 type Page="workspace"|"connections"|"documentation"|"api";
-async function postDemo(path:string,data:unknown){const response=await fetch("/demo"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!response.ok)throw new Error("Demo send failed: "+response.status);return response.json()}
+async function postDemo(path:string,data:unknown){const endpoint=location.port==="5173"?"/demo"+path:(location.protocol==="https:"?"https://"+location.hostname+":3444":"http://"+location.hostname+":3001")+path;
+ const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});if(!response.ok)throw new Error("Demo send failed: "+response.status);return response.json()}
 const base=(c:Channel)=>c==="email"?"/mailboxes":"/phone-numbers";
 export default function App(){
  const [page,setPage]=useState<Page>("workspace");

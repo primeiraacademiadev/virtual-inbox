@@ -1,6 +1,6 @@
 import {X509Certificate,createPrivateKey,createPublicKey} from "node:crypto";
 import {createSecureContext} from "node:tls";
-import {readFileSync,writeFileSync,renameSync,copyFileSync,existsSync,mkdirSync} from "node:fs";
+import {readFileSync,writeFileSync,renameSync,copyFileSync,existsSync,mkdirSync,rmSync} from "node:fs";
 import {dirname} from "node:path";
 
 export type ServerIdentity={cert:Buffer;key:Buffer;minVersion:"TLSv1.2"};
@@ -27,21 +27,28 @@ export class CertificateManager{
   return {source:this.source,subject:cert.subject,issuer:cert.issuer,validTo:cert.validTo,fingerprint256:cert.fingerprint256,subjectAltName:cert.subjectAltName||""};
  }
  subscribe(listener:(identity:ServerIdentity)=>void){this.listeners.add(listener);return ()=>this.listeners.delete(listener)}
- activate(cert:string,key:string){
-  const next=validateIdentity(cert,key);
+ private apply(next:ServerIdentity,source:"automatic"|"external"|"uploaded"){
   const old=this.active;
-  try{
-   for(const apply of this.listeners)apply(next);
-  }catch(error){
-   if(old)for(const apply of this.listeners){try{apply(old)}catch{}}
-   throw error;
-  }
-  mkdirSync(dirname(this.uploadPath),{recursive:true,mode:0o700});
-  const temporary=this.uploadPath+".tmp";
-  writeFileSync(temporary,JSON.stringify({cert,key}),{mode:0o600});
-  if(existsSync(this.uploadPath))copyFileSync(this.uploadPath,this.uploadPath+".previous");
-  renameSync(temporary,this.uploadPath);
-  this.active=next;this.source="uploaded";
+  try{for(const listener of this.listeners)listener(next)}
+  catch(error){if(old)for(const listener of this.listeners){try{listener(old)}catch{}}throw error}
+  this.active=next;this.source=source;
   return this.info();
  }
+ useGenerated(cert:string|Buffer,key:string|Buffer){return this.apply(validateIdentity(cert,key),"automatic")}
+ activate(cert:string,key:string){
+  const next=validateIdentity(cert,key);
+  mkdirSync(dirname(this.uploadPath),{recursive:true,mode:0o700});
+  const temporary=this.uploadPath+"."+Date.now()+".tmp";
+  writeFileSync(temporary,JSON.stringify({cert,key}),{mode:0o600,flag:"wx"});
+  try{
+   const info=this.apply(next,"uploaded");
+   if(existsSync(this.uploadPath))copyFileSync(this.uploadPath,this.uploadPath+".previous");
+   renameSync(temporary,this.uploadPath);
+   return info;
+  }catch(error){
+   try{rmSync(temporary,{force:true})}catch{}
+   throw error;
+  }
+ }
+
 }

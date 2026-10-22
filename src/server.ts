@@ -3,7 +3,7 @@ import { createServer as createHttpsServer } from "node:https";
 import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync, copyFileSync, rmSync } from "node:fs";
 import { resolve, join, extname, sep, dirname } from "node:path";
 import { TLSSocket } from "node:tls";
-import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
+import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID, createHash } from "node:crypto";
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
 import {normalizeMimeAttachments,sanitizeDownloadName} from "./mime/attachments.js";
@@ -273,12 +273,12 @@ if(tlsIdentity){
  });
 }
 if(tlsMode==="external"&&tlsCertPath&&tlsKeyPath){
- let previousFingerprint=certificateManager.info()?.fingerprint256;
+ let previousFingerprint=certificateManager.identity?createHash("sha256").update(certificateManager.identity.cert).update(certificateManager.identity.key).digest("hex"):undefined;
  const externalRefresh=setInterval(()=>{
   if(certificateManager.activeSource!=="external")return;
   try{
    const cert=readFileSync(tlsCertPath),key=readFileSync(tlsKeyPath);
-   const fingerprint=new X509Certificate(cert).fingerprint256;
+   const fingerprint=createHash("sha256").update(cert).update(key).digest("hex");
    if(fingerprint===previousFingerprint)return;
    certificateManager.useExternal(cert,key);
    tlsIdentity=certificateManager.identity;

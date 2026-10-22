@@ -18,3 +18,9 @@ test("CORS only permits same-origin or explicit dev origin",()=>{
  assert.equal(isAllowedOrigin("https://evil.example","localhost:3000",origins),false);
  assert.equal(isAllowedOrigin(undefined,"localhost:3000",origins),true);
 });
+
+test("demo API preflight accepts the HTTPS console on its own separate port",()=>{
+ const applicationOrigins=new Set(["https://127.0.0.1:3443","http://127.0.0.1:3000"]);
+ assert.equal(isAllowedOrigin("https://127.0.0.1:3443","127.0.0.1:3444",applicationOrigins),true);
+ assert.equal(isAllowedOrigin("https://attacker.example","127.0.0.1:3444",applicationOrigins),false);
+});

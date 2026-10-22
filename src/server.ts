@@ -73,15 +73,15 @@ function errorCode(status:number,message:string):string{
  if(status===400)return "INVALID_REQUEST";
  return "INTERNAL_ERROR";
 }
-const allowedOrigins=new Set((process.env.HTTP_ALLOWED_ORIGINS||"").split(",").map(x=>x.trim()).filter(Boolean));
+const allowedOrigins=new Set(["http://127.0.0.1:5173","http://localhost:5173",...(process.env.HTTP_ALLOWED_ORIGINS||"").split(",")].map(x=>x.trim()).filter(Boolean));
 function originAllowed(req:IncomingMessage){
  const origin=req.headers.origin;if(!origin)return true;
  try{const parsed=new URL(origin);const host=String(req.headers.host||"").toLowerCase();return ((parsed.protocol==="http:"||parsed.protocol==="https:")&&parsed.host.toLowerCase()===host)||allowedOrigins.has(origin)}catch{return false}
 }
 function hostAllowed(req:IncomingMessage){
  const host=String(req.headers.host||"");if(!host||host.includes(",")||/[\\\s]/.test(host))return false;
- try{const url=new URL("http://"+host);const hostname=url.hostname.replace(/^\\[|\\]$/g,"").toLowerCase();
- const configured=[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","[::1]","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(",")].map(x=>x.trim().replace(/^\\[|\\]$/g,"").toLowerCase());
+ try{const url=new URL("http://"+host);const hostname=url.hostname.replace(/^\[|\]$/g,"").toLowerCase();
+ const configured=[setting("PUBLIC_HOST","localhost"),setting("HOST","127.0.0.1"),"localhost","127.0.0.1","[::1]","::1",...(process.env.HTTP_ALLOWED_HOSTS||"").split(",")].map(x=>x.trim().replace(/^\[|\]$/g,"").toLowerCase());
  return configured.includes(hostname)}catch{return false}
 }
 function applyCors(req:IncomingMessage,res:ServerResponse){

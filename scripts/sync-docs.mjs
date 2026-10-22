@@ -1,21 +1,15 @@
-import { mkdirSync, copyFileSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"..");
-const destination=join(projectRoot,"web/public/wiki");
-mkdirSync(destination,{recursive:true});
-const documents=[
-  ["README.md","overview.md"],
-  ["docs/demo.md","demo.md"],
-  ["docs/integration.md","integration.md"],
-  ["docs/sdk.md","sdk.md"],
-  ["docs/api.md","api.md"],
-  ["docs/architecture.md","architecture.md"],
-  ["docs/development.md","development.md"],
-  ["docs/tls.md","tls.md"]
-];
-for(const [source,target] of documents)copyFileSync(join(projectRoot,source),join(destination,target));
-console.log("Wiki documentation synchronized from repository Markdown");
-\nimport {execFileSync} from "node:child_process";
-execFileSync(process.execPath,[join(projectRoot,"scripts/build-doc-search.mjs")],{stdio:"inherit"});
+import {mkdirSync,copyFileSync,existsSync} from "node:fs";
+import {dirname,resolve,join} from "node:path";
+import {fileURLToPath} from "node:url";
+import {execFileSync} from "node:child_process";
+const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+const documents=["overview","demo","integration","sdk","api","tls","architecture","development"];
+for(const locale of ["pt-PT","en","fr"]){
+ const target=join(root,"web/public/wiki",locale);mkdirSync(target,{recursive:true});
+ for(const name of documents){
+  const localized=join(root,"docs/i18n",locale,name+".md");
+  if(!existsSync(localized))throw Error("Missing translation: "+locale+"/"+name);
+  copyFileSync(localized,join(target,name+".md"));
+ }
+}
+execFileSync(process.execPath,[join(root,"scripts/build-doc-search.mjs")],{stdio:"inherit"});

@@ -46,3 +46,21 @@ Os endpoints equivalentes aos de mailboxes estão disponíveis em `/phone-number
 | GET | `/logs/events` | Subscrever SSE global |
 
 **Nota de segurança:** a API não possui autenticação no MVP; usar apenas numa rede protegida.
+
+## Received email attachments
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/mailboxes/:id/messages/:messageId/attachments/:attachmentId` | Download attachment bytes |
+
+Message JSON contains attachment metadata (ID, name, MIME type, size) without file bytes.
+
+## TLS and administrative operations
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/tls/ca.pem` | Download public local CA certificate (auto mode only) |
+| PUT | `/admin/tls` | Admin HTTPS import of PEM certificate/key |
+| PUT | `/admin/network` | Admin HTTPS settings for hostnames and ports (restart needed) |
+
+All administrative modifications require `Authorization: Bearer <ADMIN_TOKEN>` over HTTPS. The private key is never downloadable.

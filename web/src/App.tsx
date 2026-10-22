@@ -26,6 +26,7 @@ export default function App(){
  const previousUiLocale=useRef(locale);
  useEffect(()=>{if(previousUiLocale.current!==locale){previousUiLocale.current=locale;setIdentityPrefs(p=>({...p,locale:localeForUi(locale)}))}},[locale]);
  useEffect(()=>savePrefs(identityPrefs),[identityPrefs]);
+ useEffect(()=>{void request<{active:{source:string;subject:string;subjectAltName:string;validTo:string;fingerprint256:string}|null}>("/tls/status").then(x=>{setActiveCertificate(x.active);if(x.active?.subjectAltName){const names=[...x.active.subjectAltName.matchAll(/(?:DNS|IP Address):([^,]+)/g)].map(m=>m[1].trim());if(names.length)setTlsNames(names.join(","))}}).catch(()=>{})},[]);
  useEffect(()=>{void request<GenerationOptions>("/identity-generation/options").then(x=>{setIdentityOptions(x);if(!hadSavedIdentityPrefs.current&&!identityPrefsTouched.current)setIdentityPrefs(p=>({...p,emailStrategy:x.defaults.emailStrategy,phoneStrategy:x.defaults.phoneStrategy,safeTestData:x.defaults.safeTestData,includeCountryCode:x.defaults.includeCountryCode}))}).catch(()=>{})},[]);
  const [menuOpen,setMenuOpen]=useState(false);
  const [connection,setConnection]=useState<any>(null);
@@ -34,6 +35,8 @@ export default function App(){
  const [tlsKeyFile,setTlsKeyFile]=useState<File|null>(null);
  const [tlsStatus,setTlsStatus]=useState("");
  const [activeCertificate,setActiveCertificate]=useState<{source:string;subject:string;subjectAltName:string;validTo:string;fingerprint256:string}|null>(null);
+ const [tlsNames,setTlsNames]=useState("localhost,127.0.0.1");
+ const [tlsNamesStatus,setTlsNamesStatus]=useState("");
  const [networkFields,setNetworkFields]=useState<Record<string,string>>({});
  const [networkStatus,setNetworkStatus]=useState("");
  const [docText,setDocText]=useState("");
@@ -107,6 +110,17 @@ export default function App(){
     setNetworkStatus(t("networkSaved"));
    }catch(e){setNetworkStatus(localizeError(e,locale))}
  }
+ async function saveTlsNames(){
+  const values=tlsNames.split(",").map(x=>x.trim()).filter(Boolean);
+  try{
+   const dns=values.filter(x=>!(/^[0-9.]+$/.test(x)||x.includes(":")));
+   const ips=values.filter(x=>!dns.includes(x));
+   const endpoint=location.protocol==="https"?"/api/admin/tls/names":"https://"+location.hostname+":3443/admin/tls/names";
+   const response=await fetch(endpoint,{method:"PUT",headers:{"Content-Type":"application/json","Authorization":"Bearer "+adminToken},body:JSON.stringify({dns,ips})});
+   if(!response.ok)throw Error("TLS SAN update: HTTP "+response.status);
+   const updated=await response.json();setActiveCertificate(updated.active);setTlsNamesStatus("Certificate updated without restarting");
+  }catch(error){setTlsNamesStatus(localizeError(error,locale))}
+ }
  async function importCertificate(){
   if(!tlsCertFile||!tlsKeyFile){setTlsStatus(t("selectPem"));return}
   try{
@@ -143,7 +157,7 @@ export default function App(){
  {view!=="inbox"&&<section className="panel"><div className="panelHead"><strong>{t("logs")}</strong><div className="spacer"/><button onClick={()=>setView("inbox")} title={t("minimizeLogs")}>▾</button></div><div className="logFilters"><input aria-label={t("filterLogs")} placeholder={t("filterLogs")} value={logFilter} onChange={e=>setLogFilter(e.target.value)}/><button onClick={()=>setLogs([])}>{t("clearView")}</button></div><div className="panelBody">{filteredLogs.slice().reverse().map(e=><div className="logRow" key={e.id}><span>{formatDate(e.at)}</span>{eventLabel(locale,e.type)} <span>{e.resourceId?.slice(0,8)||""}</span></div>)}</div></section>}
  </main></div>}
  {page==="connections"&&<main className="information"><h2>{t("connectionTitle")}</h2><p>{t("connectionIntro")}</p><h3>{t("clientConfig")}</h3><table><thead><tr><th>{t("protocol")}</th><th>{t("server")}</th><th>{t("port")}</th><th>{t("security")}</th></tr></thead><tbody><tr><td>HTTPS API</td><td>{connection?.host||"localhost"}</td><td>{connection?.http?.httpsPort||"—"}</td><td>TLS</td></tr><tr><td>SMTP</td><td>{connection?.host||"localhost"}</td><td>{connection?.smtp?.plainPort||2525}</td><td>{connection?.smtp?.starttls?t("starttlsReady"):t("starttlsOff")}</td></tr><tr><td>SMTPS</td><td>{connection?.host||"localhost"}</td><td>{connection?.smtp?.implicitTlsPort||"—"}</td><td>{t("implicitTls")}</td></tr><tr><td>SMS API</td><td>{connection?.host||"localhost"}</td><td>{connection?.http?.httpsPort||connection?.http?.port||3000}</td><td>HTTP(S)</td></tr></tbody></table><h3>{t("networkValues")}</h3><div className="copyDetails"><CopyButton value={connection?.host||"localhost"} label={t("copyHost")}/>{connection?.http?.httpsPort&&<CopyButton value={"https://"+(connection.host||"localhost")+":"+connection.http.httpsPort} label={t("copyHttps")}/>}<CopyButton value={(connection?.host||"localhost")+":"+(connection?.smtp?.plainPort||2525)} label={t("copySmtp")}/>{connection?.smtp?.implicitTlsPort&&<CopyButton value={(connection.host||"localhost")+":"+connection.smtp.implicitTlsPort} label={t("copySmtps")}/>}</div><h3>{t("addresses")}</h3><div className="tlsImport">{Object.entries(networkFields).map(([name,value])=><label key={name}>{name}<div className="copyField"><input value={value} onChange={e=>setNetworkFields(p=>({...p,[name]:e.target.value}))}/><CopyButton value={value} label={t("copyValue")+" "+name}/></div></label>)}<button disabled={!adminToken} onClick={()=>void saveNetwork()}>{t("saveAddresses")}</button>{networkStatus&&<p role="status">{networkStatus}</p>}</div><h3>{t("certInstalled")}</h3>{activeCertificate&&<div className="detail"><strong>Active TLS</strong><p>Source: {activeCertificate.source}</p><p>SAN: {activeCertificate.subjectAltName}</p><p>Expires: {activeCertificate.validTo}</p></div>}{connection?.certificate?<><p>{t("issuer")} {connection.certificate.issuer}</p><p>{t("validity")} {connection.certificate.validTo}</p><p>{t("fingerprint")} {connection.certificate.fingerprint256} <CopyButton value={connection.certificate.fingerprint256} label={t("copyFingerprint")}/></p><a href={"/api"+connection.certificate.download} download>{t("downloadCert")}</a>{connection.certificate.caDownload&&<p><a href={"/api"+connection.certificate.caDownload} download>{t("downloadCa")}</a></p>}</>:<p>{t("tlsMissing")}</p>}<p className="tiny">{t("privateKeyNotice")}</p>
- <h3>{t("importTls")}</h3>
+ <h3>Certificate DNS / IP names (SAN)</h3><div className="tlsImport"><label>DNS names and IP addresses, separated by commas<input value={tlsNames} onChange={e=>setTlsNames(e.target.value)}/></label><button disabled={!adminToken} onClick={()=>void saveTlsNames()}>Regenerate and apply certificate</button>{tlsNamesStatus&&<p role="status">{tlsNamesStatus}</p>}</div><h3>{t("importTls")}</h3>
  <div className="tlsImport"><label>{t("publicPem")}<input type="file" accept=".pem,.crt" onChange={e=>setTlsCertFile(e.target.files?.[0]||null)}/></label>
  <label>{t("privatePem")}<input type="file" accept=".pem,.key" onChange={e=>setTlsKeyFile(e.target.files?.[0]||null)}/></label>
  <label>{t("adminToken")}<input type="password" value={adminToken} onChange={e=>setAdminToken(e.target.value)} autoComplete="off"/></label>

@@ -1,31 +1,44 @@
-# Manual QA and demonstration
+# Try Virtual Inbox — guided walkthrough
 
-## User interface
+**Audience:** someone experimenting with the product, without integrating a separate application.
 
-The left navigation can collapse to an icon rail. It contains two independently collapsible groups, **Inboxes — Email** and **Inboxes — SMS**, each with a **+** create/attach button and unread badges. At the bottom is **Live Logs**.
+## Before you start
 
-Selecting a mailbox or phone number maximizes its pane; clicking that same entry again returns to split view (inbox over logs). Clicking **Live Logs** maximizes logs; clicking again returns to split view. Collapsing the navigation preserves panel state.
+Install Node.js 24+ and OpenSSL, follow the [README startup steps](../README.md), and open the console. If using generated local HTTPS, trust the **public CA certificate** before opening the HTTPS site; use the Vite HTTP development console if you prefer to avoid this initial browser trust step in local development.
 
-The circular **+** inside a selected inbox opens a contextual composer. Its destination is fixed to that inbox, and the composer can be collapsed. Email accepts From, Subject and Body; SMS accepts From and Body.
+## Walkthrough A: email
 
-## Create or observe an inbox
+1. Choose **Inboxes**, expand **Inboxes — Email**, and press **+**. With the identifier empty, the app creates a random mailbox. The ⏱ control sets its TTL.
+2. Click the mailbox in the sidebar. Press the floating **+** inside the inbox to compose.
+3. Enter a sender and subject. Optionally select one or more attachments, then press **Enviar**.
+4. This does not inject directly into storage: the browser calls the **demo API** on port 3001/3444, whose Nodemailer client sends to the sandbox SMTP receiver on port 2525.
+5. Select the received message to inspect it. Download attached files through their links. Review events in **Live Logs**.
 
-Click **+** in either group. A single identifier input automatically detects an email address or an international-format SMS number; it rejects invalid input. Leave blank to generate a random recipient of the group from which you opened the dialog.
+## Walkthrough B: SMS
 
-If the identifier exists, it is attached to the current GUID observer session, without touching its TTL. If absent, the console asks for confirmation before creating it. The round **⏱** control reveals TTL in seconds; default 1800, accepted range 1..604800. TTL only applies when *creating*, not when observing.
+1. Add a random SMS number in **Inboxes — SMS**, or enter an E.164 number such as `+351900000001`.
+2. Use the floating **+** to send to the selected recipient.
+3. The browser calls the **demo SMS API**, not a mobile carrier. The received message appears in that inbox.
 
-Each console's observation session is identified by a GUID issued by the server over SSE and retained within the browser tab (sessionStorage). The backend maintains the inbox list associated with that GUID; reconnections announce monitored inboxes and resume notifications.
+## Existing recipients and unexpected traffic
 
-## Self-send
+Entering an **existing** identifier attaches it to your current observer session without changing TTL. If the identifier is missing, the console asks whether to create it. Unknown/expired destinations are diverted into system anomaly inboxes, which cannot be deleted.
 
-For email, the backend demo endpoint uses SMTP to deliver back to the selected inbox. For SMS, the console calls the sandbox's HTTP gateway. This deliberately exercises the protocol adapters.
+## Navigation
 
-## Failure and anomaly demonstration
+- Inboxes and Live Logs have independent scrolling; selecting an inbox enlarges it, clicking it again returns to the split view.
+- The composer overlays the workspace, with its own scroll, rather than pushing Live Logs downward.
+- The collapsed sidebar exposes contextual tools via hover or keyboard focus. Touch behavior still needs acceptance testing.
+- A GUID observer session persists across SSE reconnections within the current browser tab; creating a different tab creates an independent session.
 
-Send an SMS to an unregistered phone number:
+## Troubleshooting
 
-```sh
-curl -X POST http://127.0.0.1:3000/sms/messages -H 'content-type: application/json' -d '{"from":"+351911111111","to":"+351922222222","body":"Unexpected SMS"}'
-```
+| Symptom | Check |
+| --- | --- |
+| Can't open HTTPS console | OpenSSL generated a local CA; import its **public** certificate into a trust store, or use Vite HTTP locally |
+| SMTP message not received | Server is running, recipient is registered, destination host/port are correct |
+| Email demo send fails | Demo listener reachable on 3001/3444, SMTP listener available on 2525 |
+| No SMS appears | The mock expects HTTP POST to demo listener; SMS is not sent via telephone network |
+| Inbox disappeared | TTL elapsed or server restarted; all state is ephemeral |
 
-The SMS system inbox `+999000000000` receives the message, recording `captureReason=UNKNOWN_RECIPIENT`. An expired inbox produces `EXPIRED_RECIPIENT`, provided the resource has not yet been swept from the store; see documented limitation.
+See [Integration](integration.md) if you want to connect a real application instead of sending from the demo console.

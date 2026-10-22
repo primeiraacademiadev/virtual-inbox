@@ -9,7 +9,8 @@
     "test": "node --import tsx --test test/*.test.ts",
     "dev:console": "npm run dev --prefix web",
     "build:console": "npm run build --prefix web",
-    "audit": "npm audit --audit-level=high && npm audit --prefix web --audit-level=high"
+    "audit": "npm audit --audit-level=high && npm audit --prefix web --audit-level=high",
+    "dev:console:https": "npm run dev:https --prefix web"
   },
   "dependencies": {
     "smtp-server": "^3.19.23",

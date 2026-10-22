@@ -71,6 +71,21 @@ function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]
   res.end(readFileSync(file));return true;
 }
 
+function errorCode(status:number,message:string):string{
+ const m=message.toLowerCase();
+ if(m.includes("inbox not found"))return "INBOX_NOT_FOUND";
+ if(m.includes("message not found"))return "MESSAGE_NOT_FOUND";
+ if(m.includes("ttl"))return "INVALID_TTL";
+ if(m.includes("expired"))return "RECIPIENT_EXPIRED";
+ if(m.includes("certificate")||m.includes("pem"))return "TLS_CERTIFICATE_INVALID";
+ if(status===413)return "MESSAGE_TOO_LARGE";
+ if(status===403)return "FORBIDDEN";
+ if(status===409)return "CONFLICT";
+ if(status===507)return "CAPACITY_EXCEEDED";
+ if(status===404)return "RESOURCE_NOT_FOUND";
+ if(status===400)return "INVALID_REQUEST";
+ return "INTERNAL_ERROR";
+}
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data,(_key,value)=>_key==="content"&&Buffer.isBuffer(value)?undefined:value))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>config.httpBytes)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
@@ -197,7 +212,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  }
  if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;
  throw new Fault(404,"Route not found");
- }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message})}
+ }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message,errorCode:errorCode(fault.status,fault.message),errorParams:{}})}
 }
 const http=createServer((req,res)=>{void handleRequest(req,res)});
 const demo=createServer((req,res)=>{void handleRequest(req,res,true)});

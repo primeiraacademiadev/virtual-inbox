@@ -22,3 +22,7 @@
 - Validate quota enforcement, expired recipient tombstones, aborting waits and process restart
 
 **Not implemented:** IMAP, POP3, Redis, Kafka, multi-node deployment, production authentication for ordinary API access. These are not MVP requirements. No deployment has been performed.
+
+## Current handoff for validation
+
+Source implementing the first five work blocks has been committed to GitHub without running the acceptance checklist, as explicitly requested. Two npm lockfiles and `npm ci` remain dependent on dependency resolution in an environment with registry access. The user will validate builds, TLS/SMTP, browser flows and security at home. Future protocols and public multi-tenant authentication remain out of scope.

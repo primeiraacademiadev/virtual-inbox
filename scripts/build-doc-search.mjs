@@ -11,7 +11,7 @@ for(const locale of ["pt-PT","en","fr"]){
   const push=()=>{if(section.body.length)index.push({document:doc,label:doc,title:section.title,anchor:"section-"+ordinal,ordinal,text:section.body.join(" ").replace(/[\`*#|]/g," ").slice(0,9000)})};
   for(const line of markdown.split(/\r?\n/)){
    const heading=line.match(/^#{1,3}\s+(.+)$/);
-   if(heading){push();ordinal++;section={title:heading[1],body:[]}}else section.body.push(line);
+   if(heading){push();ordinal++;section={title:heading[2],body:[]}}else section.body.push(line);
   }
   push();
  }

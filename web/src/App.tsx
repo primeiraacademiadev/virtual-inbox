@@ -120,7 +120,7 @@ export default function App(){
  async function removeInbox(){if(!active||!observer)return;try{if(!active.system&&confirm(t("confirmDelete")))await del(base(active.channel)+"/"+active.id);else await del("/observers/"+observer+"/inboxes/"+active.id);await syncObserver(observer);setSelected(null);setView("logs")}catch(e){setError(localizeError(e,locale))}}
  async function saveNetwork(){
    try{
-    const endpoint=location.protocol==="https:"?"/api/admin/network":"https://"+location.hostname+":3443/admin/network";
+    const endpoint="/api/admin/network";
     const response=await fetch(endpoint,{method:"PUT",headers:{"Content-Type":"application/json","Authorization":"Bearer "+adminToken},body:JSON.stringify(networkFields)});
     if(!response.ok)throw Error(t("configurationRejected")+": HTTP "+response.status);
     setNetworkStatus(t("networkSaved"));
@@ -131,7 +131,7 @@ export default function App(){
   try{
    const dns=values.filter(x=>!(/^[0-9.]+$/.test(x)||x.includes(":")));
    const ips=values.filter(x=>!dns.includes(x));
-   const endpoint=location.protocol==="https"?"/api/admin/tls/names":"https://"+location.hostname+":3443/admin/tls/names";
+   const endpoint="/api/admin/tls/names";
    const response=await fetch(endpoint,{method:"PUT",headers:{"Content-Type":"application/json","Authorization":"Bearer "+adminToken},body:JSON.stringify({dns,ips})});
    if(!response.ok)throw Error("TLS SAN update: HTTP "+response.status);
    const updated=await response.json();setActiveCertificate(updated.active);setTlsNamesStatus(t("tlsApplied"));
@@ -140,7 +140,7 @@ export default function App(){
  async function importCertificate(){
   if(!tlsCertFile||!tlsKeyFile){setTlsStatus(t("selectPem"));return}
   try{
-   const endpoint=location.protocol==="https:"?"/api/admin/tls":"https://"+location.hostname+":3443/admin/tls";
+   const endpoint="/api/admin/tls";
    const response=await fetch(endpoint,{method:"PUT",headers:{"Content-Type":"application/json","Authorization":"Bearer "+adminToken},body:JSON.stringify({cert:await tlsCertFile.text(),key:await tlsKeyFile.text()})});
    if(!response.ok)throw new Error(t("importRejected")+": HTTP "+response.status);
    const result=await response.json();setActiveCertificate(result.active);setTlsStatus(t("certificateInstalled")+" "+(result.active?.subject||""));
@@ -181,6 +181,6 @@ export default function App(){
  {tlsStatus&&<p role="status">{tlsStatus}</p>}</div><h3>{t("tlsAdvancedTitle")}</h3><p className="tlsHelp">{t("tlsHelpExternal")}</p></main>}
  {page==="documentation"&&<main className="information"><h2>{t("documentation")}</h2><DocumentSearch onNavigate={navigateSearch}/><p className="muted">{t("documentationHelp")}</p><div className="docJourneys">{[["demo",t("try"),t("tryDescription")],["integration",t("mock"),t("mockDescription")],["sdk",t("testing"),t("testingDescription")]].map(([id,title,description])=><button className={"docJourney"+(docPage===id?" active":"")} key={id} onClick={()=>setDocPage(id)}><strong>{title}</strong><small>{description}</small></button>)}</div><div className="docPicker"><span>{t("reference")}</span>{[["overview",t("intro")],["tls",t("tls")],["architecture",t("architecture")],["development",t("development")]].map(([id,title])=><button aria-pressed={docPage===id} key={id} onClick={()=>setDocPage(id)}>{title}</button>)}</div><article className="docMarkdown"><MarkdownView markdown={docText} onDocument={openDocument}/></article></main>}
  {page==="api"&&<main className="information"><h2>{t("apiTitle")}</h2><DocumentSearch onNavigate={navigateSearch}/><p>{t("apiNote")}</p><article className="docMarkdown"><MarkdownView markdown={apiText} onDocument={openDocument}/></article></main>}
- {modal&&<div className="modalBackdrop"><div className="modal"><h2>{t("addInbox")}</h2><label>{t("identifier")}<input autoFocus value={identifier} placeholder={modal==="email"?({ "pt-PT":"joao.silva@sandbox.test","en-US":"olivia.smith@sandbox.test","fr-FR":"dupont.camille@sandbox.test" }[identityPrefs.locale]):({ "pt-PT":identityPrefs.includeCountryCode?"+351912345401":"912345401","en-US":identityPrefs.includeCountryCode?"+12025550401":"2025550401","fr-FR":identityPrefs.includeCountryCode?"+33612345401":"0612345401" }[identityPrefs.locale])} onChange={e=>{setIdentifier(e.target.value);setMissing(false);setError("")}}/></label><IdentityControls channel={modal} value={identityPrefs} onChange={changeIdentityPrefs} options={identityOptions}/>{identifier.trim()&&<span className={classify(identifier.trim())?"success":"error"}>{classify(identifier.trim())==="email"?"✓ Email":classify(identifier.trim())==="sms"?"✓ SMS":"Identificador inválido"}</span>}<div className="row"><button className="clock" title={t("configureTtl")} onClick={()=>setTtlOpen(v=>!v)}>⏱</button>{ttlOpen&&<label>{t("ttl")}<input type="number" min="1" max="604800" value={ttl} onChange={e=>setTtl(e.target.value)}/></label>}</div>{missing&&<p>{t("missingInbox")}</p>}{error&&<p className="error">{error}</p>}<div className="actions"><button onClick={()=>setModal(null)}>{t("cancel")}</button><button disabled={!!identifier.trim()&&!classify(identifier.trim())} onClick={()=>void (missing||!identifier.trim()?create():addExisting())}>{missing?t("create"):identifier.trim()?t("addInbox"):t("createRandom")}</button></div></div></div>}
+ {modal&&<div className="modalBackdrop"><div className="modal"><h2>{t("addInbox")}</h2><label>{t("identifier")}<input value={identifier} placeholder={modal==="email"?({ "pt-PT":"joao.silva@sandbox.test","en-US":"olivia.smith@sandbox.test","fr-FR":"dupont.camille@sandbox.test" }[identityPrefs.locale]):({ "pt-PT":identityPrefs.includeCountryCode?"+351912345401":"912345401","en-US":identityPrefs.includeCountryCode?"+12025550401":"2025550401","fr-FR":identityPrefs.includeCountryCode?"+33612345401":"0612345401" }[identityPrefs.locale])} onChange={e=>{setIdentifier(e.target.value);setMissing(false);setError("")}}/></label><IdentityControls channel={modal} value={identityPrefs} onChange={changeIdentityPrefs} options={identityOptions}/>{identifier.trim()&&<span className={classify(identifier.trim())?"success":"error"}>{classify(identifier.trim())==="email"?"✓ Email":classify(identifier.trim())==="sms"?"✓ SMS":"Identificador inválido"}</span>}<div className="row"><button className="clock" title={t("configureTtl")} onClick={()=>setTtlOpen(v=>!v)}>⏱</button>{ttlOpen&&<label>{t("ttl")}<input type="number" min="1" max="604800" value={ttl} onChange={e=>setTtl(e.target.value)}/></label>}</div>{missing&&<p>{t("missingInbox")}</p>}{error&&<p className="error">{error}</p>}<div className="actions"><button onClick={()=>setModal(null)}>{t("cancel")}</button><button disabled={!!identifier.trim()&&!classify(identifier.trim())} onClick={()=>void (missing||!identifier.trim()?create():addExisting())}>{missing?t("create"):identifier.trim()?t("addInbox"):t("createRandom")}</button></div></div></div>}
  </div>
 }

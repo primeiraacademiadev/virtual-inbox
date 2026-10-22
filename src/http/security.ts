@@ -1,3 +1,4 @@
+import {isIP} from "node:net";
 import type {IncomingMessage,ServerResponse} from "node:http";
 
 export function isAllowedHost(host:string|undefined,configuredHosts:readonly string[]):boolean{
@@ -6,6 +7,8 @@ export function isAllowedHost(host:string|undefined,configuredHosts:readonly str
   const parsed=new URL("http://"+host);
   if(parsed.username||parsed.password)return false;
   const hostname=parsed.hostname.replace(/^\[|\]$/g,"").toLowerCase();
+  if(isIP(hostname))return true;
+  if(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(hostname))return true;
   return configuredHosts.some(x=>x.trim().replace(/^\[|\]$/g,"").toLowerCase()===hostname);
  }catch{return false}
 }

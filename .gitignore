@@ -151,3 +151,6 @@ vite.config.ts.timestamp-*
 # Locally generated security material and docs copy
 data/certificates/
 web/public/wiki/
+
+# Runtime-managed host and port settings
+data/network-settings.json

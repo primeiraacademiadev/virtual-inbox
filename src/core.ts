@@ -23,7 +23,7 @@ export class Sandbox {
   private addressIds=new Map<string,string>();
   private resourceAliases=new Map<string,string[]>();
   readonly defaults:Record<Channel,string>;
-  constructor(readonly capacity=config.logs) {
+  constructor(readonly capacity=config.logs,private readonly generateIdentity:(channel:Channel,params?:Generation)=>string=generateAddress) {
     this.emitter.setMaxListeners(0);
     this.defaults={email:this.addSystem("email","anomalies@sandbox.test"),sms:this.addSystem("sms","+999000000000")};
   }
@@ -55,7 +55,7 @@ export class Sandbox {
     const locale=generation?.locale??generationDefaults.locale;
     let addr="",aliases:string[]=[];
     for(let attempt=0;attempt<(manual?1:generationDefaults.maxAttempts);attempt++){
-      addr=manual?address!.trim():generateAddress(channel,generation);
+      addr=manual?address!.trim():this.generateIdentity(channel,generation);
       if(classify(addr)!==channel)throw new Fault(400,"Invalid identifier","INVALID_REQUEST");
       aliases=this.aliases(channel,addr,locale);
       if(aliases.every(k=>!this.addressIds.has(k)))break;

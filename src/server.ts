@@ -52,7 +52,7 @@ const http=createServer(async(req,res)=>{
  if(path[0]==="mailboxes"&&path[1]&&path[2]==="demo-send"&&method==="POST"){
    const recipient=sandbox.resource(path[1]);if(recipient.channel!=="email")throw new Fault(400,"Not an email inbox");
    const b=await body(req);
-   const client=nodemailer.createTransport({host:"127.0.0.1",port:smtpPort,secure:false,ignoreTLS:true});
+   const client=nodemailer.createTransport({host:"127.0.0.1",port:smtpPort,secure:false,ignoreTLS:true,disableFileAccess:true,disableUrlAccess:true});
    await client.sendMail({from:b.from||"demo@sandbox.test",to:recipient.address,subject:b.subject||"Demo",text:b.body||""});
    return json(res,202,{accepted:true});
  }

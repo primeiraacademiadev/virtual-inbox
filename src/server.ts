@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { readFileSync, existsSync, statSync, writeFileSync, renameSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { resolve, join, extname, sep } from "node:path";
 import { TLSSocket } from "node:tls";
 import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
@@ -15,7 +16,27 @@ export const sandbox = new Sandbox(config.logs);
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
 const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
 const demoPort=Number(process.env.DEMO_PORT || 3001),demoHttpsPort=Number(process.env.DEMO_HTTPS_PORT || 3444);
-const tlsCertPath=process.env.TLS_CERT_FILE,tlsKeyPath=process.env.TLS_KEY_FILE;
+const tlsMode=process.env.TLS_MODE||"external";
+const tlsDirectory=resolve(process.env.TLS_CERTIFICATES_DIR||"./data/certificates");
+if(!["auto","external","off"].includes(tlsMode))throw Error("Invalid TLS_MODE");
+if(tlsMode==="auto"){
+ mkdirSync(tlsDirectory,{recursive:true,mode:0o700});
+ const caKey=join(tlsDirectory,"ca-key.pem"),caCrt=join(tlsDirectory,"ca.pem");
+ const keyFile=join(tlsDirectory,"server-key.pem"),certFile=join(tlsDirectory,"server.pem");
+ if(!existsSync(caCrt)||!existsSync(caKey))execFileSync("openssl",["req","-x509","-newkey","rsa:3072","-nodes","-sha256","-days","365","-keyout",caKey,"-out",caCrt,"-subj","/CN=Virtual Inbox Local CA"]);
+ const refresh=!existsSync(keyFile)||!existsSync(certFile)||Date.parse(existsSync(certFile)?new X509Certificate(readFileSync(certFile)).validTo:"1970-01-01")<Date.now()+7*86400000;
+ if(refresh){
+  const csr=join(tlsDirectory,"server.csr"),ext=join(tlsDirectory,"server.ext");
+  const names=(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(",").map(x=>x.trim()).filter(Boolean);
+  if(names.some(x=>!/^[a-zA-Z0-9.:-]+$/.test(x)))throw Error("Invalid TLS_SERVER_NAMES");
+  writeFileSync(ext,"subjectAltName="+names.map(x=>/^\\d+\\.\\d+\\.\\d+\\.\\d+$/.test(x)?"IP:"+x:"DNS:"+x).join(",")+"\\nextendedKeyUsage=serverAuth\\n",{mode:0o600});
+  execFileSync("openssl",["req","-new","-newkey","rsa:3072","-nodes","-keyout",keyFile,"-out",csr,"-subj","/CN="+names[0]]);
+  execFileSync("openssl",["x509","-req","-in",csr,"-CA",caCrt,"-CAkey",caKey,"-CAcreateserial","-out",certFile,"-days","30","-sha256","-extfile",ext]);
+  chmodSync(keyFile,0o600);chmodSync(caKey,0o600);
+ }
+ process.env.TLS_CERT_FILE=certFile;process.env.TLS_KEY_FILE=keyFile;
+}
+const tlsCertPath=tlsMode==="off"?undefined:process.env.TLS_CERT_FILE,tlsKeyPath=tlsMode==="off"?undefined:process.env.TLS_KEY_FILE;
 if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
 const tlsIdentity=tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
 if(tlsIdentity){
@@ -96,7 +117,10 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  }
 
  if(path[0]==="connection-info"&&method==="GET"){
-  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem"}:null});
+  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});
+ }
+ if(path[0]==="tls"&&path[1]==="ca.pem"&&method==="GET"){
+   if(tlsMode!=="auto")throw new Fault(404,"Local CA not configured");res.writeHead(200,{"Content-Type":"application/x-pem-file","Content-Disposition":"attachment; filename=virtual-inbox-ca.pem"});return res.end(readFileSync(join(tlsDirectory,"ca.pem")));
  }
  if(path[0]==="tls"&&path[1]==="certificate.pem"&&method==="GET"){
    if(!tlsIdentity)throw new Fault(404,"TLS is not configured");

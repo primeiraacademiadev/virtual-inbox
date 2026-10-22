@@ -45,3 +45,15 @@ O nome público anunciado aos clientes é `PUBLIC_HOST` (omissão `localhost`); 
 Para desenvolvimento da consola, o Vite usa as portas locais 3000 (`/api`) e 3001 (`/demo`). Na versão compilada e servida pelo Node, os endpoints da API usam `/api`, enquanto o envio de demonstração é dirigido ao listener HTTPS próprio na porta 3444.
 
 **Nota de segurança:** a atualização de dois ficheiros PEM não constitui uma transação de filesystem atómica entre ambos; mantém uma cópia de recuperação antes da rotação. É necessário validar reinício e recuperação operacional antes de usar em ambientes públicos.
+
+## Automatic local CA
+
+The default `TLS_MODE=auto` generates a local development CA and a server certificate with SAN entries drawn from `TLS_SERVER_NAMES` (default `localhost,127.0.0.1`). The implementation invokes OpenSSL at first start, so **OpenSSL must be installed and in PATH**. The certificates are generated under `TLS_CERTIFICATES_DIR` (default `./data/certificates`), and are excluded from version control. Server certificates are regenerated near expiration. The local CA private key must be treated as a secret.
+
+The public CA may be downloaded from the console under **Ligações e TLS**, or by `GET /tls/ca.pem`. Clients should trust only that CA certificate explicitly; never disable certificate verification by default.
+
+## Changing addresses through the console
+
+Network host and port fields can be edited in **Ligações e TLS** after setting `ADMIN_TOKEN`. `PUT /admin/network` writes a restricted-permission JSON file configured through `NETWORK_SETTINGS_FILE` (default `./data/network-settings.json`). Values are applied after restarting the Node process. A changed public hostname must also be present in the certificate SANs, otherwise TLS verification will fail.
+
+No self-service PKCS#12 parser has been implemented: external identities are PEM certificate/key pairs. TLS off mode is available with `TLS_MODE=off` only for trusted local testing.

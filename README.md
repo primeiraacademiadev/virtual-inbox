@@ -67,3 +67,14 @@ The browser displays inline controls immediately below the identifier field: loc
 ## Browser origin security
 
 The API deliberately does not require login for local integration tests. To prevent unrelated browser pages from reading captured messages, browser CORS is restricted to same-origin, the local Vite development origins and any origins listed in `HTTP_ALLOWED_ORIGINS`. `Host` is checked against the configured public/bind hostnames, loopback and `HTTP_ALLOWED_HOSTS`. See `.env.example`.
+
+## One-process console and API
+
+Normal operation needs **one Node.js process**, which serves the compiled React console and REST/SSE API on `http://127.0.0.1:3000` and `https://127.0.0.1:3443` (default ports). The demo sender is routed through `/demo/mailboxes/:id/demo-send` and `/demo/sms/messages` **on the same origin as the console**, avoiding cross-port browser CORS. Legacy standalone demo HTTP/HTTPS listeners (3001/3444) remain available for external integration clients.
+
+- `npm run build`: compile backend and console together.
+- `npm start`: run compiled backend + console with one Node process.
+- `npm run dev`: build console as a pre-step, then run the backend in TypeScript watch mode. Re-run `npm run build:console` to refresh UI assets while developing without Vite.
+- `npm run dev:console` / `npm run dev:console:https`: **optional** Vite HMR workflows on 5173/5174; not needed for normal use.
+
+Docker similarly executes the integrated build and runs a single application process. SMTP and demo listeners use additional ports, **not additional application processes**. The frontend and backend share the same TLS identity on the main HTTPS listener.

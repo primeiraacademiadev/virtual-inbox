@@ -24,3 +24,10 @@ test("demo API preflight accepts the HTTPS console on its own separate port",()=
  assert.equal(isAllowedOrigin("https://127.0.0.1:3443","127.0.0.1:3444",applicationOrigins),true);
  assert.equal(isAllowedOrigin("https://attacker.example","127.0.0.1:3444",applicationOrigins),false);
 });
+
+test("Docker service names and network IPs work without opening public domains",()=>{
+ assert.equal(isAllowedHost("virtual-inbox:3000",hosts),true);
+ assert.equal(isAllowedHost("172.19.0.5:3000",hosts),true);
+ assert.equal(isAllowedHost("[fd00::42]:3000",hosts),true);
+ assert.equal(isAllowedHost("attacker.example:3000",hosts),false);
+});

@@ -98,25 +98,27 @@ function observe(req:IncomingMessage,res:ServerResponse,observerId?:string){
  const o=observerId?sandbox.snapshot(observerId):sandbox.newObserver();
  const url=new URL(req.url||"/","http://localhost");
  const after=String(req.headers["last-event-id"]||url.searchParams.get("after")||"");
- const observed=observerId?sandbox.observers.get(observerId)?.inboxes:null;
- const isRelevant=(e:Event)=>!observerId || (!!e.resourceId && !!observed?.has(e.resourceId));
+ const active=()=>!observerId||((sandbox.observers.get(observerId)?.expiresAt??0)>Date.now());
+ const relevant=(e:Event)=>!observerId||!!(e.resourceId&&sandbox.observers.get(observerId)?.inboxes.has(e.resourceId));
  res.writeHead(200,{"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","X-Accel-Buffering":"no"});
+ let heartbeat:ReturnType<typeof setInterval>|undefined;
+ let closed=false;
+ const stop=()=>{if(closed)return;closed=true;if(heartbeat)clearInterval(heartbeat);sandbox.emitter.off("event",callback);if(!res.writableEnded)res.end()};
  const buffered:Event[]=[];
  let replaying=true;
- const emit=(e:Event)=>{sse(res,"log",e,e.id);if(observerId&&e.type.startsWith("message.")&&isRelevant(e))sse(res,"inbox.notification",e)};
- const callback=(e:Event)=>{if(replaying)buffered.push(e);else emit(e)};
+ const emit=(e:Event)=>{if(closed)return;sse(res,"log",e,e.id);if(observerId&&e.type.startsWith("message.")&&relevant(e))sse(res,"inbox.notification",e)};
+ const callback=(e:Event)=>{if(!active()){stop();return}if(replaying)buffered.push(e);else emit(e)};
  sandbox.emitter.on("event",callback);
  sse(res,observerId?"session.restored":"session.initialized",o);
  const replay=sandbox.replay(after);
- if(!observerId) { /* Global log clients receive all events. */ }
  if(replay.reset)sse(res,"log.reset",{runId:replay.runId});
  if(replay.gap)sse(res,"log.gap",{oldest:replay.oldest,latest:replay.latest});
  for(const e of replay.events)emit(e);
  replaying=false;
  const emitted=new Set(replay.events.map(x=>x.id));
  for(const e of buffered)if(!emitted.has(e.id))callback(e);
- const heartbeat=setInterval(()=>res.write(": heartbeat\n\n"),20000);
- req.on("close",()=>{clearInterval(heartbeat);sandbox.emitter.off("event",callback)});
+ heartbeat=setInterval(()=>{if(!active())stop();else if(!res.writableEnded)res.write(": heartbeat\\n\\n")},20000);
+ req.on("close",stop);
 }
 async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=false){
  try{

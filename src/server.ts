@@ -46,7 +46,9 @@ if(tlsMode==="auto"){
 }
 const tlsCertPath=tlsMode==="off"?undefined:process.env.TLS_CERT_FILE,tlsKeyPath=tlsMode==="off"?undefined:process.env.TLS_KEY_FILE;
 if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
-const tlsIdentity=tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
+const managedIdentityFile=resolve(process.env.TLS_MANAGED_IDENTITY_FILE||join(tlsDirectory,"imported-identity.json"));
+const importedIdentity=tlsMode!=="off"&&existsSync(managedIdentityFile)?JSON.parse(readFileSync(managedIdentityFile,"utf8")) as {cert:string;key:string}:null;
+const tlsIdentity=importedIdentity?{cert:Buffer.from(importedIdentity.cert),key:Buffer.from(importedIdentity.key),minVersion:"TLSv1.2" as const}:tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
 if(tlsIdentity){
  const cert=new X509Certificate(tlsIdentity.cert);
  const privateKey=createPrivateKey(tlsIdentity.key);
@@ -127,16 +129,17 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    const supplied=String(req.headers.authorization||"").replace(/^Bearer /i,"");
    if(!token||!supplied||Buffer.byteLength(supplied)!==Buffer.byteLength(token)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(token)))throw new Fault(403,"Administrative authorization required");
    if(!(req.socket instanceof TLSSocket)||!req.socket.encrypted)throw new Fault(403,"Certificate import requires HTTPS");
-   if(!tlsCertPath||!tlsKeyPath)throw new Fault(409,"Configure TLS_CERT_FILE and TLS_KEY_FILE on server first");
+   if(!tlsIdentity)throw new Fault(409,"Enable TLS before certificate import");
    const payload=await body(req);
    if(typeof payload.cert!=="string"||typeof payload.key!=="string")throw new Fault(400,"PEM certificate and key required");
    let crt:X509Certificate,key:ReturnType<typeof createPrivateKey>;
    try{crt=new X509Certificate(payload.cert);key=createPrivateKey(payload.key)}catch{throw new Fault(400,"Invalid PEM certificate or private key")}
    if(!createPublicKey(key).equals(crt.publicKey))throw new Fault(400,"Certificate and key do not match");
-   const certTemp=tlsCertPath+"."+randomUUID()+".tmp",keyTemp=tlsKeyPath+"."+randomUUID()+".tmp";
-   writeFileSync(certTemp,payload.cert,{mode:0o600,flag:"wx"});
-   writeFileSync(keyTemp,payload.key,{mode:0o600,flag:"wx"});
-   renameSync(certTemp,tlsCertPath);renameSync(keyTemp,tlsKeyPath);
+   mkdirSync(dirname(managedIdentityFile),{recursive:true,mode:0o700});
+   const versioned=managedIdentityFile+"."+randomUUID()+".tmp";
+   writeFileSync(versioned,JSON.stringify({cert:payload.cert,key:payload.key}),{mode:0o600,flag:"wx"});
+   if(existsSync(managedIdentityFile))renameSync(managedIdentityFile,managedIdentityFile+".previous");
+   renameSync(versioned,managedIdentityFile);
    sandbox.log("tls.identity.uploaded",undefined,undefined,{subject:crt.subject,validTo:crt.validTo});
    return json(res,202,{accepted:true,restartRequired:true,subject:crt.subject,validTo:crt.validTo});
  }

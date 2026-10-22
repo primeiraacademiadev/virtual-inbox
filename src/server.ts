@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createServer as createHttpsServer } from "node:https";
 import { readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync, chmodSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { resolve, join, extname, sep } from "node:path";
+import { resolve, join, extname, sep, dirname } from "node:path";
 import { TLSSocket } from "node:tls";
 import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
 import { SMTPServer } from "smtp-server";
@@ -13,9 +13,17 @@ import {config} from "./config.js";
 import { isIP } from "node:net";
 
 export const sandbox = new Sandbox(config.logs);
-const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
-const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
-const demoPort=Number(process.env.DEMO_PORT || 3001),demoHttpsPort=Number(process.env.DEMO_HTTPS_PORT || 3444);
+const networkSettingsFile=resolve(process.env.NETWORK_SETTINGS_FILE||"./data/network-settings.json");
+const savedSettings:Record<string,string>=existsSync(networkSettingsFile)?JSON.parse(readFileSync(networkSettingsFile,"utf8")):{};
+function setting(key:string,fallback:string){return savedSettings[key]??process.env[key]??fallback}
+function adminAllowed(req:IncomingMessage){
+ const token=process.env.ADMIN_TOKEN,supplied=String(req.headers.authorization||"").replace(/^Bearer /i,"");
+ return !!token&&!!supplied&&Buffer.byteLength(supplied)===Buffer.byteLength(token)&&timingSafeEqual(Buffer.from(supplied),Buffer.from(token))&&req.socket instanceof TLSSocket&&req.socket.encrypted;
+}
+
+const port=Number(setting("PORT","3000")),smtpPort=Number(setting("SMTP_PORT","2525"));
+const httpsPort=Number(setting("HTTPS_PORT","3443")),smtpsPort=Number(setting("SMTPS_PORT","2465"));
+const demoPort=Number(setting("DEMO_PORT","3001")),demoHttpsPort=Number(setting("DEMO_HTTPS_PORT","3444"));
 const tlsMode=process.env.TLS_MODE||"auto";
 const tlsDirectory=resolve(process.env.TLS_CERTIFICATES_DIR||"./data/certificates");
 if(!["auto","external","off"].includes(tlsMode))throw Error("Invalid TLS_MODE");
@@ -44,9 +52,9 @@ if(tlsIdentity){
  const privateKey=createPrivateKey(tlsIdentity.key);
  if(!createPublicKey(privateKey).equals(cert.publicKey))throw new Error("TLS certificate and private key do not match");
 }
-const addressHost=process.env.PUBLIC_HOST||"localhost";
-const apiHost=process.env.HOST||"127.0.0.1";
-const smtpHost=process.env.SMTP_HOST||"127.0.0.1";
+const addressHost=setting("PUBLIC_HOST","localhost");
+const apiHost=setting("HOST","127.0.0.1");
+const smtpHost=setting("SMTP_HOST","127.0.0.1");
 const smtpMessageLimit=config.smtpBytes;
 const frontendRoot=resolve(process.cwd(),"web/dist");
 function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]) {
@@ -97,6 +105,23 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  const demoEndpoint=(path[0]==="mailboxes"&&!!path[1]&&path[2]==="demo-send")||(path[0]==="sms"&&path[1]==="messages");
  if(demoEndpoint!==demoOnly){if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;throw new Fault(404,"Route not available on this listener")}
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
+ if(path[0]==="admin"&&path[1]==="network"&&method==="PUT"){
+  if(!adminAllowed(req))throw new Fault(403,"Administrative HTTPS token required");
+  const values=await body(req);
+  const allowed=["PUBLIC_HOST","HOST","SMTP_HOST","PORT","HTTPS_PORT","SMTP_PORT","SMTPS_PORT","DEMO_PORT","DEMO_HTTPS_PORT"];
+  if(!values||typeof values!=="object"||Array.isArray(values)||Object.keys(values).some(k=>!allowed.includes(k)))throw new Fault(400,"Unsupported setting");
+  for(const [key,value] of Object.entries(values)){
+    if(typeof value!=="string"||!value||value.length>255)throw new Fault(400,"Invalid setting");
+    if(key.endsWith("_PORT")||key==="PORT"){const n=Number(value);if(!Number.isInteger(n)||n<1||n>65535)throw new Fault(400,"Invalid port")}
+    else if(!/^[a-zA-Z0-9.:-]+$/.test(value))throw new Fault(400,"Invalid host");
+  }
+  const data={...savedSettings,...values};
+  mkdirSync(dirname(networkSettingsFile),{recursive:true,mode:0o700});
+  const tmp=networkSettingsFile+"."+randomUUID()+".tmp";
+  writeFileSync(tmp,JSON.stringify(data,null,2),{mode:0o600,flag:"wx"});renameSync(tmp,networkSettingsFile);
+  sandbox.log("network.settings.updated",undefined,undefined,{keys:Object.keys(values)});
+  return json(res,202,{restartRequired:true,settings:data});
+ }
  if(path[0]==="admin"&&path[1]==="tls"&&method==="PUT"){
    const token=process.env.ADMIN_TOKEN;
    const supplied=String(req.headers.authorization||"").replace(/^Bearer /i,"");
@@ -117,7 +142,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  }
 
  if(path[0]==="connection-info"&&method==="GET"){
-  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});
+  return json(res,200,{host:addressHost,networkSettings:{PUBLIC_HOST:addressHost,HOST:apiHost,SMTP_HOST:smtpHost,PORT:String(port),HTTPS_PORT:String(httpsPort),SMTP_PORT:String(smtpPort),SMTPS_PORT:String(smtpsPort),DEMO_PORT:String(demoPort),DEMO_HTTPS_PORT:String(demoHttpsPort)},http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});
  }
  if(path[0]==="tls"&&path[1]==="ca.pem"&&method==="GET"){
    if(tlsMode!=="auto")throw new Fault(404,"Local CA not configured");res.writeHead(200,{"Content-Type":"application/x-pem-file","Content-Disposition":"attachment; filename=virtual-inbox-ca.pem"});return res.end(readFileSync(join(tlsDirectory,"ca.pem")));

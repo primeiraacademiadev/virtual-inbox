@@ -36,3 +36,13 @@
 .docMarkdown code{font-family:monospace}
 .docMarkdown h2,.docMarkdown h3{margin-top:1.6em}
 @media(max-width:650px){.information{padding:12px}.topNav{gap:3px;padding:6px}.topNav button{padding:6px}}
+
+/* Composer overlays the full workspace, including live logs. */
+.composeOverlay{position:fixed;inset:104px 14px 18px 284px;z-index:60;justify-content:center;align-items:flex-start}
+.composeOverlay .compose{max-width:720px;width:100%;max-height:100%;overflow:auto}
+.workspace:has(.sidebar.closed) .composeOverlay{left:82px}
+.docPicker{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.tlsImport{display:grid;gap:12px;max-width:640px;margin:12px 0 24px}
+.tlsImport label{display:grid;gap:6px}
+.detail{max-height:65vh;overflow-y:auto;overflow-x:hidden}
+@media(max-width:650px){.composeOverlay{left:6px;right:6px;top:110px;bottom:8px}.workspace:has(.sidebar.closed) .composeOverlay{left:6px}}

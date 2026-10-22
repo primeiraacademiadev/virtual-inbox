@@ -65,7 +65,7 @@ export function generateAddress(channel:Channel,input:Generation={}):string{
  // A suffix recognisable as test data; in normal mode these are national-format
  // numbers and may be assigned to real subscribers. No safety claim is made.
  if(options.safeTestData){
-  const national="9"+String(randomInt(0,100000)).padStart(5,"0")+"401";
+  const national=options.includeCountryCode?"9"+String(randomInt(0,100000)).padStart(5,"0")+"401":"000"+String(randomInt(0,1000)).padStart(3,"0")+"401";
   return options.includeCountryCode?"+999"+national:national;
  }
  const prefix=pick(profile.mobilePrefixes);
@@ -80,7 +80,7 @@ export function canonicalAddress(channel:Channel,address:string,locale:IdentityL
  if(channel==="email")return address.trim().toLowerCase();
  const trimmed=address.trim();if(trimmed.startsWith("+"))return trimmed;
  const profile=catalogs[locale].phone;
- if(!/^\d+$/.test(trimmed)||trimmed.length!==profile.nationalLength)return trimmed;
+ if(!/^\d+$/.test(trimmed)||trimmed.length!==profile.nationalLength||!profile.mobilePrefixes.some(prefix=>trimmed.startsWith(prefix)))return trimmed;
  const withoutTrunk=profile.trunk&&trimmed.startsWith(profile.trunk)?trimmed.slice(profile.trunk.length):trimmed;
  return "+"+profile.countryCode+withoutTrunk;
 }

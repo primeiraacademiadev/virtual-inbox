@@ -13,6 +13,7 @@ import {config} from "./config.js";
 import {isAllowedHost,isAllowedOrigin,applyCors} from "./http/security.js";
 import {generationOptions} from "./identity-generation/generator.js";
 import {ensureLocalTls} from "./tls/local-certificates.js";
+import {CertificateManager} from "./tls/certificate-manager.js";
 
 export const sandbox = new Sandbox(config.logs);
 const networkSettingsFile=resolve(process.env.NETWORK_SETTINGS_FILE||"./data/network-settings.json");
@@ -38,7 +39,9 @@ const tlsCertPath=tlsMode==="off"?undefined:process.env.TLS_CERT_FILE,tlsKeyPath
 if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
 const managedIdentityFile=resolve(process.env.TLS_MANAGED_IDENTITY_FILE||join(tlsDirectory,"imported-identity.json"));
 const importedIdentity=tlsMode!=="off"&&existsSync(managedIdentityFile)?JSON.parse(readFileSync(managedIdentityFile,"utf8")) as {cert:string;key:string}:null;
-const tlsIdentity=importedIdentity?{cert:Buffer.from(importedIdentity.cert),key:Buffer.from(importedIdentity.key),minVersion:"TLSv1.2" as const}:tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
+const initialTlsIdentity=importedIdentity?{cert:Buffer.from(importedIdentity.cert),key:Buffer.from(importedIdentity.key),minVersion:"TLSv1.2" as const}:tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
+const certificateManager=new CertificateManager(initialTlsIdentity,importedIdentity?"uploaded":tlsMode==="auto"?"automatic":"external",managedIdentityFile);
+let tlsIdentity=certificateManager.identity;
 if(tlsIdentity){
  const cert=new X509Certificate(tlsIdentity.cert);
  const privateKey=createPrivateKey(tlsIdentity.key);
@@ -145,20 +148,18 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    if(!tlsIdentity)throw new Fault(409,"Enable TLS before certificate import");
    const payload=await body(req);
    if(typeof payload.cert!=="string"||typeof payload.key!=="string")throw new Fault(400,"PEM certificate and key required");
-   let crt:X509Certificate,key:ReturnType<typeof createPrivateKey>;
-   try{crt=new X509Certificate(payload.cert);key=createPrivateKey(payload.key)}catch{throw new Fault(400,"Invalid PEM certificate or private key")}
-   if(!createPublicKey(key).equals(crt.publicKey))throw new Fault(400,"Certificate and key do not match");
-   mkdirSync(dirname(managedIdentityFile),{recursive:true,mode:0o700});
-   const versioned=managedIdentityFile+"."+randomUUID()+".tmp";
-   writeFileSync(versioned,JSON.stringify({cert:payload.cert,key:payload.key}),{mode:0o600,flag:"wx"});
-   if(existsSync(managedIdentityFile))copyFileSync(managedIdentityFile,managedIdentityFile+".previous");
-   renameSync(versioned,managedIdentityFile);
-   sandbox.log("tls.identity.uploaded",undefined,undefined,{subject:crt.subject,validTo:crt.validTo});
-   return json(res,202,{accepted:true,restartRequired:true,subject:crt.subject,validTo:crt.validTo});
+   try{
+     const details=certificateManager.activate(payload.cert,payload.key);
+     tlsIdentity=certificateManager.identity;
+     sandbox.log("tls.identity.activated",undefined,undefined,{subject:details?.subject,validTo:details?.validTo});
+     return json(res,200,{accepted:true,restartRequired:false,active:details});
+   }catch(error){throw new Fault(400,error instanceof Error?error.message:"Invalid certificate","TLS_CERTIFICATE_INVALID")}
+
  }
 
+ if(path[0]==="tls"&&path[1]==="status"&&method==="GET")return json(res,200,{active:certificateManager.info()});
  if(path[0]==="connection-info"&&method==="GET"){
-  return json(res,200,{host:addressHost,networkSettings:{PUBLIC_HOST:addressHost,HOST:apiHost,SMTP_HOST:smtpHost,PORT:String(port),HTTPS_PORT:String(httpsPort),SMTP_PORT:String(smtpPort),SMTPS_PORT:String(smtpsPort),DEMO_PORT:String(demoPort),DEMO_HTTPS_PORT:String(demoHttpsPort)},http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});
+  return json(res,200,{host:addressHost,networkSettings:{PUBLIC_HOST:addressHost,HOST:apiHost,SMTP_HOST:smtpHost,PORT:String(port),HTTPS_PORT:String(httpsPort),SMTP_PORT:String(smtpPort),SMTPS_PORT:String(smtpsPort),DEMO_PORT:String(demoPort),DEMO_HTTPS_PORT:String(demoHttpsPort)},http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{...certificateManager.info(),download:"/tls/certificate.pem",caDownload:tlsMode==="auto"?"/tls/ca.pem":null}:null});
  }
  if(path[0]==="tls"&&path[1]==="ca.pem"&&method==="GET"){
    if(tlsMode!=="auto")throw new Fault(404,"Local CA not configured");res.writeHead(200,{"Content-Type":"application/x-pem-file","Content-Disposition":"attachment; filename=virtual-inbox-ca.pem"});return res.end(readFileSync(join(tlsDirectory,"ca.pem")));
@@ -234,6 +235,19 @@ const smtpOptions={
 }};
 const smtp=new SMTPServer(smtpOptions);
 const smtps=tlsIdentity?new SMTPServer({...smtpOptions,secure:true}):null;
+if(tlsIdentity){
+ certificateManager.subscribe(next=>{
+  https?.setSecureContext(next);
+  demoHttps?.setSecureContext(next);
+  const refresh=(server:SMTPServer)=>{
+   const service=server as SMTPServer & {updateSecureContext?:(options:{key:Buffer;cert:Buffer})=>void};
+   if(typeof service.updateSecureContext!=="function")throw Error("SMTP live TLS update unavailable");
+   service.updateSecureContext({key:next.key,cert:next.cert});
+  };
+  refresh(smtp);
+  if(smtps)refresh(smtps);
+ });
+}
 const clean=setInterval(()=>sandbox.cleanup(),1000);clean.unref();
 http.listen(port,apiHost,()=>console.log("REST listening on "+port));
 const https=tlsIdentity?createHttpsServer(tlsIdentity,(req,res)=>{void handleRequest(req,res)}):null;

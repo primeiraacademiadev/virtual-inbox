@@ -16,7 +16,7 @@ export const sandbox = new Sandbox(config.logs);
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
 const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
 const demoPort=Number(process.env.DEMO_PORT || 3001),demoHttpsPort=Number(process.env.DEMO_HTTPS_PORT || 3444);
-const tlsMode=process.env.TLS_MODE||"external";
+const tlsMode=process.env.TLS_MODE||"auto";
 const tlsDirectory=resolve(process.env.TLS_CERTIFICATES_DIR||"./data/certificates");
 if(!["auto","external","off"].includes(tlsMode))throw Error("Invalid TLS_MODE");
 if(tlsMode==="auto"){

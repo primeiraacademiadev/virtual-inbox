@@ -8,6 +8,8 @@ mkdirSync(destination,{recursive:true});
 const documents=[
   ["README.md","overview.md"],
   ["docs/demo.md","demo.md"],
+  ["docs/integration.md","integration.md"],
+  ["docs/sdk.md","sdk.md"],
   ["docs/api.md","api.md"],
   ["docs/architecture.md","architecture.md"],
   ["docs/development.md","development.md"],

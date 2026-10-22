@@ -16,7 +16,7 @@ No TLS proxy is required. The same server identity is used for HTTPS, STARTTLS a
 
 ## Choose your certificate mode
 
-**Auto (default):** `TLS_MODE=auto` invokes a locally installed **OpenSSL executable** to generate a development CA and a 30-day server certificate. The CA is retained and the server certificate renewed near expiry. Set `TLS_SERVER_NAMES` to the DNS names/IP addresses that clients actually use *before* generation. Public CA download: `GET /tls/ca.pem`; public server certificate: `GET /tls/certificate.pem`. Both links are in **Ligações e TLS**.
+**Auto (default):** `TLS_MODE=auto` uses the bundled Node.js certificate generator to generate a development CA and a 30-day server certificate. The CA is retained and the server certificate renewed near expiry. Set `TLS_SERVER_NAMES` to the DNS names/IP addresses that clients actually use *before* generation. Public CA download: `GET /tls/ca.pem`; public server certificate: `GET /tls/certificate.pem`. Both links are in **Ligações e TLS**.
 
 **External:** set `TLS_MODE=external`, `TLS_CERT_FILE=/path/server.pem` and `TLS_KEY_FILE=/path/server-key.pem`. The Node process must have permission to read the private key. Use an externally trusted certificate for public-facing URLs.
 

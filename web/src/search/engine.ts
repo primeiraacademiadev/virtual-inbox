@@ -2,6 +2,7 @@ export type SearchSection={document:string;label:string;title:string;anchor:stri
 export type SearchIndex={version:number;sections:SearchSection[]};
 export type SearchResult=SearchSection&{score:number;snippet:string};
 const aliases:Record<string,string[]>={
+ piece:["attachment","file"],joint:["attachment"],piecejointe:["attachment","fichier"],fichier:["attachment","file"],boite:["inbox","mailbox"],attendre:["wait-for-message"],certificat:["tls","ca"],rechercher:["search"],boîte:["inbox"],correo:["email"],
  ssl:["tls","smtps","certificado"],starttls:["smtp","tls"],certificado:["tls","ca","certificate"],
  ficheiro:["attachment","anexo"],anexo:["attachment","ficheiro"],telemovel:["sms","phone"],
  esperar:["wait-for-message","long polling"],outlook:["smtp","tls"],smtp:["email","mail"]

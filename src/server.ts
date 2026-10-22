@@ -31,7 +31,10 @@ const tlsMode=process.env.TLS_MODE||"auto";
 const tlsDirectory=resolve(process.env.TLS_CERTIFICATES_DIR||"./data/certificates");
 if(!["auto","external","off"].includes(tlsMode))throw Error("Invalid TLS_MODE");
 if(tlsMode==="auto"){
- const identity=ensureLocalTls(tlsDirectory,process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1");
+ const file=process.env.TLS_SERVER_NAMES_FILE;
+ const fileNames=file?JSON.parse(readFileSync(resolve(file),"utf8")) as {dns?:string[];ips?:string[]}:null;
+ const names=[...(process.env.TLS_SERVER_NAMES||"localhost,127.0.0.1").split(","),...(fileNames?.dns||[]),...(fileNames?.ips||[]),setting("PUBLIC_HOST","localhost")].map(x=>x.trim()).filter(x=>x&&x!=="0.0.0.0");
+ const identity=ensureLocalTls(tlsDirectory,[...new Set(names)].join(","));
  process.env.TLS_CERT_FILE=identity.cert;
  process.env.TLS_KEY_FILE=identity.key;
 }

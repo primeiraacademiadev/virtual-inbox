@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { readFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, renameSync } from "node:fs";
 import { resolve, join, extname, sep } from "node:path";
-import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
+import { TLSSocket } from "node:tls";
+import { X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID } from "node:crypto";
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
@@ -72,6 +73,24 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
  const demoEndpoint=(path[0]==="mailboxes"&&!!path[1]&&path[2]==="demo-send")||(path[0]==="sms"&&path[1]==="messages");
  if(demoEndpoint!==demoOnly){if(!demoOnly&&method==="GET"&&rawPath[0]!=="api"&&serveFrontend(req,res,rawPath))return;throw new Fault(404,"Route not available on this listener")}
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
+ if(path[0]==="admin"&&path[1]==="tls"&&method==="PUT"){
+   const token=process.env.ADMIN_TOKEN;
+   const supplied=String(req.headers.authorization||"").replace(/^Bearer /i,"");
+   if(!token||!supplied||Buffer.byteLength(supplied)!==Buffer.byteLength(token)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(token)))throw new Fault(403,"Administrative authorization required");
+   if(!(req.socket instanceof TLSSocket)||!req.socket.encrypted)throw new Fault(403,"Certificate import requires HTTPS");
+   if(!tlsCertPath||!tlsKeyPath)throw new Fault(409,"Configure TLS_CERT_FILE and TLS_KEY_FILE on server first");
+   const payload=await body(req);
+   if(typeof payload.cert!=="string"||typeof payload.key!=="string")throw new Fault(400,"PEM certificate and key required");
+   const crt=new X509Certificate(payload.cert),key=createPrivateKey(payload.key);
+   if(!createPublicKey(key).equals(crt.publicKey))throw new Fault(400,"Certificate and key do not match");
+   const certTemp=tlsCertPath+"."+randomUUID()+".tmp",keyTemp=tlsKeyPath+"."+randomUUID()+".tmp";
+   writeFileSync(certTemp,payload.cert,{mode:0o600,flag:"wx"});
+   writeFileSync(keyTemp,payload.key,{mode:0o600,flag:"wx"});
+   renameSync(certTemp,tlsCertPath);renameSync(keyTemp,tlsKeyPath);
+   sandbox.log("tls.identity.uploaded",undefined,undefined,{subject:crt.subject,validTo:crt.validTo});
+   return json(res,202,{accepted:true,restartRequired:true,subject:crt.subject,validTo:crt.validTo});
+ }
+
  if(path[0]==="connection-info"&&method==="GET"){
   return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null,demoPort,demoHttpsPort:tlsIdentity?demoHttpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem"}:null});
  }

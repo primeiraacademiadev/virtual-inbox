@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { readFileSync } from "node:fs";
+import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
 import { SMTPServer } from "smtp-server";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
@@ -6,6 +9,20 @@ import { Sandbox, Fault, classify, type Channel, type Event } from "./core.js";
 
 export const sandbox = new Sandbox(Number(process.env.LOG_CAPACITY || 2000));
 const port=Number(process.env.PORT || 3000),smtpPort=Number(process.env.SMTP_PORT || 2525);
+const httpsPort=Number(process.env.HTTPS_PORT || 3443),smtpsPort=Number(process.env.SMTPS_PORT || 2465);
+const tlsCertPath=process.env.TLS_CERT_FILE,tlsKeyPath=process.env.TLS_KEY_FILE;
+if(Boolean(tlsCertPath)!==Boolean(tlsKeyPath))throw new Error("TLS_CERT_FILE and TLS_KEY_FILE must be configured together");
+const tlsIdentity=tlsCertPath&&tlsKeyPath?{cert:readFileSync(tlsCertPath),key:readFileSync(tlsKeyPath),minVersion:"TLSv1.2" as const}:null;
+if(tlsIdentity){
+ const cert=new X509Certificate(tlsIdentity.cert);
+ const privateKey=createPrivateKey(tlsIdentity.key);
+ if(!createPublicKey(privateKey).equals(cert.publicKey))throw new Error("TLS certificate and private key do not match");
+}
+const addressHost=process.env.PUBLIC_HOST||"localhost";
+const apiHost=process.env.HOST||"127.0.0.1";
+const smtpHost=process.env.SMTP_HOST||"127.0.0.1";
+const smtpMessageLimit=Number(process.env.MAX_SMTP_MESSAGE_BYTES||20*1024*1024);
+
 function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID","Access-Control-Allow-Methods":"GET,POST,DELETE,OPTIONS"});res.end(JSON.stringify(data))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>1_100_000)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
@@ -38,6 +55,14 @@ const http=createServer(async(req,res)=>{
  const path=new URL(req.url||"/","http://localhost").pathname.split("/").filter(Boolean),method=req.method||"GET";
  if(method==="OPTIONS")return json(res,204,{});
  if(path[0]==="health")return json(res,200,{status:"ok",runId:sandbox.runId});
+ if(path[0]==="connection-info"&&method==="GET"){
+  return json(res,200,{host:addressHost,http:{port,httpsPort:tlsIdentity?httpsPort:null},smtp:{plainPort:smtpPort,starttls:!!tlsIdentity,implicitTlsPort:tlsIdentity?smtpsPort:null,serverName:addressHost},certificate:tlsIdentity?{subject:new X509Certificate(tlsIdentity.cert).subject,issuer:new X509Certificate(tlsIdentity.cert).issuer,validTo:new X509Certificate(tlsIdentity.cert).validTo,fingerprint256:new X509Certificate(tlsIdentity.cert).fingerprint256,download:"/tls/certificate.pem"}:null});
+ }
+ if(path[0]==="tls"&&path[1]==="certificate.pem"&&method==="GET"){
+   if(!tlsIdentity)throw new Fault(404,"TLS is not configured");
+   res.writeHead(200,{"Content-Type":"application/x-pem-file","Content-Disposition":"attachment; filename=virtual-inbox-server.pem"});
+   return res.end(tlsIdentity.cert);
+ }
  if(path[0]==="sms"&&path[1]==="messages"&&method==="POST"){const b=await body(req);return json(res,201,sandbox.deliver("sms",b.from,b.to,b.body))}
  if(path[0]==="logs"&&path[1]==="events"&&method==="GET")return observe(req,res);
  if(path[0]==="logs"&&method==="GET"){const u=new URL(req.url||"/","http://localhost");return json(res,200,sandbox.replay(u.searchParams.get("after")||undefined))}
@@ -75,17 +100,28 @@ const http=createServer(async(req,res)=>{
  throw new Fault(404,"Route not found");
  }catch(e){const fault=e instanceof Fault?e:new Fault(500,e instanceof Error?e.message:"Server error");if(!res.headersSent)json(res,fault.status,{error:fault.message})}
 });
-const smtp=new SMTPServer({authOptional:true,disabledCommands:["STARTTLS"],size:1048576,onRcptTo(_address,_session,cb){cb()},onData(stream,session,callback){
+const smtpOptions={
+ authOptional:true,
+ disabledCommands:tlsIdentity?[]:["STARTTLS"],
+ size:smtpMessageLimit,
+ ...(tlsIdentity?{key:tlsIdentity.key,cert:tlsIdentity.cert,minVersion:"TLSv1.2" as const}:{}),
+ onRcptTo(_address:unknown,_session:unknown,cb:(error?:Error|null)=>void){cb()},
+ onData(stream:any,session:any,callback:any){
  (async()=>{
    const chunks:Buffer[]=[];let size=0;
-   for await(const chunk of stream){const buf=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=buf.length;if(size>1048576)throw new Fault(413,"MIME too large");chunks.push(buf)}
+   for await(const chunk of stream){const buf=Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk);size+=buf.length;if(size>smtpMessageLimit)throw new Fault(413,"MIME too large");chunks.push(buf)}
    const raw=Buffer.concat(chunks);const parsed=await new PostalMime().parse(raw);
    const sender=session.envelope.mailFrom && typeof session.envelope.mailFrom!=="boolean"?session.envelope.mailFrom.address:"unknown@sandbox.test";
    for(const recipient of session.envelope.rcptTo)sandbox.deliver("email",sender,recipient.address,parsed.text||"",parsed.subject,parsed.html||undefined,raw.toString("utf-8"));
    callback(null,"Accepted");
  })().catch(e=>callback(e instanceof Error?e:new Error(String(e))));
-}});
+}};
+const smtp=new SMTPServer(smtpOptions);
+const smtps=tlsIdentity?new SMTPServer({...smtpOptions,secure:true}):null;
 const clean=setInterval(()=>sandbox.cleanup(),1000);clean.unref();
-http.listen(port,process.env.HOST||"127.0.0.1",()=>console.log("REST listening on "+port));
-smtp.listen(smtpPort,process.env.SMTP_HOST||"127.0.0.1",()=>console.log("SMTP listening on "+smtpPort));
-process.on("SIGINT",()=>{http.close();smtp.close();process.exit(0)});
+http.listen(port,apiHost,()=>console.log("REST listening on "+port));
+const https=tlsIdentity?createHttpsServer(tlsIdentity,http.listeners("request")[0] as any):null;
+https?.listen(httpsPort,apiHost,()=>console.log("HTTPS listening on "+httpsPort));
+smtp.listen(smtpPort,smtpHost,()=>console.log("SMTP listening on "+smtpPort));
+smtps?.listen(smtpsPort,smtpHost,()=>console.log("SMTPS listening on "+smtpsPort));
+process.on("SIGINT",()=>{http.close();https?.close();smtp.close();smtps?.close();process.exit(0)});

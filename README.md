@@ -49,3 +49,9 @@ Hosts and ports can be configured; consult [.env.example](.env.example) and [TLS
 Inbox, observer, message, attachment and log data are **in-memory only** and disappear at restart. Email is actually received through SMTP, including MIME attachment metadata/binary download. SMS is **simulated via HTTP**, not sent to a carrier. The API is not authenticated except for TLS/network configuration writes; keep it on a trusted network. Limits, TTL and quotas are configurable.
 
 **Validation status:** implementation is published, but compilation, dependency resolution/lockfiles, TLS interoperability, browser E2E and security checks still require validation. See [acceptance checklist](docs/backlog.md).
+
+## Localized console and documentation
+
+The console offers **Português (Portugal)** (`pt-PT`), **English** (`en`) and **Français** (`fr`). On first visit the browser's language is used, with English as fallback; a manual choice persists in local storage. The console switches language immediately, and the Documentation and API views load the matching Markdown and search index under `/wiki/<locale>/`. The full legacy technical manuals in `docs/` remain authoritative engineering source material; the localized console guides currently cover the key journeys in a concise format. See [internationalization design and coverage](docs/i18n.md).
+
+For clients using the REST API, errors retain `error` for backward compatibility and also include `errorCode` and `errorParams`. These stable identifiers, HTTP status codes, route names, JSON keys, event types and UUIDs are not translated.

@@ -48,3 +48,23 @@ Before changing core data structures or public API contracts, validate the chang
 - The collapsed navigation no longer renders a separate clipped plus button: group and inbox actions are exposed contextually on hover or focus.
 - Before release, verify keyboard focus navigation and touchscreen access to contextual actions. Tooltip hover alone is insufficient for touchscreen users.
 - Regression checks: split-mode inbox scroll with 50+ messages; detail scroll with long MIME text; send form submit and cancel at small viewport heights; collapsed bar with both inbox groups and unread badges; SMTP demo after dependency major upgrade; run `npm audit --omit=dev`.
+
+## Dependency refresh — 22 October 2026
+
+Runtime minimum is Node.js **24**. Node.js **26** is supported as a second CI matrix target. Updated package declarations: `smtp-server ^3.19.23`, `postal-mime ^4.0.11`, `nodemailer ^10.2.0`, `typescript ^7.0.2`, `tsx ^4.23.15`, `@types/node ^24.19.2`, `@types/smtp-server ^3.5.13`, `react/react-dom ^19.3.1`, and `vite ^8.3.0`. React type definitions are aligned to the 19.3 line.
+
+**Validation caveat:** The manifests were updated via GitHub, but no npm install, build, audit or regression test has been executed by this update. The npm registry was not accessible from the execution environment. The repository did not contain lockfiles when the upgrade began.
+
+To complete verification with npm registry access, from the repository root:
+
+```sh
+npm install --package-lock=true
+npm install --prefix web --package-lock=true
+npm test
+npm run build
+npm run build:console
+npm audit --audit-level=high
+npm audit --prefix web --audit-level=high
+```
+
+Commit both generated `package-lock.json` and `web/package-lock.json`; then replace `npm install` in CI with `npm ci`. Do not use `npm audit fix --force` to bypass failing compatibility tests. Confirm SMTP delivery, MIME parsing, observer reconnection, and console functionality on Node 24 and Node 26.

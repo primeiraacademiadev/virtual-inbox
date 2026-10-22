@@ -38,7 +38,7 @@ function serveFrontend(req:IncomingMessage,res:ServerResponse,pathParts:string[]
   res.end(readFileSync(file));return true;
 }
 
-function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID","Access-Control-Allow-Methods":"GET,POST,DELETE,OPTIONS"});res.end(JSON.stringify(data))}
+function json(res:ServerResponse,status:number,data:unknown){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"Content-Type,Last-Event-ID,Authorization","Access-Control-Allow-Methods":"GET,POST,PUT,DELETE,OPTIONS"});res.end(JSON.stringify(data))}
 async function body(req:IncomingMessage){let raw="";for await(const chunk of req){raw+=chunk;if(raw.length>1_100_000)throw new Fault(413,"Payload too large")}try{return raw?JSON.parse(raw):{}}catch{throw new Fault(400,"Invalid JSON")}}
 const channels:{[k:string]:Channel}={mailboxes:"email","phone-numbers":"sms"};
 function sse(res:ServerResponse,event:string,data:unknown,id?:string){if(res.writableEnded)return;res.write((id?"id: "+id+"\n":"")+"event: "+event+"\n"+"data: "+JSON.stringify(data)+"\n\n")}
@@ -81,7 +81,8 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
    if(!tlsCertPath||!tlsKeyPath)throw new Fault(409,"Configure TLS_CERT_FILE and TLS_KEY_FILE on server first");
    const payload=await body(req);
    if(typeof payload.cert!=="string"||typeof payload.key!=="string")throw new Fault(400,"PEM certificate and key required");
-   const crt=new X509Certificate(payload.cert),key=createPrivateKey(payload.key);
+   let crt:X509Certificate,key:ReturnType<typeof createPrivateKey>;
+   try{crt=new X509Certificate(payload.cert);key=createPrivateKey(payload.key)}catch{throw new Fault(400,"Invalid PEM certificate or private key")}
    if(!createPublicKey(key).equals(crt.publicKey))throw new Fault(400,"Certificate and key do not match");
    const certTemp=tlsCertPath+"."+randomUUID()+".tmp",keyTemp=tlsKeyPath+"."+randomUUID()+".tmp";
    writeFileSync(certTemp,payload.cert,{mode:0o600,flag:"wx"});

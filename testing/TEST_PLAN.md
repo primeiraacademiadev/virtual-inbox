@@ -46,3 +46,14 @@ O harness cria UUIDs e assuntos exclusivos por execução, remove inboxes no fin
 ## Limitações de validação
 
 Ainda não foram instaladas as dependências `testing/` nem executados Playwright, SMTP externo ou Docker nesta alteração. Gerar e versionar `testing/package-lock.json` após `npm install --prefix testing`. O workflow E2E de momento instala o harness pelo manifesto, até existir esse lockfile.
+
+## Ciclo de vida TLS — extensão de 24-10-2026
+
+Testes acrescentados:
+- `test/tls-lifecycle.test.ts`: chave incompatível, certificado expirado, rollback simulado em listener, persistência automática perante nomes inalterados, regeneração SAN e renovação automática quando restam menos de sete dias.
+- `testing/scenarios/tls/restart.spec.ts`: segundo processo Node com o mesmo diretório de certificados temporários; compara fingerprint do certificado HTTPS antes/depois do novo arranque.
+- `testing/scenarios/tls/rotation.spec.ts`: fingerprints reais de HTTPS, SMTPS e STARTTLS, envio após rotação e rejeição de importação inválida.
+
+A suite de protocolos deve agora ter 14 testes (sem alterar os três de browser), e a suite unitária deve incorporar quatro novos testes. Confirmar ambos por execução real. A renovação automática é validada na operação `ensureLocalTls` (invocada no arranque e nas operações de gestão), **não** por um agendamento contínuo de rotação em processo vivo.
+
+O handler SMTP reconhece a desconexão específica `SocketError: Socket closed while initiating TLS` como interrupção de transporte esperada; quaisquer outros erros continuam visíveis nos logs. Validar a ausência de crash e a inexistência de erros inesperados durante as execuções.

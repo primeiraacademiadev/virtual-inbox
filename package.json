@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
     "start": "node --env-file-if-exists=.env dist/src/server.js",
-    "build": "npm run build:server && npm run build:console",
+    "build": "npm run build:openapi && npm run build:server && npm run build:console",
+    "build:openapi": "node --import tsx scripts/generate-openapi.mjs",
     "test": "node --import tsx --test test/*.test.ts",
     "dev:console": "npm run dev --prefix web",
     "build:console": "npm run build --prefix web",

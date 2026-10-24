@@ -1,15 +1,19 @@
-# Try Virtual Inbox
+# Try the console
 
-An introductory walkthrough, no external application required.
+Start the application using [Start here](overview.md), then open `http://127.0.0.1:3000`. The hamburger menu opens Workspace, Connections and TLS, Documentation and API. Change language using the language selector; technical identifiers remain unchanged.
 
-## Your first email
+## Create or attach an inbox
 
-Create an inbox in the console, select it and choose Send. Demo traffic passes through port 3001/3444 and SMTP port 2525. File attachments are supported.
+Use the add control in the email or SMS sidebar group. Leave the identifier empty to generate an address. Enter an address to attach an existing inbox; if none exists, confirm creation. Format selects email/SMS automatically. The flag changes the identity locale, the strategy selects the email pattern, the country-code toggle controls telephone prefixes and SAFE selects synthetic data. The clock reveals TTL in seconds. Choices persist per browser tab, except the identifier.
 
-## Your first SMS
+The identifier used by REST is the returned UUID, not the email/telephone address. Copy controls provide feedback. Removing an observer subscription does not necessarily delete the underlying inbox; confirm the deletion action when requested.
 
-Create a simulated phone number and send a test SMS. Nothing is sent to a real carrier.
+## Send and inspect
 
----
+Select an inbox and open the compose control. Send to that same inbox. Email goes through the local SMTP listener; SMS is captured through the demo HTTP route. No external carrier is used. Inspect message details and attachment metadata; downloads preserve the original bytes. Read/unread badges belong to the console view, not a consuming API queue.
 
-[Management API](api.md) · [TLS](tls.md) · [SDK](sdk.md)
+The log panel can be minimized, shown below the inbox or expanded. The sidebar also collapses. Open Documentation for procedures and API for the generated endpoint catalogue. If no message arrives, inspect logs and the system anomaly inbox: unknown and expired destinations are captured there, subject to quotas.
+
+## Expected errors
+
+`404`: inbox/session expired or absent. `409`: address already exists. `413`: message or attachment too large. `507`: global capacity exhausted. Delete test data or increase the relevant limit deliberately. A page reload can reattach to an existing observer; after server restart, create a new session and inbox because message data is not persisted.

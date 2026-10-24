@@ -1,80 +1,65 @@
 # Virtual Inbox
 
-Ephemeral **email and SMS mock server** for manual demonstrations, application integration and automated tests. Node.js 24+ (Node 26 accepted), npm, with automatic TLS certificate generation using built-in Node.js cryptography.
+An ephemeral email/SMS sandbox for demonstrations, application integration and automated tests. One Node.js process serves the React console, REST, SSE, SMTP, STARTTLS and SMTPS. No database, Kubernetes or external certificate executable is required.
 
-> Source is proprietary (no license granted). Request authorization before distribution, modification or commercial reuse.
+> Proprietary source: no licence for redistribution, modification or commercial reuse is granted. Message APIs are intentionally unauthenticated. Run on a trusted test network, never as a public production mailbox.
 
-## Choose your route
+## Start here
 
-| I want to… | Read first |
-| --- | --- |
-| Try the console in 5 minutes | [Try the product](docs/demo.md) |
-| Point an application at a mock SMTP/SMS provider | [Integrate an application](docs/integration.md) |
-| Assert that a message arrived from a test runner | [Automate tests](docs/sdk.md) |
-| Configure trusted HTTPS/STARTTLS/SMTPS | [TLS and connection configuration](docs/tls.md) |
-| Consult exact REST/SSE methods | [API reference](docs/api.md) |
-| Understand implementation and limitations | [Architecture](docs/architecture.md), [Development](docs/development.md) |
+| Purpose | English | Português | Français |
+| --- | --- | --- | --- |
+| Install and choose a workflow | [Overview](docs/i18n/en/overview.md) | [Começar](docs/i18n/pt-PT/overview.md) | [Démarrer](docs/i18n/fr/overview.md) |
+| Try the console | [Demo](docs/i18n/en/demo.md) | [Demonstração](docs/i18n/pt-PT/demo.md) | [Démonstration](docs/i18n/fr/demo.md) |
+| Integrate a real application | [Integration](docs/i18n/en/integration.md) | [Integração](docs/i18n/pt-PT/integration.md) | [Intégration](docs/i18n/fr/integration.md) |
+| Automate assertions | [Tests](docs/i18n/en/sdk.md) | [Testes](docs/i18n/pt-PT/sdk.md) | [Tests](docs/i18n/fr/sdk.md) |
+| Configure certificates | [TLS](docs/i18n/en/tls.md) | [TLS](docs/i18n/pt-PT/tls.md) | [TLS](docs/i18n/fr/tls.md) |
 
-## Local start
+The console renders these same Markdown sources and a generated API reference. There is no independently maintained console manual.
+
+## Standalone: Windows, Linux or macOS
+
+Install Node.js 24 or newer and npm. Run from the repository root:
 
 ```sh
-git clone https://github.com/primeiraacademiadev/virtual-inbox.git
-cd virtual-inbox
-npm install
-npm install --prefix web
-npm run build:console
-npm run dev
+npm ci --ignore-scripts
+npm ci --prefix web --ignore-scripts
+npm run build
+npm start
 ```
 
-**Default TLS_MODE is `auto`.** The first start uses Node.js cryptography to generate a local CA and server identity. Open **https://localhost:3443** after explicitly trusting the local CA in your browser/device (or use the separate Vite development console below). Find the public CA at `http://127.0.0.1:3000/tls/ca.pem`; **never install or distribute the CA private key**. Do not bypass certificate checks on applications under test.
+Open `http://127.0.0.1:3000`. HTTPS is also available at `https://localhost:3443`; trust the generated local CA explicitly before using it. Missing `.env` is allowed. Optional development mode is `npm run dev`, which builds the console first. Vite is optional and is not needed to use the application.
 
-For the Vite development console, run `npm run dev:console` in another terminal, then visit **http://127.0.0.1:5173**. The backend must still be running. Do not expose these local listeners to the internet without access controls.
+Verify installation with `GET /health`, then run `node examples/smtp-roundtrip.mjs plain` in another terminal. The example creates an inbox, sends a real SMTP email with an attachment, verifies its bytes and cleans up.
 
-### Default ports
+## Docker
 
-| Service | Port | Protocol |
+```sh
+docker build -t virtual-inbox:local .
+docker run --rm --name virtual-inbox -p 127.0.0.1:3000:3000 -p 127.0.0.1:3443:3443 -p 127.0.0.1:2525:2525 -p 127.0.0.1:2465:2465 -p 127.0.0.1:3001:3001 -p 127.0.0.1:3444:3444 -v virtual-inbox-data:/app/data virtual-inbox:local
+```
+
+The volume preserves configuration and certificates, **not** inboxes or messages. Publish only the ports needed for your scenario. Other Compose services use the service name, e.g. `virtual-inbox:2525`; host clients use published ports. The container listens on `0.0.0.0`, while these mappings restrict host access to loopback. See [Docker](docs/docker.md).
+
+## Connections
+
+| Service | Default port | Use |
 | --- | --- | --- |
-| Management REST, SSE (local) | 3000 | HTTP |
-| Compiled console and management API | 3443 | HTTPS, when TLS enabled |
-| Demo sender API | 3001 | HTTP |
-| Secure demo sender API | 3444 | HTTPS, when TLS enabled |
-| Email receiver | 2525 | SMTP with STARTTLS when TLS enabled |
-| Secure email receiver | 2465 | SMTPS, when TLS enabled |
-| Vite development console | 5173 | HTTP |
+| HTTP | 3000 | Console, `/api/*`, same-origin `/demo/*` |
+| HTTPS | 3443 | Same routes, plus authenticated administration over TLS |
+| Demo HTTP / HTTPS | 3001 / 3444 | External test sender clients: `/sms/messages`, `/mailboxes/{id}/demo-send` |
+| SMTP | 2525 | Plain or STARTTLS |
+| SMTPS | 2465 | TLS from connection establishment |
 
-Hosts and ports can be configured; consult [.env.example](.env.example) and [TLS setup](docs/tls.md). The demo sender endpoints are on their **own listeners**; they are not part of the management API.
+Ports are configurable. `GET /api/connection-info` reports the running values. `Host` accepts literal IPs and single-label container names; other domains require the configured hosts or `HTTP_ALLOWED_HOSTS`. Browser origins must be same-origin or explicitly allowed by `HTTP_ALLOWED_ORIGINS` (plus the configured local development origins). These controls do not authenticate clients.
 
-## Scope and constraints
+## OpenAPI
 
-Inbox, observer, message, attachment and log data are **in-memory only** and disappear at restart. Email is actually received through SMTP, including MIME attachment metadata/binary download. SMS is **simulated via HTTP**, not sent to a carrier. The API is not authenticated except for TLS/network configuration writes; keep it on a trusted network. Limits, TTL and quotas are configurable.
+`npm run build` generates `docs/openapi.json`, `docs/openapi-demo.json`, static JSON downloads and the console API reference from `src/http/api-contract.ts`. The runtime uses the same route catalogue. The generator fails when a documented operation has no handler, or a handler has no catalogue entry. Request/response schema changes still require updating the catalogue and tests; generation cannot infer business semantics automatically.
 
-**Validation status:** implementation is published, but compilation, dependency resolution/lockfiles, TLS interoperability, browser E2E and security checks still require validation. See [acceptance checklist](docs/backlog.md).
+Running endpoints: `/api/openapi.json` and `/api/openapi-demo.json`. The main API page excludes demo sending operations; their separate contract remains available from the integration guide. SMTP is documented as a protocol, not misrepresented as an HTTP endpoint. See [OpenAPI maintenance](docs/openapi.md).
 
-## Localized console and documentation
+## Persistence and limits
 
-The console offers **Português (Portugal)** (`pt-PT`), **English** (`en`) and **Français** (`fr`). On first visit the browser's language is used, with English as fallback; a manual choice persists in local storage. The console switches language immediately, and the Documentation and API views load the matching Markdown and search index under `/wiki/<locale>/`. The full legacy technical manuals in `docs/` remain authoritative engineering source material; the localized console guides currently cover the key journeys in a concise format. See [internationalization design and coverage](docs/i18n.md).
+Inboxes, messages, attachments, observers and logs are memory-only. Expired/unknown recipients are captured in system anomaly inboxes subject to the same global quotas. A restart clears that data and changes `runId`. Explicitly delete fixtures after tests and handle HTTP `204`, `404`, `413` and `507`. Limits, TTL, identity generation and security controls are documented in [Configuration](docs/configuration.md).
 
-For clients using the REST API, errors retain `error` for backward compatibility and also include `errorCode` and `errorParams`. These stable identifiers, HTTP status codes, route names, JSON keys, event types and UUIDs are not translated.
-
-## Configurable recipient generation
-
-When an inbox identifier is left empty, the Node server generates an address using the defaults in `.env.example`. Supported locales are `pt-PT`, `en-US` and `fr-FR`; email strategies include first/last, last/first, three names, random suffix and fully random. Phones use country-specific mobile-number formats ending in `401`, with optional international prefix and a separately selectable synthetic test-data mode. Addresses are retried on collision while the inbox `id` remains a stable UUID.
-
-The browser displays inline controls immediately below the identifier field: locale flag, strategy, SAFE and phone prefix. Settings (but never the identifier) persist per browser tab session and follow a change in console language. See [Identity generation](docs/identity-generation.md).
-
-`GET /identity-generation/options` returns supported locales, strategies and server defaults. For lookup without listing every inbox, `GET /mailboxes?address=...` and `GET /phone-numbers?address=...` return a one-item array or an empty array; national and international forms are matched where the locale profile makes them equivalent.
-
-## Browser origin security
-
-The API deliberately does not require login for local integration tests. To prevent unrelated browser pages from reading captured messages, browser CORS is restricted to same-origin, the local Vite development origins and any origins listed in `HTTP_ALLOWED_ORIGINS`. `Host` accepts literal IPv4/IPv6 addresses and single-label hostnames (including Docker Compose service names) without additional configuration. Fully qualified hostnames must match the configured allowed hosts See `.env.example`.
-
-## One-process console and API
-
-Normal operation needs **one Node.js process**, which serves the compiled React console and REST/SSE API on `http://127.0.0.1:3000` and `https://127.0.0.1:3443` (default ports). The demo sender is routed through `/demo/mailboxes/:id/demo-send` and `/demo/sms/messages` **on the same origin as the console**, avoiding cross-port browser CORS. Legacy standalone demo HTTP/HTTPS listeners (3001/3444) remain available for external integration clients.
-
-- `npm run build`: compile backend and console together.
-- `npm start`: run compiled backend + console with one Node process.
-- `npm run dev`: build console as a pre-step, then run the backend in TypeScript watch mode. Re-run `npm run build:console` to refresh UI assets while developing without Vite.
-- `npm run dev:console` / `npm run dev:console:https`: **optional** Vite HMR workflows on 5173/5174; not needed for normal use.
-
-Docker similarly executes the integrated build and runs a single application process. SMTP and demo listeners use additional ports, **not additional application processes**. The frontend and backend share the same TLS identity on the main HTTPS listener.
+Do not disable certificate verification to work around TLS errors. Private CA keys and server keys must not be committed, included in reports, downloaded to clients or baked into distributed images.

@@ -1,43 +1,13 @@
-# SonarQube integration
+# SonarQube Cloud and CI
 
-The GitHub Actions CI includes a `sonar` job, configured by `sonar-project.properties` at the repository root.
+The project uses `primeiraacademiadev_virtual-inbox` in organization `primeiraacademiadev`. `sonar-project.properties` defines sources and LCOV locations. Keep analysis tokens in repository secrets, never in source or reports.
 
-## GitHub repository secrets
+The required check is the actual `SonarCloud Code Analysis` Quality Gate. A successful GitHub job named `SonarQube analysis` may only mean its wrapper completed; inspect the real analysis and commit. If using the Actions scanner, configure `SONAR_TOKEN` and `SONAR_HOST_URL` consistently and avoid conflicting automatic/CI analyses.
 
-Configure these two **Actions repository secrets** in `primeiraacademiadev/virtual-inbox` under Settings → Secrets and variables → Actions:
+Root tests, managed protocols, browser E2E, dependency audits and Docker smoke are distinct checks. Lockfiles are versioned for root/web/testing. Workflows use `npm ci --ignore-scripts`; publishing and analysis actions are pinned to full commit SHAs.
 
-- `SONAR_HOST_URL`: externally reachable SonarQube base URL (for example `https://sonarqube.example.org`, **not** a localhost or Docker-internal URL when using a GitHub-hosted runner).
-- `SONAR_TOKEN`: SonarQube analysis token authorized for the project.
+The API intentionally remains open to test clients. HTTP listeners coexist with HTTPS; administrative writes require HTTPS and a bearer token. Accept intentional static-analysis findings only after reviewing the specific data flow and recording the justification. Do not mark genuine vulnerabilities safe merely to obtain a green gate.
 
-No credentials are committed to the repository. Until both secrets exist, the scan is intentionally skipped and Actions issues a notice.
+Coverage currently comes from `npm run test:coverage`. Do not interpret its percentage as complete application coverage unless unimported source files and managed-process execution are included in that measurement. Passing functional E2E does not itself add LCOV coverage.
 
-## SonarQube project
-
-Create a SonarQube project with key `virtual-inbox` (or edit `sonar.projectKey` in `sonar-project.properties`). SonarQube Server must be reachable from a GitHub-hosted runner; for an internal-only server, use an appropriate self-hosted runner or permitted network ingress instead.
-
-The scan runs on pushes and pull requests where secrets are available, with backend sources `src`, React sources `web/src`, and tests under `test`. It generates LCOV coverage through `npm run test:coverage` and checks the Quality Gate. The Quality Gate job is deliberately independent of the dependency audit/build job; neither silently bypasses the other.
-
-**Note:** PR analysis and branch support depend on the SonarQube Server edition. For installations without PR analysis, restrict the scan to `main` in the workflow.
-
-## Local validation
-
-```sh
-npm install
-npm install --prefix web
-npm run test:coverage
-npm run build
-```
-
-Then inspect `coverage/lcov.info`. The Sonar scanner and Quality Gate require a configured server and token. No real SonarQube scan has been verified at the time of this change.
-
-For SonarQube Cloud, additional organization-level settings are required; this baseline targets SonarQube Server.
-
-## Security hardening notes (October 2026)
-
-The CI now uses checked-in root and console npm lockfiles and `npm ci --ignore-scripts`; the Docker builder/runtime do the same. A future dependency requiring installation hooks should be reviewed and explicitly permitted rather than turning scripts on globally.
-
-The main HTTP listener permits literal IP addresses and single-label container DNS names in the `Host` header, while retaining strict checks for dotted domains not explicitly allowed. This supports normal Compose/CI access without treating arbitrary public domains as trusted. Browser `Origin` still requires same-origin or explicit authorization.
-
-Root and console lockfiles must be updated together with their manifests. The external dependency vulnerability advisory for `node-forge` remains tracked and should not be masked by `npm audit` flags.
-
-Quality items beyond this maintenance pass: isolated HTTP router tests, consolidation of network configuration precedence, and full verification of the new CI and Docker builds.
+Generated OpenAPI and localized API listings come from the runtime catalogue. They do not suppress source analysis or replace tests. ESLint remains deferred for the selected TypeScript toolchain.

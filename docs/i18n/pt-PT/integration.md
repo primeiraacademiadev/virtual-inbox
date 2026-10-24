@@ -1,41 +1,35 @@
-# Integrar o Virtual Inbox como mock
+# Integrar uma aplicação
 
-Este guia destina-se a quem pretende substituir temporariamente serviços de comunicação reais durante desenvolvimento, demonstrações e testes. O Virtual Inbox não é um relay SMTP público nem um fornecedor de SMS real.
+Cria uma inbox com `POST /api/mailboxes` ou `POST /api/phone-numbers`. Um objeto JSON vazio usa os defaults do servidor. Guarda `id` (UUID REST) e `address` (destinatário). Configura a aplicação a testar, executa a sua operação normal e consulta ou espera pela mensagem capturada.
 
-## 1. Escolher o endereço do servidor
+## Transportes de email
 
-Por omissão, o servidor escuta em `127.0.0.1`. Se a aplicação em teste estiver noutro contentor ou máquina, **localhost aponta para essa máquina**, e não para o Virtual Inbox. Configura `HOST`, `SMTP_HOST` e `PUBLIC_HOST` e limita o acesso por rede. O nome utilizado pelo cliente deve constar dos SAN do certificado.
-
-## 2. Integrar SMTP
-
-| Transporte | Porta | Configuração |
+| Transporte | Porta | Opções Nodemailer |
 | --- | --- | --- |
-| SMTP | 2525 | Sem TLS apenas em ambiente de confiança |
-| SMTP + STARTTLS | 2525 | Negociação TLS após EHLO |
-| SMTPS | 2465 | TLS implícito |
+| SMTP plain | 2525 | `secure:false, ignoreTLS:true` |
+| STARTTLS obrigatório | 2525 | `secure:false, requireTLS:true` |
+| SMTPS | 2465 | `secure:true` |
 
-Regista primeiro uma mailbox pelo endpoint de gestão e usa o seu campo `address` como destinatário. Para confiar nos certificados automáticos locais, instala **apenas a CA pública**, disponível em `GET /tls/ca.pem`. Não desatives a validação do certificado TLS.
+Em TLS fornece a CA confiável e um `servername` presente nos SAN. Nunca uses `rejectUnauthorized:false`. Não é exigida autenticação SMTP. Em Compose o hostname é o nome do serviço; fora de Docker usa a porta publicada. Inclui esse hostname nos SAN quando utilizares TLS.
 
-## 3. Integrar SMS
-
-O cliente HTTP envia para a **porta de demonstração 3001** (ou 3444 com HTTPS), e não para a porta de gestão 3000.
+Com o servidor iniciado, na raiz do repositório:
 
 ```sh
-curl -X POST http://127.0.0.1:3001/sms/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"from":"+351911111111","to":"+351900000001","body":"Código: 123456"}'
+node examples/smtp-roundtrip.mjs plain
+node examples/smtp-roundtrip.mjs starttls data/certificates/ca.pem
+node examples/smtp-roundtrip.mjs smtps data/certificates/ca.pem
 ```
 
-Antes do envio, regista o número com `POST /phone-numbers` na API de gestão.
+Cada exemplo cria inbox, envia MIME com anexo binário, espera pela captura, compara SHA-256 e limpa os recursos. Em Docker copia primeiro apenas a CA pública: `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Passa `vi-ca.pem` como último argumento. Nunca copies a chave da CA para o cliente.
 
-## 4. Inspecionar mensagens e anexos
+## SMS
 
-Usa `GET /mailboxes/:id/messages` ou `GET /phone-numbers/:id/messages`. O JSON devolve metadados dos anexos, incluindo `id`, `filename`, `contentType` e `size`, nunca bytes binários. Descarrega um anexo em `GET /mailboxes/:id/messages/:messageId/attachments/:attachmentId`.
+Não existe transporte de telecomunicações real. Envia JSON `{"from":"test-app","to":"+351912345678","body":"Mensagem de teste"}` para `/demo/sms/messages` na origem principal, ou `/sms/messages` no listener demo (3001/3444). O destino deve corresponder à inbox criada; aliases nacionais/internacionais suportados chegam à mesma inbox. `node examples/sms-roundtrip.mjs` executa o percurso completo.
 
-## 5. Erros e diagnósticos
+O [contrato OpenAPI demo](/api/openapi-demo.json) descreve estes endpoints auxiliares, separados da referência principal. Enviar email demo devolve `202`; capturar SMS devolve `201`.
 
-As respostas de erro preservam `error` para compatibilidade e acrescentam `errorCode` e `errorParams`. Usa os códigos, não a mensagem em inglês. O tipo de evento SSE e os identificadores continuam invariantes.
+## Fronteiras e diagnóstico
 
-A API é maioritariamente anónima. Usa-a apenas numa rede controlada e sem dados pessoais de produção.
+A aceitação SMTP deve ser acompanhada por uma asserção REST da captura. Destinos desconhecidos/expirados vão para anomalias. As respostas JSON só incluem metadados de anexos; descarrega os bytes em `/api/mailboxes/{inboxId}/messages/{messageId}/attachments/{attachmentId}`. O limite SMTP inclui todo o MIME e o overhead de codificação. As quotas podem rejeitar mensagens.
 
-[Automatizar testes](sdk.md) · [Referência API](api.md) · [TLS](tls.md)
+CORS controla origens do browser, não clientes Node/SMTP. `421` indica Host recusado; `403` pode indicar Origin ou administração. Configura os hosts/origins necessários sem abrir uma exceção wildcard. Continua em [Testes automáticos](sdk.md).

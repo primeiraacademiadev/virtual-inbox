@@ -5,7 +5,21 @@ import { createOpenApiDocument, operations } from "../src/http/api-contract.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = readFileSync(join(root, "src/server.ts"), "utf8");
-const handlers = new Set([...source.matchAll(/^\s*case "([a-zA-Z]+)":/gm)].map((match) => match[1]));
+const handlerIds = source
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line.startsWith('case "'))
+  .map((line) => {
+    const end = line.indexOf('":', 6);
+    if (end === -1) throw new Error("Invalid HTTP handler case: " + line);
+    const id = line.slice(6, end);
+    if (!id || !Array.from(id).every((char) =>
+      (char >= "A" && char <= "Z") || (char >= "a" && char <= "z"))) {
+      throw new Error("Invalid HTTP handler identifier: " + id);
+    }
+    return id;
+  });
+const handlers = new Set(handlerIds);
 const declared = new Set(operations.map((operation) => operation.id));
 if (declared.size !== operations.length) throw new Error("Duplicate API operation identifiers");
 for (const id of declared) {

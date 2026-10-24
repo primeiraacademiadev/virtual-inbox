@@ -13,7 +13,10 @@
     "dev:console:https": "npm run dev:https --prefix web",
     "build:server": "tsc",
     "predev": "npm run build:console",
-    "test:coverage": "c8 --reporter=lcov --reporter=text node --import tsx --test test/*.test.ts"
+    "test:coverage": "c8 --reporter=lcov --reporter=text node --import tsx --test test/*.test.ts",
+    "test:integration": "node testing/scripts/run-managed.mjs test:protocols",
+    "test:e2e": "node testing/scripts/run-managed.mjs test:e2e",
+    "test:all": "node testing/scripts/run-managed.mjs test:all"
   },
   "dependencies": {
     "smtp-server": "^3.19.23",

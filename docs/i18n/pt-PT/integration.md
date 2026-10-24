@@ -16,11 +16,11 @@ Com o servidor iniciado, na raiz do repositório:
 
 ```sh
 node examples/smtp-roundtrip.mjs plain
-node examples/smtp-roundtrip.mjs starttls data/certificates/ca.pem
-node examples/smtp-roundtrip.mjs smtps data/certificates/ca.pem
+node examples/smtp-roundtrip.mjs starttls
+node examples/smtp-roundtrip.mjs smtps
 ```
 
-Cada exemplo cria inbox, envia MIME com anexo binário, espera pela captura, compara SHA-256 e limpa os recursos. Em Docker copia primeiro apenas a CA pública: `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Passa `vi-ca.pem` como último argumento. Nunca copies a chave da CA para o cliente.
+Cada exemplo cria inbox, envia MIME com anexo binário, espera pela captura, compara SHA-256 e limpa os recursos. Em Docker copia primeiro apenas a CA pública: `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Para usar uma CA fora da localização predefinida, define `VI_TEST_CA_FILE` no ambiente e executa o exemplo sem argumento adicional: no Windows CMD, `set VI_TEST_CA_FILE=vi-ca.pem` seguido de `node examples/smtp-roundtrip.mjs starttls`; em Linux/macOS, `VI_TEST_CA_FILE=./vi-ca.pem node examples/smtp-roundtrip.mjs starttls`. Nunca copies a chave da CA para o cliente.
 
 ## SMS
 

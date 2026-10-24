@@ -63,3 +63,19 @@ test("automatic leaf renews when fewer than seven days remain",()=>{
   assert.ok(Date.parse(renewed.validTo)>Date.now()+20*86400000);
  }finally{a.clean()}
 });
+
+test("Node-issued leaf has a valid signature chained to the local CA",()=>{
+ const a=fixture();
+ try{
+  const ca=new X509Certificate(readFileSync(a.files.ca));
+  const leaf=new X509Certificate(a.cert);
+  assert.equal(ca.ca,true);
+  assert.equal(leaf.ca,false);
+  assert.equal(ca.verify(ca.publicKey),true);
+  assert.equal(leaf.checkIssued(ca),true);
+  assert.equal(leaf.verify(ca.publicKey),true);
+  assert.match(leaf.subjectAltName||"",/DNS:localhost/);
+  assert.match(leaf.subjectAltName||"",/IP Address:127\.0\.0\.1/);
+  assert.doesNotThrow(()=>validateIdentity(a.cert,a.key));
+ }finally{a.clean()}
+});

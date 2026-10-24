@@ -1,0 +1,44 @@
+name: Virtual Inbox E2E
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'web/**'
+      - 'testing/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/e2e.yml'
+jobs:
+  managed-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '26'
+      - name: Install application
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix web --ignore-scripts
+      - name: Install test harness
+        run: npm install --prefix testing --ignore-scripts
+      - name: Install Playwright Chromium
+        run: npx --prefix testing playwright install --with-deps chromium
+      - name: Build integrated application
+        run: npm run build
+      - name: Run managed E2E suite
+        run: npm run test:all
+      - name: Upload E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: virtual-inbox-e2e
+          path: |
+            testing/reports/html
+            testing/reports/junit.xml
+            testing/reports/artifacts
+          retention-days: 14

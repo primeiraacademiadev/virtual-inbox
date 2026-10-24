@@ -19,8 +19,11 @@ try{
   await delay(250);
  }
  if(!ready)throw Error("SUT did not become healthy");
- const cmd=process.platform==="win32"?"npm.cmd":"npm";
- suite=spawn(cmd,["run",process.argv[2]||"test:all","--prefix","testing"],{cwd:root,env,stdio:"inherit",shell:process.platform==="win32"});
+ const command=process.argv[2]||"test:all";
+ const selected={"test:protocols":["--project=protocols"],"test:e2e":["--project=chromium"],"test:all":[]}[command];
+ if(!selected)throw Error("Unsupported test suite: "+command);
+ const playwrightCli=resolve(root,"testing/node_modules/@playwright/test/cli.js");
+ suite=spawn(process.execPath,[playwrightCli,"test",...selected],{cwd:resolve(root,"testing"),env,stdio:"inherit"});
  const code=await new Promise((resolve,reject)=>{suite.once("exit",code=>resolve(code??1));suite.once("error",reject)});
  process.exitCode=code;
 }catch(error){console.error(error);process.exitCode=1}

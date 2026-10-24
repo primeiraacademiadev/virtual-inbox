@@ -16,11 +16,11 @@ From a source checkout with the server running:
 
 ```sh
 node examples/smtp-roundtrip.mjs plain
-node examples/smtp-roundtrip.mjs starttls data/certificates/ca.pem
-node examples/smtp-roundtrip.mjs smtps data/certificates/ca.pem
+node examples/smtp-roundtrip.mjs starttls
+node examples/smtp-roundtrip.mjs smtps
 ```
 
-Each example creates an inbox, sends MIME with a binary attachment, waits for delivery, compares SHA-256 and removes its resources. For Docker, copy the public CA first: `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Pass `vi-ca.pem` as the final argument. Only copy the public CA, never the key.
+Each example creates an inbox, sends MIME with a binary attachment, waits for delivery, compares SHA-256 and removes its resources. For Docker, copy the public CA first: `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Set `VI_TEST_CA_FILE=./vi-ca.pem` in the environment when running the example with this alternative public CA path. The example deliberately does not accept a CA path as a command-line argument. Copy only the public CA, never the key.
 
 ## SMS
 

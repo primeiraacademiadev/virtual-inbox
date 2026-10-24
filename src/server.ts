@@ -151,7 +151,7 @@ async function handleRequest(req:IncomingMessage,res:ServerResponse,demoOnly=fal
   sandbox.log("network.settings.updated",undefined,undefined,{keys:Object.keys(values)});
   return json(res,202,{restartRequired:true,settings:data});
  }
- if(path[0]==="admin"&&path[1]==="tls"&&method==="PUT"){
+ if(path.length===2&&path[0]==="admin"&&path[1]==="tls"&&method==="PUT"){
    const token=process.env.ADMIN_TOKEN;
    const supplied=String(req.headers.authorization||"").replace(/^Bearer /i,"");
    if(!token||!supplied||Buffer.byteLength(supplied)!==Buffer.byteLength(token)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(token)))throw new Fault(403,"Administrative authorization required");

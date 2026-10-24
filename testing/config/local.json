@@ -1,0 +1,10 @@
+{
+  "profile": "local",
+  "baseUrl": "https://127.0.0.1:3443",
+  "host": "127.0.0.1",
+  "smtp": {
+    "plainPort": 2525,
+    "smtpsPort": 2465
+  },
+  "runMode": "attached"
+}

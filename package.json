@@ -19,16 +19,17 @@
     "test:all": "node testing/scripts/run-managed.mjs test:all"
   },
   "dependencies": {
-    "smtp-server": "^3.19.23",
+    "nodemailer": "^10.2.0",
     "postal-mime": "^4.0.11",
-    "nodemailer": "^10.2.0"
+    "smtp-server": "^3.19.23"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/smtp-server": "^3.5.13",
-    "typescript": "^7.0.2",
+    "c8": "^12.0.0",
+    "prettier": "3.9.10",
     "tsx": "^4.23.15",
-    "c8": "^12.0.0"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": ">=24"

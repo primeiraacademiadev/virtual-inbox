@@ -1,21 +1,53 @@
-import {readFileSync,writeFileSync} from "node:fs";
-import {join,resolve} from "node:path";
-const root=resolve(import.meta.dirname,"..");
-const names=["overview","demo","integration","sdk","tls","architecture","development","api"];
-for(const locale of ["pt-PT","en","fr"]){
- const index=[];
- for(const doc of names){
-  const markdown=readFileSync(join(root,"web/public/wiki",locale,doc+".md"),"utf8");
-  let ordinal=0;
-  let section={title:doc,body:[]};
-  const push=()=>{if(section.body.length)index.push({document:doc,label:doc,title:section.title,anchor:"section-"+ordinal,ordinal,text:section.body.join(" ").replace(/[\`*#|]/g," ").slice(0,9000)})};
-  for(const line of markdown.split(/\r?\n/)){
-   const markers=line.length-line.replace(/^#+/,"").length;
-   const heading=markers>=1&&markers<=3&&line[markers]===" "&&line.slice(markers+1).trim()?line.slice(markers+1).trim():null;
-   if(heading){push();ordinal++;section={title:heading,body:[]}}else section.body.push(line);
+import { readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+const root = resolve(import.meta.dirname, "..");
+const names = [
+  "overview",
+  "demo",
+  "integration",
+  "sdk",
+  "tls",
+  "architecture",
+  "development",
+  "api",
+];
+for (const locale of ["pt-PT", "en", "fr"]) {
+  const index = [];
+  for (const doc of names) {
+    const markdown = readFileSync(join(root, "web/public/wiki", locale, doc + ".md"), "utf8");
+    let ordinal = 0;
+    let section = { title: doc, body: [] };
+    const push = () => {
+      if (section.body.length)
+        index.push({
+          document: doc,
+          label: doc,
+          title: section.title,
+          anchor: "section-" + ordinal,
+          ordinal,
+          text: section.body
+            .join(" ")
+            .replace(/[\`*#|]/g, " ")
+            .slice(0, 9000),
+        });
+    };
+    for (const line of markdown.split(/\r?\n/)) {
+      const markers = line.length - line.replace(/^#+/, "").length;
+      const heading =
+        markers >= 1 && markers <= 3 && line[markers] === " " && line.slice(markers + 1).trim()
+          ? line.slice(markers + 1).trim()
+          : null;
+      if (heading) {
+        push();
+        ordinal++;
+        section = { title: heading, body: [] };
+      } else section.body.push(line);
+    }
+    push();
   }
-  push();
- }
- writeFileSync(join(root,"web/public/wiki",locale,"search-index.json"),JSON.stringify({version:1,sections:index}));
- console.log(locale+": "+index.length+" searchable sections");
+  writeFileSync(
+    join(root, "web/public/wiki", locale, "search-index.json"),
+    JSON.stringify({ version: 1, sections: index }),
+  );
+  console.log(locale + ": " + index.length + " searchable sections");
 }

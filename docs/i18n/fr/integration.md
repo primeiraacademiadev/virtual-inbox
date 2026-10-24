@@ -16,11 +16,11 @@ Depuis le dépôt, avec le serveur démarré :
 
 ```sh
 node examples/smtp-roundtrip.mjs plain
-node examples/smtp-roundtrip.mjs starttls data/certificates/ca.pem
-node examples/smtp-roundtrip.mjs smtps data/certificates/ca.pem
+node examples/smtp-roundtrip.mjs starttls
+node examples/smtp-roundtrip.mjs smtps
 ```
 
-Chaque exemple crée une boîte, envoie MIME et pièce jointe binaire, attend, compare SHA-256 puis nettoie. Avec Docker, copier uniquement l’AC publique : `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Passer `vi-ca.pem` en dernier argument, jamais la clé de l’AC.
+Chaque exemple crée une boîte, envoie MIME et pièce jointe binaire, attend, compare SHA-256 puis nettoie. Avec Docker, copier uniquement l’AC publique : `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`. Définir `VI_TEST_CA_FILE=./vi-ca.pem` dans l’environnement pour utiliser cette AC publique. Le script n’accepte plus de chemin CA en argument CLI. Ne jamais copier la clé de l’AC.
 
 ## SMS
 

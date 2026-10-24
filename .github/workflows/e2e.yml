@@ -27,7 +27,7 @@ jobs:
           npm ci --ignore-scripts
           npm ci --prefix web --ignore-scripts
       - name: Install test harness
-        run: npm install --prefix testing --ignore-scripts
+        run: npm ci --prefix testing --ignore-scripts
       - name: Install Playwright Chromium
         run: npx --prefix testing playwright install --with-deps chromium
       - name: Build integrated application
@@ -36,7 +36,7 @@ jobs:
         run: npm run test:all
       - name: Upload E2E reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: virtual-inbox-e2e
           path: |

@@ -19,7 +19,7 @@ const bool=(value:boolean)=>tlv(1,Buffer.from([value?255:0]));
 const nullValue=Buffer.from([5,0]);
 const alg=seq(oid("1.2.840.113549.1.1.11"),nullValue);
 const name=(cn:string)=>seq(set(seq(oid("2.5.4.3"),utf8(cn))));
-const time=(d:Date)=>{const v=d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,"Z");return tlv(d.getUTCFullYear()<2050?23:24,Buffer.from(d.getUTCFullYear()<2050?v.slice(2):v,"ascii"))};
+const time=(d:Date)=>{const v=d.toISOString().replace(/[-:T]/g,"").replace(/\.\d{3}Z$/,"Z");return tlv(d.getUTCFullYear()<2050?23:24,Buffer.from(d.getUTCFullYear()<2050?v.slice(2):v,"ascii"))};
 const extension=(id:string,inner:Buffer,critical=false)=>seq(oid(id),...(critical?[bool(true)]:[]),octet(inner));
 function ipBytes(value:string):Buffer{
  if(isIP(value)===4)return Buffer.from(value.split(".").map(Number));

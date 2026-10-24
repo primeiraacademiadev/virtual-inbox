@@ -137,23 +137,22 @@ export class Sandbox {
   }
   log(type: string, resourceId?: string, messageId?: string, data?: Record<string, unknown>) {
     const id = this.runId + ":" + ++this.seq;
-    const e: Event = { id, type, at: new Date().toISOString(), resourceId, messageId, data };
-    this.events.push(e);
+    const event: Event = { id, type, at: new Date().toISOString(), resourceId, messageId, data };
+    this.events.push(event);
     if (this.events.length > this.capacity) this.events.shift();
-    this.emitter.emit("event", e);
-    return e;
+    this.emitter.emit("event", event);
+    return event;
   }
   resource(id: string) {
-    const r = this.resources.get(id);
-    if (!r || (r.expiresAt && Date.parse(r.expiresAt) <= Date.now()))
+    const recipient = this.resources.get(id);
+    if (!recipient || (recipient.expiresAt && Date.parse(recipient.expiresAt) <= Date.now()))
       throw new Fault(404, "Inbox not found", "INBOX_NOT_FOUND");
-    return r;
+    return recipient;
   }
   list(channel?: Channel) {
     return [...this.resources.values()].filter(
-      (r) =>
-        (!channel || r.channel === channel) &&
-        (!r.expiresAt || Date.parse(r.expiresAt) > Date.now()),
+      (recipient) => (!channel || recipient.channel === channel) &&
+        (!recipient.expiresAt || Date.parse(recipient.expiresAt) > Date.now()),
     );
   }
   find(channel: Channel, address: string) {
@@ -171,203 +170,143 @@ export class Sandbox {
       throw new Fault(400, "Invalid TTL", "INVALID_TTL");
     if (this.resources.size >= config.maxInboxes + 2)
       throw new Fault(507, "Inbox capacity reached", "CAPACITY_EXCEEDED");
-    const o = observerId ? this.observer(observerId) : null;
+    const observer = observerId ? this.observer(observerId) : null;
     const manual = !!address?.trim();
     const locale = generation?.locale ?? generationDefaults.locale;
-    let addr = "",
-      aliases: string[] = [];
+    let generatedAddress = "";
+    let aliases: string[] = [];
     for (let attempt = 0; attempt < (manual ? 1 : generationDefaults.maxAttempts); attempt++) {
-      addr = manual ? address!.trim() : this.generateIdentity(channel, generation);
-      if (classify(addr) !== channel) throw new Fault(400, "Invalid identifier", "INVALID_REQUEST");
-      aliases = this.aliases(channel, addr, locale);
-      if (aliases.every((k) => !this.addressIds.has(k))) break;
+      generatedAddress = manual ? address!.trim() : this.generateIdentity(channel, generation);
+      if (classify(generatedAddress) !== channel) throw new Fault(400, "Invalid identifier", "INVALID_REQUEST");
+      aliases = this.aliases(channel, generatedAddress, locale);
+      if (aliases.every((key) => !this.addressIds.has(key))) break;
       if (manual) throw new Fault(409, "Identifier already exists", "CONFLICT");
       aliases = [];
     }
     if (!aliases.length)
       throw new Fault(409, "Generation attempts exhausted", "IDENTITY_GENERATION_EXHAUSTED");
-    const r: Recipient = {
-      id: randomUUID(),
-      channel,
-      address: addr,
+    const recipient: Recipient = {
+      id: randomUUID(), channel, address: generatedAddress,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
     };
-    this.resources.set(r.id, r);
-    for (const alias of aliases) this.addressIds.set(alias, r.id);
-    this.resourceAliases.set(r.id, aliases);
-    o?.inboxes.add(r.id);
-    this.log("recipient.created", r.id, undefined, { channel, address: addr });
-    return r;
+    this.resources.set(recipient.id, recipient);
+    for (const alias of aliases) this.addressIds.set(alias, recipient.id);
+    this.resourceAliases.set(recipient.id, aliases);
+    observer?.inboxes.add(recipient.id);
+    this.log("recipient.created", recipient.id, undefined, { channel, address: generatedAddress });
+    return recipient;
   }
   deleteResource(id: string) {
-    const r = this.resource(id);
-    if (r.system) throw new Fault(403, "System inbox cannot be deleted");
+    const recipient = this.resource(id);
+    if (recipient.system) throw new Fault(403, "System inbox cannot be deleted");
     this.resources.delete(id);
-    for (const alias of this.resourceAliases.get(id) || [this.key(r.channel, r.address)])
+    for (const alias of this.resourceAliases.get(id) || [this.key(recipient.channel, recipient.address)])
       this.addressIds.delete(alias);
     this.resourceAliases.delete(id);
-    for (const m of this.messages.values()) if (m.destinationId === id) this.messages.delete(m.id);
-    for (const o of this.observers.values()) o.inboxes.delete(id);
+    for (const message of this.messages.values()) if (message.destinationId === id) this.messages.delete(message.id);
+    for (const observer of this.observers.values()) observer.inboxes.delete(id);
     this.emitter.emit("resource.removed", id);
     this.log("recipient.deleted", id);
   }
   deliver(
-    channel: Channel,
-    from: string,
-    to: string,
-    body: string,
-    subject?: string,
-    html?: string,
-    rawMime?: string,
-    attachments: Attachment[] = [],
+    channel: Channel, from: string, to: string, body: string,
+    subject?: string, html?: string, rawMime?: string, attachments: Attachment[] = [],
   ) {
-    if (!from || !to || typeof body !== "string")
-      throw new Fault(400, "From, to and body required");
-    const maxMimeBytes = config.smtpBytes;
-    if (
-      body.length > config.bodyChars ||
-      (rawMime && Buffer.from(rawMime, "base64").length > maxMimeBytes)
-    )
+    if (!from || !to || typeof body !== "string") throw new Fault(400, "From, to and body required");
+    if (body.length > config.bodyChars || (rawMime && Buffer.from(rawMime, "base64").length > config.smtpBytes))
       throw new Fault(413, "Payload too large", "MESSAGE_TOO_LARGE");
-    if (channel === "sms" && Buffer.byteLength(body) > config.smsBytes)
-      throw new Fault(413, "SMS exceeds maximum size");
+    if (channel === "sms" && Buffer.byteLength(body) > config.smsBytes) throw new Fault(413, "SMS exceeds maximum size");
     if (attachments.length > config.maxAttachments) throw new Fault(413, "Too many attachments");
-    if (attachments.some((a) => a.size > config.attachmentBytes))
-      throw new Fault(413, "Attachment too large");
-    if (this.messages.size >= config.messages)
-      throw new Fault(507, "Message capacity reached", "CAPACITY_EXCEEDED");
+    if (attachments.some((attachment) => attachment.size > config.attachmentBytes)) throw new Fault(413, "Attachment too large");
+    if (this.messages.size >= config.messages) throw new Fault(507, "Message capacity reached", "CAPACITY_EXCEEDED");
     const storedBytes = [...this.messages.values()].reduce(
-      (n, m) =>
-        n +
-        Buffer.byteLength(m.body) +
-        (m.rawMime ? Buffer.byteLength(m.rawMime) : 0) +
-        (m.attachments || []).reduce((t, a) => t + a.size, 0),
-      0,
+      (total, message) => total + Buffer.byteLength(message.body) +
+        (message.rawMime ? Buffer.byteLength(message.rawMime) : 0) +
+        (message.attachments || []).reduce((sum, attachment) => sum + attachment.size, 0), 0,
     );
-    if (
-      storedBytes +
-        Buffer.byteLength(body) +
-        (rawMime ? Buffer.byteLength(rawMime) : 0) +
-        attachments.reduce((n, a) => n + a.size, 0) >
-      config.storedBytes
-    )
+    if (storedBytes + Buffer.byteLength(body) + (rawMime ? Buffer.byteLength(rawMime) : 0) +
+      attachments.reduce((sum, attachment) => sum + attachment.size, 0) > config.storedBytes) {
       throw new Fault(507, "In-memory storage capacity reached", "CAPACITY_EXCEEDED");
+    }
     const id = this.lookup(channel, to);
-    const r = id ? this.resources.get(id) : null;
-    const reason = !r
-      ? this.expired.has(this.key(channel, to))
-        ? "EXPIRED_RECIPIENT"
-        : "UNKNOWN_RECIPIENT"
-      : r.expiresAt && Date.parse(r.expiresAt) <= Date.now()
-        ? "EXPIRED_RECIPIENT"
-        : undefined;
-    const destinationId = reason ? this.defaults[channel] : r!.id;
-    const m: Message = {
-      id: randomUUID(),
-      sequence: ++this.msgSeq,
-      channel,
-      destinationId,
-      from,
-      originalRecipient: to,
-      body,
-      subject,
-      html,
-      rawMime,
-      attachments,
-      receivedAt: new Date().toISOString(),
-      captureReason: reason,
+    const recipient = id ? this.resources.get(id) : null;
+    const knownExpired = this.aliases(channel, to).some((alias) => this.expired.has(alias));
+    const reason = !recipient
+      ? knownExpired ? "EXPIRED_RECIPIENT" : "UNKNOWN_RECIPIENT"
+      : recipient.expiresAt && Date.parse(recipient.expiresAt) <= Date.now()
+        ? "EXPIRED_RECIPIENT" : undefined;
+    const destinationId = reason ? this.defaults[channel] : recipient!.id;
+    const message: Message = {
+      id: randomUUID(), sequence: ++this.msgSeq, channel, destinationId, from,
+      originalRecipient: to, body, subject, html, rawMime, attachments,
+      receivedAt: new Date().toISOString(), captureReason: reason,
     };
-    this.messages.set(m.id, m);
-    this.log(reason ? "message.captured" : "message.received", destinationId, m.id, { reason });
-    this.emitter.emit("message", m);
-    return m;
+    this.messages.set(message.id, message);
+    this.log(reason ? "message.captured" : "message.received", destinationId, message.id, { reason });
+    this.emitter.emit("message", message);
+    return message;
   }
   listMessages(id: string) {
     this.resource(id);
-    return [...this.messages.values()]
-      .filter((m) => m.destinationId === id)
-      .sort((a, b) => a.sequence - b.sequence);
+    return [...this.messages.values()].filter((message) => message.destinationId === id)
+      .sort((left, right) => left.sequence - right.sequence);
   }
   removeMessage(id: string, messageId: string) {
     this.resource(id);
-    const m = this.messages.get(messageId);
-    if (!m || m.destinationId !== id)
-      throw new Fault(404, "Message not found", "MESSAGE_NOT_FOUND");
+    const message = this.messages.get(messageId);
+    if (!message || message.destinationId !== id) throw new Fault(404, "Message not found", "MESSAGE_NOT_FOUND");
     this.messages.delete(messageId);
     this.log("message.deleted", id, messageId);
   }
   clearMessages(id: string) {
-    for (const m of this.listMessages(id)) this.removeMessage(id, m.id);
+    for (const message of this.listMessages(id)) this.removeMessage(id, message.id);
   }
   newObserver() {
-    if (this.observers.size >= config.maxObservers)
-      throw new Fault(507, "Observer capacity reached", "CAPACITY_EXCEEDED");
+    if (this.observers.size >= config.maxObservers) throw new Fault(507, "Observer capacity reached", "CAPACITY_EXCEEDED");
     const id = randomUUID();
-    this.observers.set(id, {
-      id,
-      expiresAt: Date.now() + config.observerTtl * 1000,
-      inboxes: new Set(),
-    });
+    this.observers.set(id, { id, expiresAt: Date.now() + config.observerTtl * 1000, inboxes: new Set() });
     return this.snapshot(id);
   }
   observer(id: string) {
-    const o = this.observers.get(id);
-    if (!o || o.expiresAt <= Date.now()) throw new Fault(404, "Observer not found");
-    o.expiresAt = Date.now() + config.observerTtl * 1000;
-    return o;
+    const observer = this.observers.get(id);
+    if (!observer || observer.expiresAt <= Date.now()) throw new Fault(404, "Observer not found");
+    observer.expiresAt = Date.now() + config.observerTtl * 1000;
+    return observer;
   }
   snapshot(id: string) {
-    const o = this.observer(id);
-    return {
-      observerId: id,
-      inboxes: [...o.inboxes].flatMap((i) => {
-        try {
-          return [this.resource(i)];
-        } catch {
-          return [];
-        }
-      }),
-    };
+    const observer = this.observer(id);
+    return { observerId: id, inboxes: [...observer.inboxes].flatMap((inboxId) => {
+      try { return [this.resource(inboxId)]; } catch { return []; }
+    }) };
   }
   watch(id: string, resourceId: string) {
-    const o = this.observer(id),
-      r = this.resource(resourceId);
-    o.inboxes.add(r.id);
-    return { recipient: r, messages: this.listMessages(r.id) };
+    const observer = this.observer(id);
+    const recipient = this.resource(resourceId);
+    observer.inboxes.add(recipient.id);
+    return { recipient, messages: this.listMessages(recipient.id) };
   }
   unwatch(id: string, resourceId: string) {
     this.observer(id).inboxes.delete(resourceId);
   }
   replay(after?: string) {
-    let events = this.events,
-      gap = false,
-      reset = false;
+    let events = this.events;
+    let gap = false;
+    let reset = false;
     if (after) {
-      const [run, n] = after.split(":");
+      const [run, number] = after.split(":");
       if (run !== this.runId) reset = true;
       else {
-        const seq = Number(n);
-        gap = !!events.length && seq < Number(events[0].id.split(":")[1]) - 1;
-        events = events.filter((e) => Number(e.id.split(":")[1]) > seq);
+        const sequence = Number(number);
+        gap = !!events.length && sequence < Number(events[0].id.split(":")[1]) - 1;
+        events = events.filter((event) => Number(event.id.split(":")[1]) > sequence);
       }
     }
-    return {
-      events,
-      gap,
-      reset,
-      runId: this.runId,
-      oldest: this.events[0]?.id,
-      latest: this.events.at(-1)?.id,
-    };
+    return { events, gap, reset, runId: this.runId, oldest: this.events[0]?.id, latest: this.events.at(-1)?.id };
   }
   wait(
     id: string,
-    {
-      after = 0,
-      timeoutMs = 10000,
-      match = {},
-    }: {
+    { after = 0, timeoutMs = 10000, match = {} }: {
       after?: number;
       timeoutMs?: number;
       match?: { from?: string; bodyContains?: string; subjectContains?: string };
@@ -375,33 +314,26 @@ export class Sandbox {
     signal?: AbortSignal,
   ): Promise<Message | null> {
     this.resource(id);
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > config.waitMs)
-      throw new Fault(400, "Invalid timeout");
-    const fits = (m: Message) =>
-      m.destinationId === id &&
-      m.sequence > after &&
-      (!match.from || m.from === match.from) &&
-      (!match.bodyContains || m.body.includes(match.bodyContains)) &&
-      (!match.subjectContains || (m.subject || "").includes(match.subjectContains));
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > config.waitMs) throw new Fault(400, "Invalid timeout");
+    const fits = (message: Message) => message.destinationId === id && message.sequence > after &&
+      (!match.from || message.from === match.from) &&
+      (!match.bodyContains || message.body.includes(match.bodyContains)) &&
+      (!match.subjectContains || (message.subject || "").includes(match.subjectContains));
     const found = this.listMessages(id).find(fits);
     if (found) return Promise.resolve(found);
     return new Promise((resolve) => {
       let done = false;
-      const finish = (m: Message | null) => {
+      const finish = (message: Message | null) => {
         if (done) return;
         done = true;
         clearTimeout(timer);
         this.emitter.off("message", onMessage);
         this.emitter.off("resource.removed", onRemove);
         signal?.removeEventListener("abort", onAbort);
-        resolve(m);
+        resolve(message);
       };
-      const onMessage = (m: Message) => {
-        if (fits(m)) finish(m);
-      };
-      const onRemove = (removedId: string) => {
-        if (removedId === id) finish(null);
-      };
+      const onMessage = (message: Message) => { if (fits(message)) finish(message); };
+      const onRemove = (removedId: string) => { if (removedId === id) finish(null); };
       const onAbort = () => finish(null);
       const timer = setTimeout(() => finish(null), timeoutMs);
       this.emitter.on("message", onMessage);
@@ -412,21 +344,24 @@ export class Sandbox {
     });
   }
   cleanup() {
-    for (const r of [...this.resources.values()])
-      if (r.expiresAt && Date.parse(r.expiresAt) <= Date.now()) {
-        this.resources.delete(r.id);
-        for (const alias of this.resourceAliases.get(r.id) || [this.key(r.channel, r.address)])
-          this.addressIds.delete(alias);
-        this.resourceAliases.delete(r.id);
-        this.expired.set(this.key(r.channel, r.address), Date.now());
-        for (const m of this.messages.values())
-          if (m.destinationId === r.id) this.messages.delete(m.id);
-        for (const o of this.observers.values()) o.inboxes.delete(r.id);
-        this.emitter.emit("resource.removed", r.id);
-        this.log("recipient.expired", r.id);
+    for (const recipient of [...this.resources.values()]) {
+      if (!recipient.expiresAt || Date.parse(recipient.expiresAt) > Date.now()) continue;
+      this.resources.delete(recipient.id);
+      const aliases = this.resourceAliases.get(recipient.id) || [this.key(recipient.channel, recipient.address)];
+      const expiredAt = Date.now();
+      for (const alias of aliases) {
+        this.addressIds.delete(alias);
+        this.expired.set(alias, expiredAt);
       }
-    for (const [id, o] of this.observers) if (o.expiresAt <= Date.now()) this.observers.delete(id);
-    for (const [key, at] of this.expired)
-      if (at < Date.now() - config.maxTtl * 1000) this.expired.delete(key);
+      this.resourceAliases.delete(recipient.id);
+      for (const message of this.messages.values()) {
+        if (message.destinationId === recipient.id) this.messages.delete(message.id);
+      }
+      for (const observer of this.observers.values()) observer.inboxes.delete(recipient.id);
+      this.emitter.emit("resource.removed", recipient.id);
+      this.log("recipient.expired", recipient.id);
+    }
+    for (const [id, observer] of this.observers) if (observer.expiresAt <= Date.now()) this.observers.delete(id);
+    for (const [key, at] of this.expired) if (at < Date.now() - config.maxTtl * 1000) this.expired.delete(key);
   }
 }

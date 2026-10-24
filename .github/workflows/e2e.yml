@@ -42,3 +42,51 @@ jobs:
             testing/reports/junit.xml
             testing/reports/artifacts
           retention-days: 14
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build runtime Docker image
+        run: docker build --tag virtual-inbox:ci .
+      - name: Start actual runtime image
+        run: |
+          docker run -d --name virtual-inbox-ci \
+            -p 127.0.0.1:13000:3000 \
+            -p 127.0.0.1:12525:2525 \
+            virtual-inbox:ci
+      - name: Validate HTTP and SMTP on real container
+        run: |
+          node --input-type=module <<'NODE'
+          import {connect} from 'node:net';
+          import {setTimeout as delay} from 'node:timers/promises';
+          let healthy=false;
+          for(let attempt=0;attempt<60;attempt++){
+            try{
+              const response=await fetch('http://127.0.0.1:13000/health');
+              if(response.ok){healthy=true;break}
+            }catch{}
+            await delay(500);
+          }
+          if(!healthy)throw Error('Docker runtime did not become healthy');
+          await new Promise((resolve,reject)=>{
+            const socket=connect({host:'127.0.0.1',port:12525});
+            socket.setTimeout(5000,()=>socket.destroy(Error('SMTP greeting timed out')));
+            socket.once('data',data=>{
+              const greeting=data.toString('utf8');
+              socket.end();
+              greeting.startsWith('220')?resolve():reject(Error('Unexpected SMTP greeting: '+greeting));
+            });
+            socket.once('error',reject);
+          });
+          console.log('Docker image passed health and SMTP listener checks');
+          NODE
+      - name: Collect container logs
+        if: always()
+        run: docker logs virtual-inbox-ci || true
+      - name: Remove test container
+        if: always()
+        run: docker rm -f virtual-inbox-ci || true

@@ -9,7 +9,22 @@ export type Recipient = { id: string; channel: Channel; address: string; created
 export type Attachment = { id:string; filename:string; contentType:string; size:number; content:Buffer };
 export type Message = { id: string; sequence: number; channel: Channel; destinationId: string; from: string; originalRecipient: string; subject?: string; body: string; html?: string; rawMime?: string; attachments?:Attachment[]; receivedAt: string; captureReason?: string };
 export type Event = { id: string; type: string; at: string; resourceId?: string; messageId?: string; data?: Record<string,unknown> };
-export const classify = (s:string): Channel | null => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)?"email":/^(?:\+[1-9]\d{6,14}|\d{9,15})$/.test(s)?"sms":null;
+export function classifyAddress(s:string):"email"|"sms"|null{
+ if(s.length===0||s.length>320)return null;
+ const at=s.indexOf("@");
+ if(at>0&&at===s.lastIndexOf("@")&&at<s.length-1){
+  const domain=s.slice(at+1);
+  const dot=domain.indexOf(".");
+  if(dot>0&&dot<domain.length-1&&!Array.from(s).some(c=>c==="@"?false:c===" "||c==="\t"||c==="\r"||c==="\n"||c==="\f"||c==="\v"))return "email";
+ }
+ const digits=s.startsWith("+")?s.slice(1):s;
+ if(digits.length>0&&Array.from(digits).every(c=>c>="0"&&c<="9")){
+  if(s.startsWith("+"))return digits[0]!=="0"&&digits.length>=7&&digits.length<=15?"sms":null;
+  return digits.length>=9&&digits.length<=15?"sms":null;
+ }
+ return null;
+}
+export const classify = classifyAddress;
 export {Fault} from "./domain-types.js";
 export class Sandbox {
   readonly runId=randomUUID();

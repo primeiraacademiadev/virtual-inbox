@@ -1,6 +1,6 @@
 # Virtual Inbox
 
-Ephemeral **email and SMS mock server** for manual demonstrations, application integration and automated tests. Node.js 24+ (Node 26 accepted), npm, and **OpenSSL on PATH** when using automatic TLS.
+Ephemeral **email and SMS mock server** for manual demonstrations, application integration and automated tests. Node.js 24+ (Node 26 accepted), npm, with automatic TLS certificate generation using built-in Node.js cryptography.
 
 > Source is proprietary (no license granted). Request authorization before distribution, modification or commercial reuse.
 
@@ -26,7 +26,7 @@ npm run build:console
 npm run dev
 ```
 
-**Default TLS_MODE is `auto`.** The first start invokes OpenSSL to generate a local CA and server identity. Open **https://localhost:3443** after explicitly trusting the local CA in your browser/device (or use the separate Vite development console below). Find the public CA at `http://127.0.0.1:3000/tls/ca.pem`; **never install or distribute the CA private key**. Do not bypass certificate checks on applications under test.
+**Default TLS_MODE is `auto`.** The first start uses Node.js cryptography to generate a local CA and server identity. Open **https://localhost:3443** after explicitly trusting the local CA in your browser/device (or use the separate Vite development console below). Find the public CA at `http://127.0.0.1:3000/tls/ca.pem`; **never install or distribute the CA private key**. Do not bypass certificate checks on applications under test.
 
 For the Vite development console, run `npm run dev:console` in another terminal, then visit **http://127.0.0.1:5173**. The backend must still be running. Do not expose these local listeners to the internet without access controls.
 
@@ -66,7 +66,7 @@ The browser displays inline controls immediately below the identifier field: loc
 
 ## Browser origin security
 
-The API deliberately does not require login for local integration tests. To prevent unrelated browser pages from reading captured messages, browser CORS is restricted to same-origin, the local Vite development origins and any origins listed in `HTTP_ALLOWED_ORIGINS`. `Host` is checked against the configured public/bind hostnames, loopback and `HTTP_ALLOWED_HOSTS`. See `.env.example`.
+The API deliberately does not require login for local integration tests. To prevent unrelated browser pages from reading captured messages, browser CORS is restricted to same-origin, the local Vite development origins and any origins listed in `HTTP_ALLOWED_ORIGINS`. `Host` accepts literal IPv4/IPv6 addresses and single-label hostnames (including Docker Compose service names) without additional configuration. Fully qualified hostnames must match the configured allowed hosts See `.env.example`.
 
 ## One-process console and API
 

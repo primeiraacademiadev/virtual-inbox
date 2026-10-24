@@ -18,6 +18,9 @@ async function postDemo(path:string,data:unknown){
  return response.json();
 }
 const base=(c:Channel)=>c==="email"?"/mailboxes":"/phone-numbers";
+const safeDoc=(value:string)=>/^[a-z0-9-]+$/.test(value)?value:"overview";
+const safeLocale=(value:string)=>["pt-PT","en","fr"].includes(value)?value:"en";
+const safeObserver=(value:string)=>/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value)?value:"";
 export default function App(){
  const {locale,t,formatDate,formatNumber}=useI18n();
  const [page,setPage]=useState<Page>("workspace");
@@ -85,8 +88,8 @@ export default function App(){
  const [logFilter,setLogFilter]=useState("");
  const [connected,setConnected]=useState(false);
  useEffect(()=>{void request<any>("/connection-info").then(data=>{setConnection(data);setNetworkFields(data.networkSettings||{})}).catch(()=>{})},[]);
- useEffect(()=>{const controller=new AbortController();setApiText("");fetch("/wiki/"+locale+"/api.md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setApiText(text)}).catch(()=>{if(!controller.signal.aborted)setApiText(t("unavailable"))});return()=>controller.abort()},[locale,t]);
- useEffect(()=>{const controller=new AbortController();setDocText("");fetch("/wiki/"+locale+"/"+docPage+".md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setDocText(text)}).catch(()=>{if(!controller.signal.aborted)setDocText(t("unavailable"))});return()=>controller.abort()},[docPage,locale,t]);
+ useEffect(()=>{const controller=new AbortController();setApiText("");fetch("/wiki/"+safeLocale(locale)+"/api.md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setApiText(text)}).catch(()=>{if(!controller.signal.aborted)setApiText(t("unavailable"))});return()=>controller.abort()},[locale,t]);
+ useEffect(()=>{const controller=new AbortController();setDocText("");fetch("/wiki/"+safeLocale(locale)+"/"+safeDoc(docPage)+".md",{signal:controller.signal}).then(r=>r.ok?r.text():t("unavailable")).then(text=>{if(!controller.signal.aborted)setDocText(text)}).catch(()=>{if(!controller.signal.aborted)setDocText(t("unavailable"))});return()=>controller.abort()},[docPage,locale,t]);
  useEffect(()=>{if(!jump||page!=="documentation"&&page!=="api")return;const timeout=setTimeout(()=>{const root=document.querySelector(".information .docMarkdown");const heading=root?.querySelectorAll("h1,h2,h3")[Math.max(0,jump.ordinal-1)] as HTMLElement|undefined;heading?.scrollIntoView({behavior:"smooth",block:"start"});if(heading){heading.classList.add("searchTarget");setTimeout(()=>heading.classList.remove("searchTarget"),1600)}setJump(null)},130);return()=>clearTimeout(timeout)},[jump,docText,apiText,page]);
  function openPage(next:Page){setPage(next);setMenuOpen(false)}
  function openDocument(id:string){if(id==="api"){openPage("api")}else{setDocPage(id);openPage("documentation")}}
@@ -96,7 +99,7 @@ export default function App(){
  const syncObserver=useCallback(async(id:string)=>{const snapshot=await request<Observer>("/observers/"+id);setInboxes(snapshot.inboxes);for(const r of snapshot.inboxes)void refresh(r.id,r.channel)},[refresh]);
  useEffect(()=>{
   let activeSse:EventSource|null=null;let closed=false;
-  const path=observer?"/api/observers/"+observer+"/events":"/api/observers/events";
+  const path=safeObserver(observer)?"/api/observers/"+safeObserver(observer)+"/events":"/api/observers/events";
   activeSse=new EventSource(path);setConnected(false);
   const handleSession=(ev:MessageEvent)=>{const data=JSON.parse(ev.data) as Observer; if(closed)return;setObserver(data.observerId);sessionStorage.setItem("virtual-inbox-observer",data.observerId);setInboxes(data.inboxes);data.inboxes.forEach(r=>void refresh(r.id,r.channel))};
   const handleLog=(ev:MessageEvent)=>{const entry=JSON.parse(ev.data) as EventEntry;setLogs(p=>p.some(x=>x.id===entry.id)?p:[...p.slice(-499),entry]);if(entry.resourceId&&entry.type.startsWith("message.")){const r=inboxesRef.current.find(x=>x.id===entry.resourceId);if(r)void refresh(r.id,r.channel)}};

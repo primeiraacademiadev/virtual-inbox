@@ -57,3 +57,18 @@ Testes acrescentados:
 A suite de protocolos deve agora ter 14 testes (sem alterar os três de browser), e a suite unitária deve incorporar quatro novos testes. Confirmar ambos por execução real. A renovação automática é validada na operação `ensureLocalTls` (invocada no arranque e nas operações de gestão), **não** por um agendamento contínuo de rotação em processo vivo.
 
 O handler SMTP reconhece a desconexão específica `SocketError: Socket closed while initiating TLS` como interrupção de transporte esperada; quaisquer outros erros continuam visíveis nos logs. Validar a ausência de crash e a inexistência de erros inesperados durante as execuções.
+
+## Resiliência e concorrência — extensão de 24-10-2026
+
+Os testes `testing/scenarios/resilience/` exigem `VI_RUN_MODE=managed` e usam o processo isolado do runner. Os limites desse processo são intencionalmente reduzidos: 40 inboxes, 80 mensagens, 40 observadores, SMS até 512 bytes, 3 anexos, espera até 5000 ms.
+
+Cenários incluídos:
+- inbox com TTL de um segundo e posterior captura na inbox de anomalias;
+- `wait-for-message` a terminar com HTTP 204 sem consumo;
+- 20 mensagens SMS entregues em concorrência, sem duplicação de identificadores;
+- 40 inboxes criadas, a 41.ª rejeitada com 507 e healthcheck disponível;
+- payload SMS de 513 bytes rejeitado com 413 e envio seguinte aceite;
+- pedido long-poll abortado pelo cliente sem indisponibilidade do servidor;
+- cliente SMTP a terminar abruptamente, seguido de validação de healthcheck e envio.
+
+Estes testes são funcionais de resiliência com limites reduzidos, **não** benchmarks de throughput. A suite completa passa de 17 para 24 cenários previstos. A execução em Windows, CI e Docker deve ser confirmada antes de marcar como validada.

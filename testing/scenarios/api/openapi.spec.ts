@@ -40,9 +40,8 @@ for (const mode of ["plain", "starttls", "smtps"]) {
   test(`documented SMTP example completes a verified ${mode} round trip`, async () => {
     requireManaged();
     const args = [resolve(root, "examples/smtp-roundtrip.mjs"), mode];
-    if (mode !== "plain") {
-      if (!process.env.VI_TEST_CA_FILE) throw new Error("Managed CA is required");
-      args.push(process.env.VI_TEST_CA_FILE);
+    if (mode !== "plain" && !process.env.VI_TEST_CA_FILE) {
+      throw new Error("Managed CA is required");
     }
     const result = await execute(process.execPath, args, {
       cwd: root, env: { ...process.env, VI_BASE_URL: baseUrl }, timeout: 30000,
@@ -51,6 +50,17 @@ for (const mode of ["plain", "starttls", "smtps"]) {
     expect(result.stdout).toContain("SHA-256 matches");
   });
 }
+
+test("SMTP example rejects untrusted positional CA paths", async () => {
+  requireManaged();
+  await expect(
+    execute(process.execPath, [
+      resolve(root, "examples/smtp-roundtrip.mjs"),
+      "starttls",
+      "../../etc/passwd",
+    ], { cwd: root, timeout: 10000 }),
+  ).rejects.toThrow(/VI_TEST_CA_FILE/);
+});
 
 test("documented SMS example captures and cleans up its own resources", async () => {
   requireManaged();

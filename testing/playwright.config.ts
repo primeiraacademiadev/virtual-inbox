@@ -5,7 +5,7 @@ export default defineConfig({
  fullyParallel:false,workers:process.env.CI?1:2,retries:process.env.CI?1:0,
  reporter:[["list"],["html",{outputFolder:"reports/html",open:"never"}],["junit",{outputFile:"reports/junit.xml"}]],
  outputDir:"reports/artifacts",
- use:{baseURL:profile.baseUrl,ignoreHTTPSErrors:true,trace:"retain-on-failure",screenshot:"only-on-failure",video:"retain-on-failure"},
+ use:{baseURL:process.env.VI_BROWSER_URL||profile.baseUrl,ignoreHTTPSErrors:true,trace:"retain-on-failure",screenshot:"only-on-failure",video:"retain-on-failure"},
  projects:[
   {name:"protocols",testMatch:"scenarios/**/*.spec.ts",use:{}},
   {name:"chromium",testMatch:"playwright/specs/**/*.spec.ts",use:{...devices["Desktop Chrome"]}}

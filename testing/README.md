@@ -1,0 +1,38 @@
+# Virtual Inbox Test Harness
+
+This separate test application exercises the service as an external SMTP/HTTP/browser client.
+
+## Setup
+
+From the repository root:
+
+```sh
+npm ci
+npm ci --prefix web
+npm ci --prefix testing
+npx --prefix testing playwright install chromium
+npm run build
+```
+
+A new `testing/package-lock.json` must be generated and committed alongside changes to testing dependencies.
+
+## Execution
+
+```sh
+npm run test:protocols --prefix testing
+npm run test:e2e --prefix testing
+npm run test:all --prefix testing
+node testing/scripts/run-managed.mjs test:all
+```
+
+The first commands use the selected `VI_TEST_PROFILE` (default: local) against an **already running** server. The managed launcher starts a separate compiled server with isolated data, alternative ports and generated CA, then runs Playwright and removes its temporary files. It must never point destructive tests to a shared instance.
+
+Environment overrides: `VI_BASE_URL`, `VI_SMTP_HOST`, `VI_SMTP_PORT`, `VI_SMTPS_PORT`, `VI_TEST_CA_FILE` and `VI_TLS_SERVERNAME`. SMTP TLS verification uses the local CA if supplied. All SMTP TLS verification tests must run with `VI_TEST_CA_FILE` set; do not disable verification to make them pass.
+
+Reports: `testing/reports/html`, `testing/reports/junit.xml`, `testing/reports/artifacts`. No OTP, private keys or admin tokens should be included in published reports.
+
+## Coverage matrix
+
+SMTP plain, STARTTLS and SMTPS each exercise delivery, MIME binary attachment integrity, and REST wait-for-message. Further suites cover SMS national/E.164 routing, browser navigation and locales, Host/CORS isolation, as well as TLS metadata. Future destructive cases (certificate rotation, listener reload, saturation and expiry) must be marked managed-only and use the guarded test environment.
+
+The tests are independent of `src/core.ts` and use real listeners. `npm test` in the root remains the fast unit/regression suite.

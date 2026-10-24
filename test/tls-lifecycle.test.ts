@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {X509Certificate} from "node:crypto";
@@ -52,5 +52,22 @@ test("automatic certificate reuse survives restart and SAN changes renew the lea
   const updated=new X509Certificate(readFileSync(a.files.cert));
   assert.notEqual(updated.fingerprint256,before);
   assert.match(updated.subjectAltName,/rotation\.example\.test/);
+ }finally{a.clean()}
+});
+
+test("automatic leaf renews when fewer than seven days remain",()=>{
+ const a=fixture();
+ try{
+  const leaf=forge.pki.certificateFromPem(readFileSync(a.files.cert,"utf8"));
+  const issuer=forge.pki.privateKeyFromPem(readFileSync(join(a.dir,"ca-key.pem"),"utf8"));
+  leaf.validity.notBefore=new Date(Date.now()-60_000);
+  leaf.validity.notAfter=new Date(Date.now()+24*60*60*1000);
+  leaf.sign(issuer,forge.md.sha256.create());
+  const nearlyExpired=forge.pki.certificateToPem(leaf);
+  writeFileSync(a.files.cert,nearlyExpired);
+  ensureLocalTls(a.dir,"localhost,127.0.0.1");
+  const renewed=new X509Certificate(readFileSync(a.files.cert));
+  assert.notEqual(renewed.fingerprint256,new X509Certificate(nearlyExpired).fingerprint256);
+  assert.ok(Date.parse(renewed.validTo)>Date.now()+20*86400000);
  }finally{a.clean()}
 });

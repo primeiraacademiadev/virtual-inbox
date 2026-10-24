@@ -6,7 +6,7 @@ import {setTimeout as delay} from "node:timers/promises";
 const root=resolve(import.meta.dirname,"../..");
 const temp=mkdtempSync(join(tmpdir(),"virtual-inbox-e2e-"));
 const ports={PORT:"13000",HTTPS_PORT:"13443",SMTP_PORT:"12525",SMTPS_PORT:"12465",DEMO_PORT:"13001",DEMO_HTTPS_PORT:"13444"};
-const env={...process.env,...ports,HOST:"127.0.0.1",SMTP_HOST:"127.0.0.1",PUBLIC_HOST:"localhost",TLS_MODE:"auto",TLS_CERTIFICATES_DIR:join(temp,"certificates"),TLS_SERVER_NAMES:"localhost,127.0.0.1",NETWORK_SETTINGS_FILE:join(temp,"network.json"),TLS_MANAGED_IDENTITY_FILE:join(temp,"imported.json"),VI_RUN_MODE:"managed",VI_BASE_URL:"http://127.0.0.1:13000",VI_SMTP_HOST:"127.0.0.1",VI_SMTP_PORT:ports.SMTP_PORT,VI_SMTPS_PORT:ports.SMTPS_PORT,VI_TEST_CA_FILE:join(temp,"certificates","ca.pem"),VI_TLS_SERVERNAME:"localhost"};
+const env={...process.env,...ports,ADMIN_TOKEN:"harness-"+Math.random().toString(36).slice(2)+"-"+Date.now(),VI_HTTPS_PORT:ports.HTTPS_PORT,HOST:"127.0.0.1",SMTP_HOST:"127.0.0.1",PUBLIC_HOST:"localhost",TLS_MODE:"auto",TLS_CERTIFICATES_DIR:join(temp,"certificates"),TLS_SERVER_NAMES:"localhost,127.0.0.1",NETWORK_SETTINGS_FILE:join(temp,"network.json"),TLS_MANAGED_IDENTITY_FILE:join(temp,"imported.json"),VI_RUN_MODE:"managed",VI_BASE_URL:"http://127.0.0.1:13000",VI_SMTP_HOST:"127.0.0.1",VI_SMTP_PORT:ports.SMTP_PORT,VI_SMTPS_PORT:ports.SMTPS_PORT,VI_TEST_CA_FILE:join(temp,"certificates","ca.pem"),VI_TLS_SERVERNAME:"localhost"};
 const child=spawn(process.execPath,[join(root,"dist/src/server.js")],{cwd:root,env,stdio:["ignore","pipe","pipe"]});
 child.stdout.on("data",data=>process.stdout.write("[SUT] "+data));
 child.stderr.on("data",data=>process.stderr.write("[SUT] "+data));

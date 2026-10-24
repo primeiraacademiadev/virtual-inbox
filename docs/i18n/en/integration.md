@@ -10,7 +10,7 @@ Create an inbox through `POST /api/mailboxes` or `POST /api/phone-numbers`; an e
 | STARTTLS required | 2525 | `secure:false, requireTLS:true` |
 | SMTPS | 2465 | `secure:true` |
 
-For TLS, supply the trusted CA and a `servername` that appears in the server certificate SAN. Never set `rejectUnauthorized:false`. SMTP authentication is not required. In Compose, the SMTP hostname is the service name; outside Docker it is the published host/port. Add that hostname to certificate SANs when using TLS.
+For TLS, supply the trusted CA and a `servername` that appears in the server certificate SAN. Never set `rejectUnauthorized:false`. SMTP AUTH is optional and accepts dummy credentials. In Compose, the SMTP hostname is the service name; outside Docker it is the published host/port. Add that hostname to certificate SANs when using TLS.
 
 From a source checkout with the server running:
 
@@ -33,3 +33,21 @@ The [demo OpenAPI contract](/api/openapi-demo.json) documents these auxiliary en
 A successful SMTP transaction indicates acceptance; assert capture through REST as well. Unknown/expired destinations go to anomaly inboxes. Metadata responses omit attachment bytes; download `/api/mailboxes/{inboxId}/messages/{messageId}/attachments/{attachmentId}` separately. The SMTP limit covers complete MIME, including encoding overhead. HTTP/SMTP quotas may reject messages instead of retaining them.
 
 CORS affects browser origins, not ordinary Node/SMTP clients. A `421` indicates a rejected Host; a `403` may be Origin or administrative authorization. Configure allowed hosts/origins, not a wildcard exemption. Continue with [Automated tests](sdk.md).
+
+## Communication compatibility and SMTP authentication
+
+Virtual Inbox is a **test-only sandbox**. It advertises SMTP AUTH `PLAIN` and `LOGIN` and accepts any username/password pair. Only the `authUser` name is retained with the captured message; the password is **never stored or logged**. Unauthenticated delivery still works. AUTH here **does not authenticate or authorize** clients: do not expose the SMTP listener to the Internet or an untrusted network. AUTH over plaintext SMTP is deliberately allowed for sandbox-only tests; use STARTTLS/SMTPS for sensitive traffic.
+
+Communication always supplies SMTP credentials. Point it at Virtual Inbox and use dummy credentials; the previous `535 Authentication not implemented` failure is addressed. For Node STARTTLS/SMTPS clients, set `NODE_EXTRA_CA_CERTS=/path/to/vi-ca.pem` **before starting** the Communication process. For Docker, mount the public CA file and use its path inside the container. The connection hostname must match a server certificate SAN. Never set `rejectUnauthorized:false`.
+
+Message list/detail/wait responses now include `headers` (ordered array, duplicates preserved, with lowercase `key`, `originalKey`, and `value`), `envelope: {mailFrom,rcptTo}`, and `authUser` when supplied. Inspect `From` for the display name and `Reply-To`, `Cc`, `X-Message-ID` as received. **Bcc commonly has no MIME header**; verify the envelope `rcptTo` instead. The existing `from` field remains the SMTP envelope sender.
+
+To match HTML and a custom header during wait:
+
+```json
+{"timeoutMs":10000,"match":{"bodyContains":"code-123","header":{"name":"X-Message-ID","valueContains":"trace-abc"}}}
+```
+
+`bodyContains` searches plain-text body **or raw HTML**; `htmlContains` searches only raw HTML. Header names are case-insensitive and `valueContains` is case-sensitive. Filters are combined with AND. HTML-only messages can have an empty `body`.
+
+MIME/attachment size errors return SMTP **552** (permanent), not 450. Exhausted global storage can return **452** (transient). Map retries and DLQ accordingly. Integration tests exercise AUTH PLAIN/LOGIN across SMTP/STARTTLS/SMTPS, MIME metadata and 552.

@@ -9,7 +9,7 @@ import { TLSSocket } from "node:tls";
 import {
   X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID, createHash,
 } from "node:crypto";
-import { SMTPServer } from "smtp-server";
+import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachments.js";
@@ -479,7 +479,7 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
   const responseCode = status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
   return Object.assign(failure, { responseCode });
 }
-const smtpOptions = {
+const smtpOptions: SMTPServerOptions = {
   authOptional: true,
   // This is a disposable test sandbox, not a credentials validator or public SMTP relay.
   // Supporting AUTH on plaintext matches clients that always authenticate.
@@ -489,10 +489,9 @@ const smtpOptions = {
   size: smtpMessageLimit,
   rejectOversized: true,
   ...(tlsIdentity ? { key: tlsIdentity.key, cert: tlsIdentity.cert, minVersion: "TLSv1.2" as const } : {}),
-  onAuth(auth: { username: string }, _session: unknown,
-    callback: (error: Error | null, response?: { user: string }) => void) {
+  onAuth(auth, _session, callback) {
     // Never inspect, persist or log the supplied password.
-    callback(null, { user: auth.username });
+    callback(null, { user: auth.username || "" });
   },
   onRcptTo(_address: unknown, _session: unknown, callback: (error?: Error | null) => void) { callback(); },
   onData(stream: any, session: any, callback: any) {

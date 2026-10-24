@@ -1,33 +1,33 @@
-# Automatiser les tests avec le SDK TypeScript
+# Automatiser les assertions
 
-Le client se trouve dans `sdk/client.ts` et utilise le `fetch` natif de Node.js 24+. Il n'est pas encore publié comme package npm.
+Utiliser des boîtes et marqueurs uniques par test. Éviter les sleeps arbitraires : les lectures et attentes ne consomment pas les messages. Filtrer et nettoyer les ressources propres au test.
 
-## Exemple de vérification d'e-mail
+## Séquence fiable
 
-```ts
-import {VirtualInboxClient} from "../sdk/client.js";
-const api = new VirtualInboxClient("http://127.0.0.1:3000");
-await api.withInbox("email", async inbox => {
-  // Configurez l'application testée pour écrire à inbox.address.
-  // Déclenchez l'action qui provoque l'envoi SMTP.
-  const message = await api.wait(inbox,{subjectContains:"OTP"},15000);
-  if(!message)throw Error("OTP non reçu");
-  if(!message.body.includes("123456"))throw Error("Code incorrect");
-});
+1. POST `/api/mailboxes` avec `{"ttlSeconds":180}` ; conserver `id`/`address`.
+2. Commencer POST `/api/mailboxes/{id}/wait-for-message` avec `{"timeoutMs":10000,"match":{"subjectContains":"marqueur-unique"}}`.
+3. Déclencher l’opération réelle de l’application, pas l’émetteur de démonstration lorsque l’on teste cette application.
+4. Vérifier HTTP `200`, expéditeur, contenu et octets des pièces jointes. `204` n’a pas de corps JSON : délai sans résultat ou suppression de boîte.
+5. DELETE `/api/mailboxes/{id}` dans `finally`.
+
+`after` est une séquence de message exclusive, pas un id SSE. Tous les filtres `from`, `bodyContains`, `subjectContains` doivent correspondre. Respecter `MAX_WAIT_TIMEOUT_MS`. `404` signifie une boîte déjà absente/expirée, pas un résultat vide réussi.
+
+Exemples exécutables : `examples/smtp-roundtrip.mjs` et `examples/sms-roundtrip.mjs`. Le SDK source optionnel est `sdk/client.ts` ; le contrat HTTP généré définit les payloads.
+
+## Observateurs et SSE
+
+GET `/api/observers/events` ouvre le flux ; `session.initialized` annonce `observerId` et les boîtes observées. POST `/api/observers/{observerId}/inboxes` avec `{"inboxId":"UUID"}` s’abonne et retourne les messages existants. Reconnecter via `/api/observers/{observerId}/events` ; `session.restored` annonce la projection serveur. Réenregistrer les abonnements manquants.
+
+Conserver le dernier id de `log` et l’envoyer dans `Last-Event-ID` ou `after`. `log.gap` exige une réconciliation REST ; `log.reset` indique un autre processus. Les notifications contiennent des identifiants, pas les octets des pièces jointes. Sessions et boîtes expirent indépendamment. Les flux incluent aussi des journaux globaux : les abonnements ne sont pas une frontière d’autorisation.
+
+## Tester Virtual Inbox
+
+```sh
+npm ci --prefix testing --ignore-scripts
+node testing/node_modules/@playwright/test/cli.js install chromium
+npm run build
+npm test
+npm run test:all
 ```
 
-`withInbox` supprime toujours la boîte temporaire dans `finally`, même si une assertion échoue. L'attente ne consomme jamais un message.
-
-## Vérification des SMS
-
-Utilisez `withInbox("sms",...)`, configurez l'application testée pour envoyer des SMS via `http://127.0.0.1:3001/sms/messages`, déclenchez l'envoi, puis appelez `wait`.
-
-## Curseurs, délais et isolation
-
-`after` représente une séquence numérique de messages, pas un ID d'événement SSE. `wait` renvoie un message ou `null` en cas de réponse HTTP 204. Préférez des destinataires aléatoires ou uniques pour éviter toute interférence. L'état disparaît au redémarrage.
-
-## Pièces jointes
-
-Les réponses JSON contiennent les métadonnées. Utilisez `api.download(inbox,message.id,attachment.id)` pour obtenir les octets et vérifier des empreintes ou le contenu. Validez les limites SMTP et les quotas pendant les tests d'acceptation.
-
-[Intégration](integration.md) · [API](api.md)
+Le harness géré lance une instance isolée temporaire. Ne pas exécuter rotation TLS ou saturation sur une installation partagée. Les rapports sous `testing/reports/` sont des artefacts. Le smoke test Docker vérifie réellement HTTP/SMTP mais n’est pas toute la suite navigateur contre le conteneur.

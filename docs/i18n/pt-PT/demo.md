@@ -1,15 +1,19 @@
-# Experimentar o Virtual Inbox
+# Experimentar a consola
 
-Percurso guiado para explorar a consola sem criar outra aplicação.
+Segue [Começar](overview.md), abre `http://127.0.0.1:3000` e usa o menu hambúrguer para Workspace, Ligações e TLS, Documentação e API. O seletor de língua altera a apresentação; identificadores e propriedades técnicas não são traduzidos.
 
-## Primeira mensagem de email
+## Adicionar uma inbox
 
-Abre Inboxes, cria uma caixa de email com o botão +, seleciona-a e usa Enviar. O envio de demonstração atravessa a porta 3001/3444 e o SMTP na porta 2525. Podes adicionar anexos.
+Usa o controlo de adicionar no grupo email ou SMS da barra lateral. Campo vazio gera um endereço. Um endereço preenchido procura uma inbox existente; se não existir, confirma a criação. O formato seleciona automaticamente o tipo. A bandeira altera o locale da identidade; a estratégia define o padrão do email; o indicativo controla o prefixo telefónico; SAFE escolhe dados sintéticos. O relógio revela o TTL em segundos. As opções persistem por separador do browser, exceto o identificador.
 
-## Primeiro SMS
+O identificador REST é o UUID devolvido, não o endereço de email nem o telefone. Os controlos de copiar dão feedback. Remover uma subscrição não equivale necessariamente a eliminar a inbox: confirma a ação de eliminação quando pedida.
 
-Cria um número SMS e envia uma mensagem de demonstração. Não existe envio para operadoras reais.
+## Enviar e consultar
 
----
+Seleciona uma inbox e abre o envio. O destinatário é a própria inbox. Email percorre o listener SMTP local; SMS entra pelo endpoint HTTP de demonstração, sem operadora externa. Consulta detalhes e anexos; o download preserva os bytes originais. O estado lida/não lida pertence à consola: consultar mensagens pela API não as consome.
 
-[API de gestão](api.md) · [TLS](tls.md) · [SDK](sdk.md)
+O painel de logs pode ser minimizado, apresentado sob a inbox ou expandido. A barra lateral também colapsa. Documentação contém os procedimentos; API mostra o catálogo gerado. Se uma mensagem não aparecer, consulta os logs e a inbox de anomalias: destinos desconhecidos ou expirados são capturados aí, dentro das quotas.
+
+## Erros esperados
+
+`404`: inbox/sessão inexistente ou expirada. `409`: endereço existente. `413`: mensagem/anexo demasiado grande. `507`: capacidade global esgotada. Elimina dados de teste ou aumenta deliberadamente o limite. Um reload pode recuperar o observador; depois de reiniciar o servidor, cria nova sessão e inbox, porque o estado não é persistido.

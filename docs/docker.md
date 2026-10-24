@@ -1,26 +1,41 @@
-# Docker image and GHCR workflow
+# Docker and Compose
 
-CI checks Node 24 and 26, runs tests, TypeScript builds and npm audits. A separate `container.yml` workflow receives successful **push-to-main** CI completions via `workflow_run`, builds a multi-stage Node 26 image and publishes to `ghcr.io/primeiraacademiadev/virtual-inbox`.
+Docker is optional. Standalone and container deployments use the same Node process and configuration; there is no Kubernetes dependency. Build with `docker build -t virtual-inbox:local .`. The Dockerfile compiles the console and generated OpenAPI, then runs as user `node`.
 
-The image supports **linux/amd64 and linux/arm64**. Tags `main` and `sha-<full commit SHA>` are published; `latest` is deliberately withheld until an accepted release. Publication is **only** triggered by a successful CI run for a push to `main`; there is no manual publish bypass.
-
-## Run locally
+## Local container
 
 ```sh
-docker build -t virtual-inbox:local .
-docker volume create virtual-inbox-data
-docker run --rm --name virtual-inbox \
-  -p 127.0.0.1:3000:3000 -p 127.0.0.1:3443:3443 \
-  -p 127.0.0.1:2525:2525 -p 127.0.0.1:2465:2465 \
-  -p 127.0.0.1:3001:3001 -p 127.0.0.1:3444:3444 \
-  -v virtual-inbox-data:/app/data \
-  virtual-inbox:local
+docker run --rm --name virtual-inbox -p 127.0.0.1:3000:3000 -p 127.0.0.1:3443:3443 -p 127.0.0.1:2525:2525 -p 127.0.0.1:2465:2465 -v virtual-inbox-data:/app/data virtual-inbox:local
 ```
 
-The image installs OpenSSL so the local CA can be generated in `TLS_MODE=auto`. The public CA can be downloaded from `http://127.0.0.1:3000/tls/ca.pem`; trust it explicitly before using HTTPS. All listeners bind inside the container to `0.0.0.0`, but the example publishes **host loopback only**. Do not publish unauthenticated endpoints to public interfaces.
+Open `http://127.0.0.1:3000`; use `/api/health` to confirm readiness. The named volume retains settings and certificates only. Message state is lost when the process restarts. Add 3001/3444 mappings only for clients that use the separate demo listeners; the console uses same-origin `/demo`.
 
-The `/app/data` volume persists **certificates and network settings**, not messages: inboxes, messages and observer sessions remain in memory and vanish on restart. The runtime runs as non-root `node`. The SMTP and HTTPS services reuse one certificate identity.
+## Compose
 
-The Dockerfile currently uses `npm install` because the repository does **not yet contain lockfiles**. Once lockfiles are created and committed, switch Dockerfile and CI to `npm ci` for reproducibility. Build/test success and GHCR publication are not asserted by this document.
+```yaml
+services:
+  virtual-inbox:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3443:3443"
+    environment:
+      PUBLIC_HOST: virtual-inbox
+      TLS_SERVER_NAMES: localhost,127.0.0.1,virtual-inbox
+    volumes:
+      - inbox-data:/app/data
+volumes:
+  inbox-data:
+```
 
-`GITHUB_TOKEN` and `packages: write` are used for publication. Organization GHCR policies may require additional permission/configuration; verify in GitHub Actions before relying on it.
+Other services on the Compose network use `virtual-inbox:2525` for SMTP and `http://virtual-inbox:3000/api` for HTTP. They must not use their own localhost. Add host port mappings for SMTP only when a host application needs them. The service name is accepted by the Host policy, but TLS still requires the name in SAN and trust in the CA.
+
+## Secrets and certificates
+
+Mount PEM files read-only and set `TLS_MODE=external`, `TLS_CERT_FILE`, `TLS_KEY_FILE` for externally issued identities. Keep private keys out of Docker images and build contexts. Copy only the public CA for client trust, e.g. `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`.
+
+Docker does not read a host `.env` into the application automatically; use `--env-file`, `-e` or Compose environment configuration. Persisted network settings can override those environment values, with a startup warning. See [Configuration](configuration.md) and [TLS](i18n/en/tls.md).
+
+## Validation scope
+
+The CI docker-smoke job builds and starts the actual image, checks HTTP health and the SMTP greeting, then removes the container. The managed protocol/browser suite runs a compiled Node process separately; do not describe the smoke test as full container E2E coverage.

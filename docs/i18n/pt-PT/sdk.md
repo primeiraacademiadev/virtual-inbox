@@ -1,33 +1,33 @@
-# Automatizar testes com o SDK TypeScript
+# Automatizar asserções
 
-O cliente está em `sdk/client.ts` e utiliza o `fetch` nativo do Node.js 24+. Ainda não é um pacote npm publicado.
+Usa inboxes e marcadores únicos por execução. Não uses sleeps arbitrários para adivinhar quando chega uma mensagem. Leituras e esperas não consomem mensagens; cada teste deve filtrar e limpar os próprios recursos.
 
-## Teste de envio de email
+## Sequência fiável
 
-```ts
-import {VirtualInboxClient} from "../sdk/client.js";
-const api = new VirtualInboxClient("http://127.0.0.1:3000");
-await api.withInbox("email", async inbox => {
-  // Configura a aplicação em teste para enviar para inbox.address.
-  // Executa a ação na aplicação que provoca o envio SMTP.
-  const message = await api.wait(inbox,{subjectContains:"OTP"},15000);
-  if(!message)throw Error("OTP não recebido");
-  if(!message.body.includes("123456"))throw Error("Código incorreto");
-});
+1. POST `/api/mailboxes` com `{"ttlSeconds":180}`; guarda `id` e `address`.
+2. Inicia POST `/api/mailboxes/{id}/wait-for-message` com `{"timeoutMs":10000,"match":{"subjectContains":"marcador-unico"}}`.
+3. Executa a operação real da aplicação testada, não o emissor da consola quando pretendes testar essa aplicação.
+4. Verifica HTTP `200`, remetente, conteúdo e bytes dos anexos. `204` não tem JSON: significa timeout sem correspondência ou remoção da inbox.
+5. Elimina `/api/mailboxes/{id}` num bloco `finally`.
+
+`after` é um número de sequência de mensagem exclusivo, não o id de evento SSE. Os filtros `from`, `bodyContains` e `subjectContains` combinam-se por AND. O timeout não pode exceder `MAX_WAIT_TIMEOUT_MS`. `404` significa que a inbox já não existia; não o trates como resultado vazio bem-sucedido.
+
+Os exemplos executáveis estão em `examples/smtp-roundtrip.mjs` e `examples/sms-roundtrip.mjs`. O SDK opcional está em `sdk/client.ts`; o contrato HTTP gerado é a referência dos payloads.
+
+## Observadores e SSE
+
+GET `/api/observers/events` abre o stream. O primeiro `session.initialized` anuncia `observerId` e inboxes observadas. POST `/api/observers/{observerId}/inboxes` com `{"inboxId":"UUID"}` regista interesse e devolve mensagens existentes. A religação usa `/api/observers/{observerId}/events`; `session.restored` anuncia a projeção no servidor. Regista de novo o que faltar.
+
+Guarda o último id de `log` e envia-o em `Last-Event-ID` ou `after` para replay. `log.gap` exige reconciliar por REST; `log.reset` indica outra execução. Notificações contêm identificadores, não bytes de anexos. Sessões e inboxes expiram independentemente. Os streams atuais também incluem logs globais: as subscrições não são uma fronteira de autorização.
+
+## Testar o próprio Virtual Inbox
+
+```sh
+npm ci --prefix testing --ignore-scripts
+node testing/node_modules/@playwright/test/cli.js install chromium
+npm run build
+npm test
+npm run test:all
 ```
 
-O `withInbox` elimina a caixa em `finally`, incluindo quando uma asserção falha. A espera não consome mensagens.
-
-## Teste SMS
-
-Usa `withInbox("sms",...)`; configura o fornecedor SMS da aplicação para enviar para `http://127.0.0.1:3001/sms/messages`, desencadeia a ação e verifica com `wait`.
-
-## Cursores, tempos e isolamento
-
-O argumento `after` corresponde a uma sequência numérica de mensagens. Não é um ID SSE. `wait` devolve uma mensagem ou `null` quando a API responde 204. Usa destinatários aleatórios ou exclusivos por teste para evitar interferência. A memória e as sessões desaparecem após reinício.
-
-## Anexos
-
-Os dados JSON incluem metadados dos anexos. Usa `api.download(inbox,message.id,attachment.id)` para obter os bytes e comparar hashes ou conteúdos. Verifica limites SMTP e quotas no ambiente de aceitação.
-
-[Integrar como mock](integration.md) · [API](api.md)
+O harness gerido inicia uma instância isolada temporária. Não executes rotação TLS ou esgotamento de quotas numa instalação partilhada. Relatórios ficam em `testing/reports/` e não são código-fonte. O CI Docker faz um smoke test real de HTTP/SMTP; não equivale à suite completa de browser contra o contentor.

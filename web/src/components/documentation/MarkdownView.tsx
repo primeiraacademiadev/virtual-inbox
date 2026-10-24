@@ -1,18 +1,17 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ReactNode } from "react";
 
 const documents = new Set([
-  "overview",
-  "demo",
-  "integration",
-  "sdk",
-  "api",
-  "tls",
-  "architecture",
-  "development",
+  "overview", "demo", "integration", "sdk", "api", "tls", "architecture", "development",
 ]);
+const downloads: Record<string, string> = {
+  "/api/openapi.json": "virtual-inbox-openapi.json",
+  "/api/openapi-demo.json": "virtual-inbox-demo-openapi.json",
+  "/api/tls/ca.pem": "virtual-inbox-ca.pem",
+  "/api/tls/certificate.pem": "virtual-inbox-server.pem",
+};
 type Props = { markdown: string; onDocument: (id: string) => void };
+
 export function MarkdownView({ markdown, onDocument }: Props) {
   function navigate(href: string) {
     const [raw, anchor] = href.split("#", 2);
@@ -21,12 +20,8 @@ export function MarkdownView({ markdown, onDocument }: Props) {
       return;
     }
     const normalized = raw.replace(/^\.\.\//, "").replace(/^docs\//, "");
-    const id =
-      normalized === "README.md"
-        ? "overview"
-        : normalized.endsWith(".md")
-          ? normalized.slice(0, -3)
-          : normalized;
+    const id = normalized === "README.md" ? "overview"
+      : normalized.endsWith(".md") ? normalized.slice(0, -3) : normalized;
     if (documents.has(id)) {
       onDocument(id);
       return;
@@ -34,8 +29,7 @@ export function MarkdownView({ markdown, onDocument }: Props) {
     if (normalized.startsWith("/") || normalized.includes("..")) return;
     window.open(
       "https://github.com/primeiraacademiadev/virtual-inbox/blob/main/" + encodeURI(normalized),
-      "_blank",
-      "noopener,noreferrer",
+      "_blank", "noopener,noreferrer",
     );
   }
   return (
@@ -44,22 +38,17 @@ export function MarkdownView({ markdown, onDocument }: Props) {
       components={{
         a: ({ href, children }) => {
           if (!href) return <>{children}</>;
-          if (/^https?:\/\//i.test(href))
-            return (
-              <a href={href} target="_blank" rel="noopener noreferrer">
-                {children}
-              </a>
-            );
+          if (Object.hasOwn(downloads, href)) {
+            return <a href={href} download={downloads[href]}>{children}</a>;
+          }
+          if (/^https?:\/\//i.test(href)) {
+            return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+          }
           return (
-            <a
-              href={href}
-              onClick={(event) => {
-                event.preventDefault();
-                navigate(href);
-              }}
-            >
-              {children}
-            </a>
+            <a href={href} onClick={(event) => {
+              event.preventDefault();
+              navigate(href);
+            }}>{children}</a>
           );
         },
       }}

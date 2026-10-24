@@ -1,33 +1,33 @@
-# Automate tests with the TypeScript SDK
+# Automate delivery assertions
 
-The client lives in `sdk/client.ts` and uses Node.js 24+ native `fetch`. It is not published as an npm package yet.
+Use unique inboxes and correlation markers per test. Do not use arbitrary sleeps to guess when a message arrives. REST reads and waits are non-consuming, so independent tests must filter messages and clean up their own resources.
 
-## Email assertion example
+## Reliable sequence
 
-```ts
-import {VirtualInboxClient} from "../sdk/client.js";
-const api = new VirtualInboxClient("http://127.0.0.1:3000");
-await api.withInbox("email", async inbox => {
-  // Configure the application under test to send to inbox.address.
-  // Trigger the action in the application that sends SMTP email.
-  const message = await api.wait(inbox,{subjectContains:"OTP"},15000);
-  if(!message)throw Error("OTP not received");
-  if(!message.body.includes("123456"))throw Error("Wrong code");
-});
+1. POST `/api/mailboxes` with `{"ttlSeconds":180}` and retain `id`/`address`.
+2. Start POST `/api/mailboxes/{id}/wait-for-message` with `{"timeoutMs":10000,"match":{"subjectContains":"run-unique-marker"}}`.
+3. Trigger the real application workflow, not the console sender when testing that application.
+4. Assert HTTP `200`, the expected sender/body and attachment contents. `204` has no JSON body and means no match before timeout or inbox removal.
+5. DELETE `/api/mailboxes/{id}` in `finally`.
+
+`after` is an exclusive message sequence number, not an SSE event id. All supplied filters (`from`, `bodyContains`, `subjectContains`) must match. Wait time must be within `MAX_WAIT_TIMEOUT_MS`; `404` means the inbox was already absent/expired. Do not swallow those errors as successful empty results.
+
+See the executable `examples/smtp-roundtrip.mjs` and `examples/sms-roundtrip.mjs`. The optional source SDK lives in `sdk/client.ts`; the direct HTTP contract remains authoritative.
+
+## Observers and SSE
+
+GET `/api/observers/events` opens a stream and first announces `session.initialized` with `observerId` and watched inboxes. POST `/api/observers/{observerId}/inboxes` with `{"inboxId":"UUID"}` to subscribe; the response includes existing messages. Reconnect through `/api/observers/{observerId}/events`; `session.restored` announces the server projection. Register any missing subscriptions again.
+
+Retain the last `log` event id and send `Last-Event-ID` or query `after` for replay. `log.gap` requires reconciling state by REST; `log.reset` indicates a different process run. Notification payloads contain identifiers, not full attachment bytes. Sessions expire independently of inboxes. Current streams include global log events as well as inbox notifications: subscriptions are not an access-control boundary.
+
+## Test the sandbox itself
+
+```sh
+npm ci --prefix testing --ignore-scripts
+node testing/node_modules/@playwright/test/cli.js install chromium
+npm run build
+npm test
+npm run test:all
 ```
 
-`withInbox` always removes the temporary mailbox in `finally`, even when an assertion fails. Waiting never consumes a message.
-
-## SMS assertions
-
-Use `withInbox("sms",...)`, configure the system under test to send SMS through `http://127.0.0.1:3001/sms/messages`, trigger the action, then call `wait`.
-
-## Cursors, timeouts and isolation
-
-`after` refers to a numeric message sequence, not an SSE event ID. `wait` returns a message or `null` when the API responds 204. Prefer random or test-unique recipients to avoid interference. All messages and observer sessions disappear after restart.
-
-## Attachments
-
-JSON responses include attachment metadata. Use `api.download(inbox,message.id,attachment.id)` to retrieve bytes and assert hashes or file content. Check SMTP size limits and quotas during acceptance testing.
-
-[Integration](integration.md) · [API](api.md)
+The managed harness starts a temporary isolated server. TLS rotation and quota tests must not run against a shared installation. Reports are generated under `testing/reports/`; they are not source files. Docker CI currently adds a real-container HTTP/SMTP smoke test; it is not the full browser suite against Docker.

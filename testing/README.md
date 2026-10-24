@@ -1,40 +1,38 @@
 # Virtual Inbox Test Harness
 
-This separate test application exercises the service as an external SMTP/HTTP/browser client.
+The harness tests the sandbox as an external HTTP, SMTP and browser client. It does not import the Sandbox to simulate delivery. Unit tests in root `test/` are a separate layer.
 
-## Setup
-
-From the repository root:
+## Clean setup
 
 ```sh
-npm ci
-npm ci --prefix web
-npm ci --prefix testing
-npx --prefix testing playwright install chromium
+npm ci --ignore-scripts
+npm ci --prefix web --ignore-scripts
+npm ci --prefix testing --ignore-scripts
+node testing/node_modules/@playwright/test/cli.js install chromium
 npm run build
 ```
 
-The test harness uses the committed `testing/package-lock.json`; CI installs it reproducibly with `npm ci --prefix testing`.
+All three packages have committed lockfiles. Do not replace `npm ci` with an unpinned install in CI. ESLint is not required.
 
-## Execution
+## Managed execution
 
 ```sh
-npm run test:protocols --prefix testing
-npm run test:e2e --prefix testing
-npm run test:all --prefix testing
-node testing/scripts/run-managed.mjs test:all
+npm test
+npm run test:integration
+npm run test:e2e
+npm run test:all
 ```
 
-The first commands use the selected `VI_TEST_PROFILE` (default: local) against an **already running** server. The managed launcher starts a separate compiled server with isolated data, alternative ports and generated CA, then runs Playwright and removes its temporary files. It must never point destructive tests to a shared instance.
+`test:integration` runs network scenarios; `test:e2e` runs Chromium scenarios; `test:all` runs both (not the root unit tests). The launcher starts compiled code on alternate ports with temporary certificates, settings and a test-only admin token. It removes temporary data at shutdown. Shared global-quota and TLS-mutating scenarios run with one worker. Never run destructive tests against shared data.
 
-The API uses HTTP by default in the local profile for Node test clients. For Playwright browser testing over HTTPS, set `VI_BROWSER_URL=https://127.0.0.1:3443`. Provide `VI_TEST_CA_FILE=.../data/certificates/ca.pem` and `VI_TLS_SERVERNAME=localhost` to verify STARTTLS/SMTPS against the generated CA. The test driver refuses to disable TLS verification as a shortcut.
+## Attached execution
 
-Environment overrides: `VI_BASE_URL`, `VI_SMTP_HOST`, `VI_SMTP_PORT`, `VI_SMTPS_PORT`, `VI_TEST_CA_FILE` and `VI_TLS_SERVERNAME`. SMTP TLS verification uses the local CA if supplied. All SMTP TLS verification tests must run with `VI_TEST_CA_FILE` set; do not disable verification to make them pass.
+The testing package can target an existing service using `VI_TEST_PROFILE`, `VI_BASE_URL`, `VI_BROWSER_URL`, `VI_SMTP_HOST`, `VI_SMTP_PORT`, `VI_SMTPS_PORT`, `VI_TEST_CA_FILE` and `VI_TLS_SERVERNAME`. Local API defaults use HTTP. STARTTLS and SMTPS require an explicit CA file and retain certificate verification. Managed-only scenarios intentionally reject attached mode: select only compatible tests rather than setting a false managed flag.
 
-Reports: `testing/reports/html`, `testing/reports/junit.xml`, `testing/reports/artifacts`. No OTP, private keys or admin tokens should be included in published reports.
+## Reports and contracts
 
-## Coverage matrix
+HTML/JUnit/traces are generated under `testing/reports/` and published as CI artifacts. They must not be committed. Screenshots, traces and logs may contain captured test data: use synthetic messages and review artifacts before sharing. Never include tokens or private keys.
 
-SMTP plain, STARTTLS and SMTPS each exercise delivery, MIME binary attachment integrity, and REST wait-for-message. Further suites cover SMS national/E.164 routing, browser navigation and locales, Host/CORS isolation, as well as TLS metadata. Future destructive cases (certificate rotation, listener reload, saturation and expiry) must be marked managed-only and use the guarded test environment.
+`npm run build:openapi` generates management/demo OpenAPI in `docs/` and the console reference. Unit tests check route/handler agreement and schema references; HTTP scenarios check that the running service returns those contracts. Keep behavioral tests alongside metadata checks.
 
-The tests are independent of `src/core.ts` and use real listeners. `npm test` in the root remains the fast unit/regression suite.
+The Docker smoke job is separate from the process-based harness. It validates actual image startup, HTTP health and SMTP greeting; it is not a full browser/SMTP TLS matrix against Docker.

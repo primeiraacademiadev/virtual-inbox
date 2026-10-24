@@ -4,14 +4,14 @@ import { createHash, randomUUID } from "node:crypto";
 import nodemailer from "nodemailer";
 
 const mode = process.argv[2] || "plain";
-if (!["plain", "starttls", "smtps"].includes(mode)) {
-  throw new Error("Usage: node examples/smtp-roundtrip.mjs plain|starttls|smtps [ca-file]");
+if (!["plain", "starttls", "smtps"].includes(mode) || process.argv.length > 3) {
+  throw new Error("Usage: node examples/smtp-roundtrip.mjs plain|starttls|smtps (set VI_TEST_CA_FILE for a custom CA)");
 }
 const baseUrl = process.env.VI_BASE_URL || "http://127.0.0.1:3000";
 const apiUrl = new URL("/api/", baseUrl);
 const controller = new AbortController();
 const tls = mode === "plain" ? undefined : {
-  ca: readFileSync(process.argv[3] || process.env.VI_TEST_CA_FILE || "data/certificates/ca.pem"),
+  ca: readFileSync(process.env.VI_TEST_CA_FILE || "data/certificates/ca.pem"),
   rejectUnauthorized: true,
   servername: process.env.VI_TLS_SERVERNAME || "localhost",
 };

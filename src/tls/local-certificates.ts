@@ -7,10 +7,9 @@ import {
   generateKeyPairSync,
   sign,
   createPrivateKey,
-  createPublicKey,
-  KeyObject,
 } from "node:crypto";
 import { isIP } from "node:net";
+import { ipAddressBytes } from "./ip-address.js";
 
 // Minimal X.509 DER encoder for certificates issued by the local test CA.
 // Uses Node/OpenSSL for RSA key generation and SHA256withRSA signing.
@@ -46,7 +45,6 @@ const oid = (parts: string) => {
   return tlv(6, Buffer.from(out));
 };
 const utf8 = (s: string) => tlv(12, Buffer.from(s));
-const ia5 = (s: string) => tlv(22, Buffer.from(s, "ascii"));
 const octet = (b: Buffer) => tlv(4, b);
 const bitString = (b: Buffer, unused = 0) => tlv(3, Buffer.concat([Buffer.from([unused]), b]));
 const bool = (value: boolean) => tlv(1, Buffer.from([value ? 255 : 0]));
@@ -54,10 +52,7 @@ const nullValue = Buffer.from([5, 0]);
 const alg = seq(oid("1.2.840.113549.1.1.11"), nullValue);
 const name = (cn: string) => seq(set(seq(oid("2.5.4.3"), utf8(cn))));
 const time = (d: Date) => {
-  const v = d
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .replace(/\.\d{3}Z$/, "Z");
+  const v = d.toISOString().replace(/[-:T]/g, "").replace(/\.\d{3}Z$/, "Z");
   return tlv(
     d.getUTCFullYear() < 2050 ? 23 : 24,
     Buffer.from(d.getUTCFullYear() < 2050 ? v.slice(2) : v, "ascii"),
@@ -65,20 +60,7 @@ const time = (d: Date) => {
 };
 const extension = (id: string, inner: Buffer, critical = false) =>
   seq(oid(id), ...(critical ? [bool(true)] : []), octet(inner));
-function ipBytes(value: string): Buffer {
-  if (isIP(value) === 4) return Buffer.from(value.split(".").map(Number));
-  if (isIP(value) !== 6) throw Error("Invalid IP SAN");
-  // Resolve IPv6 compression without introducing a new dependency.
-  const [left, right] = value.toLowerCase().split("::");
-  const a = left ? left.split(":") : [];
-  const b = right ? right.split(":") : [];
-  const segments =
-    right === undefined ? a : [...a, ...Array(8 - a.length - b.length).fill("0"), ...b];
-  if (segments.length !== 8) throw Error("Invalid IPv6 SAN");
-  const bytes = Buffer.alloc(16);
-  segments.forEach((s, i) => bytes.writeUInt16BE(Number.parseInt(s || "0", 16), i * 2));
-  return bytes;
-}
+
 export function issueLocalCertificate(options: {
   commonName: string;
   names?: string[];
@@ -102,60 +84,47 @@ export function issueLocalCertificate(options: {
   serial[0] |= 1;
   const extensions = [
     extension("2.5.29.19", options.ca ? seq(bool(true)) : seq(), true),
-    extension(
-      "2.5.29.15",
-      bitString(Buffer.from([options.ca ? 0x06 : 0xa0]), options.ca ? 1 : 5),
-      true,
-    ),
+    extension("2.5.29.15", bitString(Buffer.from([options.ca ? 0x06 : 0xa0]), options.ca ? 1 : 5), true),
   ];
   if (!options.ca) {
     extensions.push(extension("2.5.29.37", seq(oid("1.3.6.1.5.5.7.3.1"))));
     extensions.push(
       extension(
         "2.5.29.17",
-        seq(
-          ...(options.names || []).map((value) =>
-            isIP(value) ? tlv(0x87, ipBytes(value)) : tlv(0x82, Buffer.from(value, "ascii")),
-          ),
-        ),
+        seq(...(options.names || []).map((value) =>
+          isIP(value) ? tlv(0x87, ipAddressBytes(value)) : tlv(0x82, Buffer.from(value, "ascii")),
+        )),
       ),
     );
   }
   const tbs = seq(
-    tlv(0xa0, integer(Buffer.from([2]))),
-    integer(serial),
-    alg,
-    name(options.issuerName || options.commonName),
-    seq(time(notBefore), time(notAfter)),
-    name(options.commonName),
-    publicKey.export({ format: "der", type: "spki" }) as Buffer,
+    tlv(0xa0, integer(Buffer.from([2]))), integer(serial), alg,
+    name(options.issuerName || options.commonName), seq(time(notBefore), time(notAfter)),
+    name(options.commonName), publicKey.export({ format: "der", type: "spki" }) as Buffer,
     tlv(0xa3, seq(...extensions)),
   );
   const signer = options.issuerKey ? createPrivateKey(options.issuerKey) : privateKey;
   const certDer = seq(tbs, alg, bitString(sign("RSA-SHA256", tbs, signer)));
-  const base64 = certDer
-    .toString("base64")
-    .match(/.{1,64}/g)!
-    .join("\n");
+  const base64 = certDer.toString("base64").match(/.{1,64}/g)!.join("\n");
   return { key, cert: "-----BEGIN CERTIFICATE-----\n" + base64 + "\n-----END CERTIFICATE-----\n" };
 }
+
 function save(path: string, value: string, mode: number) {
   writeFileSync(path, value, { mode });
   chmodSync(path, mode);
 }
+
 /** Generate a local CA and server certificate using Node's crypto primitives. */
 export function ensureLocalTls(directory: string, namesText: string) {
-  const names = namesText
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (!names.length || names.some((x) => !/^[a-zA-Z0-9.:-]+$/.test(x)))
+  const names = namesText.split(",").map((value) => value.trim()).filter(Boolean);
+  if (!names.length || names.some((value) => !/^[a-zA-Z0-9.:-]+$/.test(value))) {
     throw Error("Invalid TLS_SERVER_NAMES");
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const caKey = join(directory, "ca-key.pem"),
-    caCert = join(directory, "ca.pem");
-  const serverKey = join(directory, "server-key.pem"),
-    serverCert = join(directory, "server.pem");
+  const caKey = join(directory, "ca-key.pem");
+  const caCert = join(directory, "ca.pem");
+  const serverKey = join(directory, "server-key.pem");
+  const serverCert = join(directory, "server.pem");
   if (!existsSync(caKey) || !existsSync(caCert)) {
     const ca = issueLocalCertificate({ commonName: "Virtual Inbox Local CA", days: 365, ca: true });
     save(caKey, ca.key, 0o600);
@@ -166,18 +135,13 @@ export function ensureLocalTls(directory: string, namesText: string) {
     .update([...new Set(names)].sort((a, b) => a.localeCompare(b)).join(","))
     .digest("hex");
   const renew =
-    !existsSync(serverKey) ||
-    !existsSync(serverCert) ||
-    !existsSync(fingerprintFile) ||
+    !existsSync(serverKey) || !existsSync(serverCert) || !existsSync(fingerprintFile) ||
     readFileSync(fingerprintFile, "utf8") !== namesHash ||
     Date.parse(new X509Certificate(readFileSync(serverCert)).validTo) < Date.now() + 7 * 86_400_000;
   if (renew) {
     const leaf = issueLocalCertificate({
-      commonName: names[0],
-      names,
-      issuerName: "Virtual Inbox Local CA",
-      issuerKey: readFileSync(caKey),
-      days: 30,
+      commonName: names[0], names, issuerName: "Virtual Inbox Local CA",
+      issuerKey: readFileSync(caKey), days: 30,
     });
     save(serverKey, leaf.key, 0o600);
     save(serverCert, leaf.cert, 0o644);

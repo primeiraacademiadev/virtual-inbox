@@ -19,9 +19,9 @@ async function fingerprint():Promise<string>{
 async function updateSan(){
  const content=JSON.stringify({dns:["localhost","rotation.example.test"],ips:["127.0.0.1"]});
  const port=Number(process.env.VI_HTTPS_PORT||3443);
- return await new Promise<number>((resolve,reject)=>{
+ return await new Promise<{status:number;body:string}>((resolve,reject)=>{
   const req=httpsRequest({hostname:profile.host,port,path:"/api/admin/tls/names",method:"PUT",servername:"localhost",ca:ca(),rejectUnauthorized:true,headers:{"authorization":"Bearer "+process.env.ADMIN_TOKEN,"content-type":"application/json","content-length":Buffer.byteLength(content)}},res=>{
-   res.resume();res.on("end",()=>resolve(res.statusCode||0));
+   const chunks:Buffer[]=[];res.on("data",(chunk:Buffer)=>chunks.push(chunk));res.on("end",()=>resolve({status:res.statusCode||0,body:Buffer.concat(chunks).toString("utf8")}));
   });
   req.on("error",reject);req.end(content);
  });
@@ -31,7 +31,7 @@ test("managed TLS SAN rotation replaces the live HTTPS certificate without resta
  if(!process.env.ADMIN_TOKEN||!process.env.VI_TEST_CA_FILE)throw Error("Managed identity/CA required");
  const before=await fingerprint();
  const status=await updateSan();
- expect(status).toBe(200);
+ expect(status.status,status.body).toBe(200);
  const after=await fingerprint();
  expect(after).not.toBe(before);
 });

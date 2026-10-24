@@ -31,7 +31,7 @@ function ipBytes(value:string):Buffer{
  const segments=right===undefined?a:[...a,...Array(8-a.length-b.length).fill("0"),...b];
  if(segments.length!==8)throw Error("Invalid IPv6 SAN");
  const bytes=Buffer.alloc(16);
- segments.forEach((s,i)=>bytes.writeUInt16BE(parseInt(s||"0",16),i*2));
+ segments.forEach((s,i)=>bytes.writeUInt16BE(Number.parseInt(s||"0",16),i*2));
  return bytes;
 }
 export function issueLocalCertificate(options:{commonName:string;names?:string[];issuerName?:string;issuerKey?:string|Buffer;days?:number;notBefore?:Date;notAfter?:Date;ca?:boolean}){

@@ -67,7 +67,14 @@ async function starttlsFingerprint():Promise<string>{
   const secured=tlsConnect({socket,servername:"localhost",ca:ca(),rejectUnauthorized:true});
   secured.setTimeout(7000,()=>secured.destroy(new Error("STARTTLS handshake timeout")));
   return await new Promise<string>((resolve,reject)=>{
-   secured.once("secureConnect",()=>{const fp=secured.getPeerCertificate().fingerprint256;secured.destroy();resolve(fp)});
+   secured.once("secureConnect",async()=>{
+    const fp=secured.getPeerCertificate().fingerprint256;
+    try{
+     const hello=smtpReply(secured,250);secured.write("EHLO test-harness.local\r\n");await hello;
+     const quit=smtpReply(secured,221);secured.write("QUIT\r\n");await quit;
+     secured.end();resolve(fp);
+    }catch(error){secured.destroy();reject(error)}
+   });
    secured.once("error",reject);
   });
  }finally{socket.destroy()}

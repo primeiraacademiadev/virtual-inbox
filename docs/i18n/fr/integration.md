@@ -33,3 +33,21 @@ Le [contrat OpenAPI demo](/api/openapi-demo.json) documente ces opérations sép
 Vérifier la capture REST après l’acceptation SMTP. Les destinataires inconnus/expirés vont dans les anomalies. Le JSON contient seulement les métadonnées des pièces jointes ; télécharger les octets via `/api/mailboxes/{inboxId}/messages/{messageId}/attachments/{attachmentId}`. La limite SMTP inclut l’encodage et tout le MIME. Les quotas peuvent rejeter une livraison.
 
 CORS concerne le navigateur, pas un client Node/SMTP ordinaire. `421` indique Host refusé ; `403` peut indiquer Origin ou administration. Configurer précisément les hosts/origines autorisés. Continuer avec [Tests automatiques](sdk.md).
+
+## Compatibilité Communication et authentification SMTP
+
+Virtual Inbox est un **bac à sable de test** : il annonce SMTP AUTH `PLAIN` et `LOGIN` et accepte tous les identifiants/mots de passe. Seul `authUser` est conservé avec le message ; **jamais le mot de passe**. Les envois sans authentification restent possibles. Ceci **n'est pas un contrôle d'accès** : ne pas exposer SMTP à Internet ni à un réseau non fiable. AUTH en clair est autorisé uniquement pour les tests ; préférer STARTTLS/SMTPS.
+
+Communication nécessite toujours des identifiants SMTP. Utiliser des valeurs fictives et cibler Virtual Inbox : l'erreur `535 Authentication not implemented` est corrigée. Pour les clients Node STARTTLS/SMTPS, définir `NODE_EXTRA_CA_CERTS=/chemin/vi-ca.pem` **avant le démarrage** du processus Communication. Sous Docker, monter l'AC publique et utiliser son chemin dans le conteneur. Le nom d'hôte doit apparaître dans les SAN du certificat. Ne jamais utiliser `rejectUnauthorized:false`.
+
+Les réponses de liste, détail et attente des messages incluent `headers` (ordre et doublons préservés, `key` en minuscules, `originalKey`, `value`), `envelope: {mailFrom,rcptTo}` et `authUser` le cas échéant. Les en-têtes `From`, `Reply-To`, `Cc`, `X-Message-ID` sont accessibles quand ils existent. **Bcc est souvent absent du MIME** : vérifier `envelope.rcptTo`. L'ancien champ `from` reste l'expéditeur SMTP de l'enveloppe.
+
+Attente avec filtre HTML et en-tête :
+
+```json
+{"timeoutMs":10000,"match":{"bodyContains":"code-123","header":{"name":"X-Message-ID","valueContains":"trace-abc"}}}
+```
+
+`bodyContains` cherche dans le texte **ou le HTML brut** ; `htmlContains` uniquement dans le HTML. Le nom d'en-tête ignore la casse, `valueContains` respecte la casse. Les filtres se combinent par AND. Un message HTML seul peut avoir un `body` vide.
+
+Les dépassements MIME/pièces jointes retournent SMTP **552** (permanent), pas 450. Une capacité globale épuisée peut retourner **452** (transitoire). Adapter les retries et la DLQ. Les tests couvrent AUTH PLAIN/LOGIN, SMTP/STARTTLS/SMTPS, métadonnées et 552.

@@ -72,3 +72,7 @@ Cenários incluídos:
 - cliente SMTP a terminar abruptamente, seguido de validação de healthcheck e envio.
 
 Estes testes são funcionais de resiliência com limites reduzidos, **não** benchmarks de throughput. A suite completa passa de 17 para 24 cenários previstos. A execução em Windows, CI e Docker deve ser confirmada antes de marcar como validada.
+
+## Validação da proteção de main — 24-10-2026
+
+Esta alteração documental é usada para verificar que os Pull Requests para `main` ficam sujeitos às gates CI, E2E, Docker e SonarCloud definidas no ruleset `Protect main`. O merge só deverá ser efetuado depois de todas as verificações obrigatórias passarem.

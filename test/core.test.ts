@@ -37,3 +37,32 @@ test("wait matches incoming message without consuming", async () => {
   assert.equal(msg?.body, "123456");
   assert.equal(s.listMessages(r.id).length, 1);
 });
+
+test("wait finds an HTML-only email by body and by an exact MIME header", async () => {
+  const sandbox = new Sandbox();
+  const inbox = sandbox.create("email");
+  sandbox.deliver(
+    "email", "sender@example.test", inbox.address, "", "HTML",
+    "<p>One-time <b>code-48192</b></p>", undefined, [],
+    {
+      headers: [
+        { key: "x-message-id", originalKey: "X-Message-ID", value: "trace-unique-42" },
+        { key: "x-message-id", originalKey: "X-Message-ID", value: "trace-alternate-84" },
+      ],
+      envelope: { mailFrom: "sender@example.test", rcptTo: [inbox.address, "hidden@example.test"] },
+      authUser: "communication",
+    },
+  );
+  const byBody = await sandbox.wait(inbox.id, {
+    timeoutMs: 100, match: { bodyContains: "code-48192" },
+  });
+  assert.equal(byBody?.body, "");
+  assert.match(byBody?.html || "", /code-48192/);
+  const byHeader = await sandbox.wait(inbox.id, {
+    timeoutMs: 100,
+    match: { header: { name: "X-MESSAGE-ID", valueContains: "alternate-84" }, htmlContains: "One-time" },
+  });
+  assert.equal(byHeader?.id, byBody?.id);
+  assert.equal(byHeader?.authUser, "communication");
+  assert.deepEqual(byHeader?.envelope?.rcptTo, [inbox.address, "hidden@example.test"]);
+});

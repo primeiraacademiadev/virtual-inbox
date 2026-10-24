@@ -51,6 +51,7 @@ test("automatic certificate reuse survives restart and SAN changes renew the lea
   ensureLocalTls(a.dir,"localhost,127.0.0.1,rotation.example.test");
   const updated=new X509Certificate(readFileSync(a.files.cert));
   assert.notEqual(updated.fingerprint256,before);
+  assert.ok(updated.subjectAltName,"Renewed certificate must include subjectAltName");
   assert.match(updated.subjectAltName,/rotation\.example\.test/);
  }finally{a.clean()}
 });

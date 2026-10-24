@@ -154,3 +154,6 @@ web/public/wiki/
 
 # Runtime-managed host and port settings
 data/network-settings.json
+
+# Playwright-generated reports and traces
+testing/reports/

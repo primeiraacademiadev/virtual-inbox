@@ -4,7 +4,7 @@ import {profile} from "../framework/environment";
 export type Transport="plain"|"starttls"|"smtps";
 export type MailInput={to:string;subject:string;text:string;attachments?:Array<{filename:string;content:Buffer;contentType?:string}>};
 export class SmtpDriver{
- private tls(){return process.env.VI_TEST_CA_FILE?{ca:readFileSync(process.env.VI_TEST_CA_FILE),rejectUnauthorized:true,servername:process.env.VI_TLS_SERVERNAME||"localhost"}:{rejectUnauthorized:false};}
+ private tls(){return process.env.VI_TEST_CA_FILE?{ca:readFileSync(process.env.VI_TEST_CA_FILE),rejectUnauthorized:true,servername:process.env.VI_TLS_SERVERNAME||"localhost"}:(()=>{throw new Error("VI_TEST_CA_FILE is required for verified STARTTLS/SMTPS tests")})();}
  async send(mode:Transport,input:MailInput){
   const secure=mode==="smtps";
   const transport=nodemailer.createTransport({

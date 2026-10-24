@@ -27,6 +27,13 @@ export type Attachment = {
   size: number;
   content: Buffer;
 };
+export type MailHeader = { key: string; originalKey: string; value: string };
+export type MailEnvelope = { mailFrom: string; rcptTo: string[] };
+export type MailMetadata = {
+  headers?: MailHeader[];
+  envelope?: MailEnvelope;
+  authUser?: string;
+};
 export type Message = {
   id: string;
   sequence: number;
@@ -38,6 +45,12 @@ export type Message = {
   body: string;
   html?: string;
   rawMime?: string;
+  /** Original MIME headers, in arrival order; duplicated header names are retained. */
+  headers?: MailHeader[];
+  /** SMTP MAIL FROM and all RCPT TO recipients, including envelope-only Bcc recipients. */
+  envelope?: MailEnvelope;
+  /** Accepted SMTP AUTH username, never the password. */
+  authUser?: string;
   attachments?: Attachment[];
   receivedAt: string;
   captureReason?: string;
@@ -212,6 +225,7 @@ export class Sandbox {
   deliver(
     channel: Channel, from: string, to: string, body: string,
     subject?: string, html?: string, rawMime?: string, attachments: Attachment[] = [],
+    metadata: MailMetadata = {},
   ) {
     if (!from || !to || typeof body !== "string") throw new Fault(400, "From, to and body required");
     if (body.length > config.bodyChars || (rawMime && Buffer.from(rawMime, "base64").length > config.smtpBytes))
@@ -240,6 +254,7 @@ export class Sandbox {
     const message: Message = {
       id: randomUUID(), sequence: ++this.msgSeq, channel, destinationId, from,
       originalRecipient: to, body, subject, html, rawMime, attachments,
+      headers: metadata.headers, envelope: metadata.envelope, authUser: metadata.authUser,
       receivedAt: new Date().toISOString(), captureReason: reason,
     };
     this.messages.set(message.id, message);
@@ -309,7 +324,13 @@ export class Sandbox {
     { after = 0, timeoutMs = 10000, match = {} }: {
       after?: number;
       timeoutMs?: number;
-      match?: { from?: string; bodyContains?: string; subjectContains?: string };
+      match?: {
+        from?: string;
+        bodyContains?: string;
+        htmlContains?: string;
+        subjectContains?: string;
+        header?: { name: string; valueContains: string };
+      };
     },
     signal?: AbortSignal,
   ): Promise<Message | null> {
@@ -317,8 +338,14 @@ export class Sandbox {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > config.waitMs) throw new Fault(400, "Invalid timeout");
     const fits = (message: Message) => message.destinationId === id && message.sequence > after &&
       (!match.from || message.from === match.from) &&
-      (!match.bodyContains || message.body.includes(match.bodyContains)) &&
-      (!match.subjectContains || (message.subject || "").includes(match.subjectContains));
+      (!match.bodyContains ||
+        message.body.includes(match.bodyContains) ||
+        (message.html || "").includes(match.bodyContains)) &&
+      (!match.htmlContains || (message.html || "").includes(match.htmlContains)) &&
+      (!match.subjectContains || (message.subject || "").includes(match.subjectContains)) &&
+      (!match.header || (message.headers || []).some((header) =>
+        header.key === match.header!.name.toLowerCase() &&
+        header.value.includes(match.header!.valueContains)));
     const found = this.listMessages(id).find(fits);
     if (found) return Promise.resolve(found);
     return new Promise((resolve) => {

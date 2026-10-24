@@ -265,6 +265,11 @@ const smtpOptions={
 }};
 const smtp=new SMTPServer(smtpOptions);
 const smtps=tlsIdentity?new SMTPServer({...smtpOptions,secure:true}):null;
+// SMTP clients can terminate during STARTTLS; smtp-server emits those
+// transport errors on the server EventEmitter. Never crash the process.
+for(const listener of [smtp,smtps])listener?.on("error",(error:Error)=>{
+ console.warn("SMTP transport error:",error.message);
+});
 if(tlsIdentity){
  certificateManager.subscribe(next=>{
   https?.setSecureContext(next);

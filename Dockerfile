@@ -30,7 +30,9 @@ ENV NODE_ENV=production \
     TLS_MANAGED_IDENTITY_FILE=/app/data/certificates/imported-identity.json \
     NETWORK_SETTINGS_FILE=/app/data/network-settings.json
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app/data && chown node:node /app/data
 COPY package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund --ignore-scripts && npm cache clean --force

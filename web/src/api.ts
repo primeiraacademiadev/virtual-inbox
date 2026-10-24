@@ -15,10 +15,10 @@ export function classify(input:string):"email"|"sms"|null{
   const dot=domain.indexOf(".");
   if(dot>0&&dot<domain.length-1&&!Array.from(input).some(c=>c==="@"?false:c===" "||c==="\t"||c==="\r"||c==="\n"||c==="\f"||c==="\v"))return "email";
  }
- const digits=input.startsWith("+")?input.slice(1):s;
- if(digitinput.length>0&&Array.from(digits).every(c=>c>="0"&&c<="9")){
-  if(input.startsWith("+"))return digits[0]!=="0"&&digitinput.length>=7&&digitinput.length<=15?"sms":null;
-  return digitinput.length>=9&&digitinput.length<=15?"sms":null;
+ const digits=input.startsWith("+")?input.slice(1):input;
+ if(digits.length>0&&Array.from(digits).every(c=>c>="0"&&c<="9")){
+  if(input.startsWith("+"))return digits[0]!=="0"&&digits.length>=7&&digits.length<=15?"sms":null;
+  return digits.length>=9&&digits.length<=15?"sms":null;
  }
  return null;
 }

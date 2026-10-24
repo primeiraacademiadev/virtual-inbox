@@ -60,7 +60,7 @@ O handler SMTP reconhece a desconexão específica `SocketError: Socket closed w
 
 ## Resiliência e concorrência — extensão de 24-10-2026
 
-Os testes `testing/scenarios/resilience/` exigem `VI_RUN_MODE=managed` e usam o processo isolado do runner. Os limites desse processo são intencionalmente reduzidos: 40 inboxes, 80 mensagens, 40 observadores, SMS até 512 bytes, 3 anexos, espera até 5000 ms.
+Os testes `testing/scenarios/resilience/` exigem `VI_RUN_MODE=managed` e usam o processo isolado do runner. Os limites desse processo são intencionalmente reduzidos: 40 inboxes, 80 mensagens, 40 observadores, SMS até 512 bytes, 3 anexos, espera até 12000 ms.
 
 Cenários incluídos:
 - inbox com TTL de um segundo e posterior captura na inbox de anomalias;

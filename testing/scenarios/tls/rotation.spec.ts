@@ -106,3 +106,25 @@ test("managed SAN rotation updates HTTPS, SMTPS and STARTTLS without restart",as
   }
  }finally{await api.dispose()}
 });
+
+test("invalid certificate upload preserves active TLS identity on all listeners",async()=>{
+ requireManaged();
+ if(!process.env.ADMIN_TOKEN||!process.env.VI_TEST_CA_FILE)throw Error("Managed identity/CA required");
+ const before=await Promise.all([fingerprint(),smtpsFingerprint(),starttlsFingerprint()]);
+ const content=JSON.stringify({cert:"not-a-certificate",key:"not-a-key"});
+ const response=await new Promise<{status:number;body:string}>((resolve,reject)=>{
+  const request=httpsRequest({
+   hostname:profile.host,port:Number(process.env.VI_HTTPS_PORT||3443),
+   path:"/api/admin/tls",method:"PUT",servername:"localhost",ca:ca(),rejectUnauthorized:true,
+   headers:{"authorization":"Bearer "+process.env.ADMIN_TOKEN,"content-type":"application/json","content-length":Buffer.byteLength(content)}
+  },res=>{
+   const chunks:Buffer[]=[];
+   res.on("data",(chunk:Buffer)=>chunks.push(chunk));
+   res.on("end",()=>resolve({status:res.statusCode||0,body:Buffer.concat(chunks).toString("utf8")}));
+  });
+  request.once("error",reject);request.end(content);
+ });
+ expect(response.status,response.body).toBe(400);
+ const after=await Promise.all([fingerprint(),smtpsFingerprint(),starttlsFingerprint()]);
+ expect(after).toEqual(before);
+});

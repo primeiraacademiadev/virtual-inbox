@@ -1,6 +1,8 @@
 name: Virtual Inbox E2E
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - 'src/**'

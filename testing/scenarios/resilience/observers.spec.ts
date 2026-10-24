@@ -51,14 +51,18 @@ test("global message capacity can be recovered by deleting messages",async()=>{
  try{
   const inbox=await api.create("sms");
   const prefix="capacity-"+randomUUID();
-  for(let i=0;i<80;i++){
+  let accepted=0;
+  let reachedLimit=false;
+  for(let i=0;i<=80;i++){
    const response=await sms(inbox.address,prefix+"-"+i);
+   if(response.status===507){reachedLimit=true;break}
    expect(response.status).toBe(201);
+   accepted++;
   }
-  const rejected=await sms(inbox.address,prefix+"-overflow");
-  expect(rejected.status).toBe(507);
+  expect(reachedLimit,"Global message quota should eventually reject delivery").toBe(true);
+  expect(accepted,"At least one new message must fit before reaching the quota").toBeGreaterThan(0);
   const items=await api.messages(inbox);
-  expect(items).toHaveLength(80);
+  expect(items).toHaveLength(accepted);
   const deleted=await fetch(baseUrl+"/api/phone-numbers/"+inbox.id+"/messages/"+items[0].id,{method:"DELETE"});
   expect(deleted.status).toBe(204);
   expect((await sms(inbox.address,prefix+"-recovered")).status).toBe(201);

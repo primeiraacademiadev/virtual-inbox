@@ -33,6 +33,7 @@ export type MailMetadata = {
   headers?: MailHeader[];
   envelope?: MailEnvelope;
   authUser?: string;
+  smtpSessionId?: string;
 };
 export type Message = {
   id: string;
@@ -51,6 +52,7 @@ export type Message = {
   envelope?: MailEnvelope;
   /** Accepted SMTP AUTH username, never the password. */
   authUser?: string;
+  smtpSessionId?: string;
   attachments?: Attachment[];
   receivedAt: string;
   captureReason?: string;
@@ -255,6 +257,7 @@ export class Sandbox {
       id: randomUUID(), sequence: ++this.msgSeq, channel, destinationId, from,
       originalRecipient: to, body, subject, html, rawMime, attachments,
       headers: metadata.headers, envelope: metadata.envelope, authUser: metadata.authUser,
+      smtpSessionId: metadata.smtpSessionId,
       receivedAt: new Date().toISOString(), captureReason: reason,
     };
     this.messages.set(message.id, message);

@@ -10,6 +10,7 @@ import {
   X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID, createHash,
 } from "node:crypto";
 import { SMTPServer, type SMTPServerOptions } from "smtp-server";
+import { SmtpSessionStore } from "./smtp-sessions.js";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachments.js";
@@ -25,6 +26,8 @@ import {
 } from "./tls/server-names.js";
 
 export const sandbox = new Sandbox(config.logs);
+const smtpSessions = new SmtpSessionStore();
+const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",
 );
@@ -260,6 +263,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "smtpClients":
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, smtpSessions.listClients());
+      case "smtpSessions":
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, smtpSessions.listSessions(url.searchParams.get("clientId") || undefined));
+      case "smtpVerify": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        return json(res, 200, await smtpSessions.verifyCredentials(params.sessionId, input.username, input.password, input.attemptId));
+      }
       case "health":
         return json(res, 200, { status: "ok", runId: sandbox.runId });
       case "openapi":
@@ -481,6 +495,20 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
 }
 const smtpOptions: SMTPServerOptions = {
   authOptional: true,
+  onConnect(session, callback) {
+    try {
+      const id = smtpSessions.connect(session.remoteAddress || "unknown", !!session.secure);
+      smtpSessionIds.set(session, id);
+      sandbox.log("smtp.session.connected", undefined, undefined, { sessionId: id });
+      callback();
+    } catch {
+      callback(Object.assign(new Error("SMTP session capacity reached"), { responseCode: 421 }));
+    }
+  },
+  onClose(session) {
+    const id = smtpSessionIds.get(session);
+    if (id) { smtpSessions.disconnect(id); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
+  },
   // This is a disposable test sandbox, not a credentials validator or public SMTP relay.
   // Supporting AUTH on plaintext matches clients that always authenticate.
   allowInsecureAuth: true,
@@ -489,9 +517,13 @@ const smtpOptions: SMTPServerOptions = {
   size: smtpMessageLimit,
   rejectOversized: true,
   ...(tlsIdentity ? { key: tlsIdentity.key, cert: tlsIdentity.cert, minVersion: "TLSv1.2" as const } : {}),
-  onAuth(auth, _session, callback) {
-    // Never inspect, persist or log the supplied password.
-    callback(null, { user: auth.username || "" });
+  onAuth(auth, session, callback) {
+    const id = smtpSessionIds.get(session);
+    if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
+    void smtpSessions.authenticate(id, auth.username || "", auth.password || "", auth.method).then(() => {
+      sandbox.log("smtp.session.authenticated", undefined, undefined, { sessionId: id });
+      callback(null, { user: auth.username || "" });
+    }).catch(() => callback(Object.assign(new Error("Authentication temporarily unavailable"), { responseCode: 454 })));
   },
   onRcptTo(_address: unknown, _session: unknown, callback: (error?: Error | null) => void) { callback(); },
   onData(stream: any, session: any, callback: any) {
@@ -524,13 +556,21 @@ const smtpOptions: SMTPServerOptions = {
           rcptTo: session.envelope.rcptTo.map((recipient: { address: string }) => recipient.address),
         },
         authUser: typeof session.user === "string" ? session.user : undefined,
+        smtpSessionId: smtpSessionIds.get(session),
       };
       for (const recipient of session.envelope.rcptTo) {
-        sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
+        const message = sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
           parsed.html || undefined, raw.toString("base64"), attachments, metadata);
+        if (metadata.smtpSessionId) smtpSessions.recordMessage(metadata.smtpSessionId, message.id);
       }
       callback(null, "Accepted");
-    })().catch((error) => callback(smtpFailure(error)));
+    })().catch((error) => {
+      const failure = smtpFailure(error);
+      const id = smtpSessionIds.get(session);
+      if (id) { smtpSessions.recordError(id, failure.responseCode, error instanceof Fault ? error.code || "SMTP_FAILURE" : "SMTP_FAILURE");
+        sandbox.log("smtp.session.error", undefined, undefined, { sessionId: id, responseCode: failure.responseCode }); }
+      callback(failure);
+    });
   },
 };
 const smtp = new SMTPServer(smtpOptions);
@@ -575,7 +615,7 @@ if (tlsMode === "external" && tlsCertPath && tlsKeyPath) {
   }, 10000);
   externalRefresh.unref();
 }
-const clean = setInterval(() => sandbox.cleanup(), 1000);
+const clean = setInterval(() => { sandbox.cleanup(); smtpSessions.cleanup(); }, 1000);
 clean.unref();
 http.listen(port, apiHost, () => console.log("REST listening on " + port));
 const https = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res); }) : null;

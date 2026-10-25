@@ -38,6 +38,9 @@ export type Message = {
   body: string;
   html?: string;
   rawMime?: string;
+  headers?: Record<string, string[]>;
+  envelope?: { mailFrom: string; rcptTo: string[] };
+  smtpSessionId?: string;
   attachments?: Attachment[];
   receivedAt: string;
   captureReason?: string;
@@ -212,6 +215,7 @@ export class Sandbox {
   deliver(
     channel: Channel, from: string, to: string, body: string,
     subject?: string, html?: string, rawMime?: string, attachments: Attachment[] = [],
+    smtp?: { headers?: Record<string, string[]>; envelope?: { mailFrom: string; rcptTo: string[] }; sessionId?: string },
   ) {
     if (!from || !to || typeof body !== "string") throw new Fault(400, "From, to and body required");
     if (body.length > config.bodyChars || (rawMime && Buffer.from(rawMime, "base64").length > config.smtpBytes))
@@ -240,6 +244,7 @@ export class Sandbox {
     const message: Message = {
       id: randomUUID(), sequence: ++this.msgSeq, channel, destinationId, from,
       originalRecipient: to, body, subject, html, rawMime, attachments,
+      headers: smtp?.headers, envelope: smtp?.envelope, smtpSessionId: smtp?.sessionId,
       receivedAt: new Date().toISOString(), captureReason: reason,
     };
     this.messages.set(message.id, message);
@@ -309,15 +314,21 @@ export class Sandbox {
     { after = 0, timeoutMs = 10000, match = {} }: {
       after?: number;
       timeoutMs?: number;
-      match?: { from?: string; bodyContains?: string; subjectContains?: string };
+      match?: { from?: string; bodyContains?: string; subjectContains?: string; htmlContains?: string; header?: { name: string; contains: string } };
     },
     signal?: AbortSignal,
   ): Promise<Message | null> {
     this.resource(id);
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > config.waitMs) throw new Fault(400, "Invalid timeout");
+    if (match.header && (typeof match.header.name !== "string" || !/^[a-z0-9-]+$/i.test(match.header.name) || typeof match.header.contains !== "string"))
+      throw new Fault(400, "Invalid header matcher", "INVALID_REQUEST");
     const fits = (message: Message) => message.destinationId === id && message.sequence > after &&
       (!match.from || message.from === match.from) &&
-      (!match.bodyContains || message.body.includes(match.bodyContains)) &&
+      (!match.bodyContains || message.body.includes(match.bodyContains) ||
+         (message.html || "").replace(/<[^>]*>/g, " ").includes(match.bodyContains)) &&
+       (!match.htmlContains || (message.html || "").includes(match.htmlContains)) &&
+       (!match.header || Object.entries(message.headers || {}).some(([name, values]) =>
+         name.toLowerCase() === match.header!.name.toLowerCase() && values.some((value) => value.includes(match.header!.contains)))) &&
       (!match.subjectContains || (message.subject || "").includes(match.subjectContains));
     const found = this.listMessages(id).find(fits);
     if (found) return Promise.resolve(found);

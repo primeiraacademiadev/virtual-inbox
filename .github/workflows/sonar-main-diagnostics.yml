@@ -44,4 +44,29 @@ jobs:
                   print(json.dumps({"metric":metric.get("metric"),"value":metric.get("value"),"periods":metric.get("periods")},sort_keys=True))
           except Exception as error:
               print("Detailed measures request unavailable:",type(error).__name__)
+          try:
+              period = get("/api/new_code_periods/show", {"project": key, "branch": "main"})
+              print("MAIN NEW CODE PERIOD:", json.dumps(period, sort_keys=True))
+          except Exception as error:
+              print("New code period request unavailable:",type(error).__name__, str(error)[:150])
+          try:
+              metrics = "new_coverage,new_duplicated_lines_density,new_lines_to_cover,new_uncovered_lines,new_lines,new_duplicated_lines"
+              data = get("/api/measures/component_tree", {"component": key, "branch": "main", "qualifiers": "FIL", "metricKeys": metrics, "ps": "500"})
+              ranked = []
+              for component in data.get("components", []):
+                  values = {}
+                  for measure in component.get("measures", []):
+                      raw = measure.get("value") or next((p.get("value") for p in measure.get("periods", []) if p.get("index")==1), "0")
+                      try: values[measure["metric"]] = float(raw)
+                      except ValueError: pass
+                  if values.get("new_lines", 0):
+                      ranked.append((component.get("path", component.get("key")),values))
+              print("NEW CODE CONTRIBUTORS (by uncovered lines):")
+              for path, values in sorted(ranked,key=lambda x: x[1].get("new_uncovered_lines",0),reverse=True)[:30]:
+                  print(json.dumps({"path":path,"metrics":values},sort_keys=True))
+              print("NEW CODE DUPLICATION CONTRIBUTORS:")
+              for path, values in sorted(ranked,key=lambda x: x[1].get("new_duplicated_lines",0),reverse=True)[:25]:
+                  print(json.dumps({"path":path,"metrics":values},sort_keys=True))
+          except Exception as error:
+              print("Component tree request unavailable:",type(error).__name__,str(error)[:150])
           PY

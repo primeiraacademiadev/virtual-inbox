@@ -46,6 +46,7 @@ test("sidebar removal preserves unread badge and respects cancellation", async (
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem("virtual-inbox-observer"))).toBeTruthy();
   await page.locator(".sidebar .inboxGroup").first().locator(".groupHead button").last().click();
   await page.locator(".modal .actions button").last().click();
+  await expect(page.locator(".panelTitle")).toContainText("@");
   const address = await page.locator(".panelTitle").innerText();
   const row = page.locator(".sidebarInboxRow").filter({ hasText: address });
   await expect(row).toBeVisible();

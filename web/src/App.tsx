@@ -14,8 +14,8 @@ import { LanguageSelector } from "./i18n/LanguageSelector";
 import { CopyButton } from "./components/clipboard/CopyButton";
 import { CopyMenu } from "./components/clipboard/CopyMenu";
 import { useDismissable } from "./hooks/useDismissable";
-import { generateDemoSample } from "./demo-samples";
-import { removeInboxRecord } from "./inbox-removal";
+import { generateDemoSample, applyDemoSample, beginDemoCompose, refreshDemoOnLocaleChange } from "./demo-samples";
+import { removeInboxAndReconcile } from "./inbox-removal";
 import { DocumentSearch, type SearchDestination } from "./search/DocumentSearch";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -166,10 +166,7 @@ export default function App() {
   const [subject, setSubject] = useState(initialDemoSample.current.subject);
   const [body, setBody] = useState(initialDemoSample.current.body);
   useEffect(() => {
-    if (compose) return; // Preserve a draft being edited.
-    const sample = generateDemoSample(locale);
-    setSubject(sample.subject);
-    setBody(sample.body);
+    refreshDemoOnLocaleChange(locale, compose, { setSubject, setBody });
   }, [locale]);
   const [outgoingFiles, setOutgoingFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
@@ -389,14 +386,14 @@ export default function App() {
     }
   }
   function newDemoSample() {
-    const sample = generateDemoSample(locale, subject);
-    setSubject(sample.subject);
-    setBody(sample.body);
+    applyDemoSample(locale, subject, { setSubject, setBody });
   }
   function startCompose() {
-    newDemoSample();
-    setOutgoingFiles([]);
-    setCompose(true);
+    beginDemoCompose(locale, subject, {
+      setSubject, setBody,
+      clearAttachments: () => setOutgoingFiles([]),
+      showComposer: () => setCompose(true),
+    });
   }
   async function send() {
     if (!active) return;
@@ -447,18 +444,17 @@ export default function App() {
   async function removeInbox(target: Recipient) {
     if (!observer) return;
     try {
-      const removed = await removeInboxRecord(target, observer, {
+      await removeInboxAndReconcile(target, observer, selected, {
         confirmDelete: () => window.confirm(t("confirmDelete")),
         remove: del,
+        syncObserver,
+        clearSelected: () => {
+          setSelected(null);
+          setView("logs");
+          setCompose(false);
+          setDetail(null);
+        },
       });
-      if (!removed) return;
-      await syncObserver(observer);
-      if (selected === target.id) {
-        setSelected(null);
-        setView("logs");
-        setCompose(false);
-        setDetail(null);
-      }
     } catch (e) {
       setError(localizeError(e, locale));
     }

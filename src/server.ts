@@ -9,7 +9,7 @@ import { TLSSocket } from "node:tls";
 import {
   X509Certificate, createPrivateKey, createPublicKey, timingSafeEqual, randomUUID, createHash,
 } from "node:crypto";
-import { SMTPServer } from "smtp-server";
+import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachments.js";
@@ -472,33 +472,65 @@ const http = createServer((req, res) => { void handleRequest(req, res); });
 const demo = createServer((req, res) => { void handleRequest(req, res, true); });
 http.maxConnections = config.maxConnections;
 demo.maxConnections = config.maxConnections;
-const smtpOptions = {
+function smtpFailure(error: unknown): Error & { responseCode: number } {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  // Permanent message-size rejection must not trigger transport retries.
+  const status = error instanceof Fault ? error.status : 500;
+  const responseCode = status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
+  return Object.assign(failure, { responseCode });
+}
+const smtpOptions: SMTPServerOptions = {
   authOptional: true,
+  // This is a disposable test sandbox, not a credentials validator or public SMTP relay.
+  // Supporting AUTH on plaintext matches clients that always authenticate.
+  allowInsecureAuth: true,
+  authMethods: ["PLAIN", "LOGIN"],
   disabledCommands: tlsIdentity ? [] : ["STARTTLS"],
   size: smtpMessageLimit,
+  rejectOversized: true,
   ...(tlsIdentity ? { key: tlsIdentity.key, cert: tlsIdentity.cert, minVersion: "TLSv1.2" as const } : {}),
+  onAuth(auth, _session, callback) {
+    // Never inspect, persist or log the supplied password.
+    callback(null, { user: auth.username || "" });
+  },
   onRcptTo(_address: unknown, _session: unknown, callback: (error?: Error | null) => void) { callback(); },
   onData(stream: any, session: any, callback: any) {
     (async () => {
       const chunks: Buffer[] = [];
       let size = 0;
+      let oversized = false;
       for await (const chunk of stream) {
         const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
         size += buffer.length;
-        if (size > smtpMessageLimit) throw new Fault(413, "MIME too large");
+        if (size > smtpMessageLimit || stream.sizeExceeded) {
+          // Drain DATA without retaining more bytes, so SMTP receives a final 552.
+          oversized = true;
+          continue;
+        }
         chunks.push(buffer);
       }
+      if (oversized || stream.sizeExceeded) throw new Fault(413, "MIME too large", "MESSAGE_TOO_LARGE");
       const raw = Buffer.concat(chunks);
       const parsed = await new PostalMime().parse(raw);
       const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
         ? session.envelope.mailFrom.address : "unknown@sandbox.test";
       const attachments: Attachment[] = normalizeMimeAttachments(parsed.attachments || []);
+      const metadata = {
+        headers: parsed.headers.map((header) => ({
+          key: header.key, originalKey: header.originalKey || header.key, value: header.value,
+        })),
+        envelope: {
+          mailFrom: sender,
+          rcptTo: session.envelope.rcptTo.map((recipient: { address: string }) => recipient.address),
+        },
+        authUser: typeof session.user === "string" ? session.user : undefined,
+      };
       for (const recipient of session.envelope.rcptTo) {
         sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
-          parsed.html || undefined, raw.toString("base64"), attachments);
+          parsed.html || undefined, raw.toString("base64"), attachments, metadata);
       }
       callback(null, "Accepted");
-    })().catch((error) => callback(error instanceof Error ? error : new Error(String(error))));
+    })().catch((error) => callback(smtpFailure(error)));
   },
 };
 const smtp = new SMTPServer(smtpOptions);

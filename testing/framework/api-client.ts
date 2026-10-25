@@ -5,6 +5,10 @@ export type CapturedMessage = {
   subject?: string;
   body: string;
   from: string;
+  html?: string;
+  headers?: Array<{ key: string; originalKey: string; value: string }>;
+  envelope?: { mailFrom: string; rcptTo: string[] };
+  authUser?: string;
   attachments?: Array<{ id: string; filename: string; size: number }>;
 };
 export class ApiClient {

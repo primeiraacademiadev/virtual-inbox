@@ -44,9 +44,18 @@ export const schemas: Record<string, Schema> = {
   Attachment: object({ id: uuid, filename: string, contentType: string, size: integer }, [
     "id", "filename", "contentType", "size",
   ]),
+  MailHeader: object({
+    key: string, originalKey: string, value: string,
+  }, ["key", "originalKey", "value"]),
+  MailEnvelope: object({
+    mailFrom: string, rcptTo: array(string),
+  }, ["mailFrom", "rcptTo"]),
   Message: object({
     id: uuid, sequence: integer, channel: { enum: ["email", "sms"] }, destinationId: uuid,
     from: string, originalRecipient: string, subject: string, body: string, html: string,
+    headers: array(reference("MailHeader")),
+    envelope: reference("MailEnvelope"),
+    authUser: { type: "string", description: "Accepted SMTP AUTH username only; never the password." },
     receivedAt: { type: "string", format: "date-time" },
     captureReason: { enum: ["UNKNOWN_RECIPIENT", "EXPIRED_RECIPIENT"] },
     attachments: array(reference("Attachment")),
@@ -67,7 +76,16 @@ export const schemas: Record<string, Schema> = {
   Wait: object({
     after: { type: "integer", minimum: 0, description: "Exclusive message sequence cursor." },
     timeoutMs: { type: "integer", minimum: 1, description: "Must not exceed MAX_WAIT_TIMEOUT_MS." },
-    match: object({ from: string, bodyContains: string, subjectContains: string }),
+    match: object({
+      from: string,
+      bodyContains: { type: "string", description: "Matches plain-text body or raw HTML." },
+      htmlContains: { type: "string", description: "Matches raw HTML only." },
+      subjectContains: string,
+      header: object({
+        name: { type: "string", description: "Case-insensitive MIME header name." },
+        valueContains: { type: "string", description: "Case-sensitive substring of an unfolded header value." },
+      }, ["name", "valueContains"]),
+    }),
   }),
   Observer: object({ observerId: uuid, inboxes: reference("Inboxes") }, ["observerId", "inboxes"]),
   Watch: object({ inboxId: uuid }, ["inboxId"]),

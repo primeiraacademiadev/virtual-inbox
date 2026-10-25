@@ -562,7 +562,8 @@ const smtpOptions: SMTPServerOptions = {
           key: header.key, originalKey: header.originalKey || header.key, value: header.value,
         })),
         // Parsed display names are RFC 2047-decoded; headers[] stays raw.
-        decodedFrom: parsed.from && "address" in parsed.from
+        decodedFrom: parsed.from && "address" in parsed.from &&
+          typeof parsed.from.address === "string"
           ? { name: parsed.from.name, address: parsed.from.address }
           : undefined,
         envelope: {

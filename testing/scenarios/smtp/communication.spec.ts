@@ -1,9 +1,47 @@
 import { test, expect } from "@playwright/test";
 import nodemailer from "nodemailer";
 import { readFileSync } from "node:fs";
+import { request as httpsRequest } from "node:https";
 import { randomUUID } from "node:crypto";
 import { ApiClient } from "../../framework/api-client";
 import { profile, requireManaged } from "../../framework/environment";
+
+type SessionSummary = {
+  id: string;
+  secure: boolean;
+  authenticated: boolean;
+  authUser?: string;
+  messageIds: string[];
+};
+
+/** Admin-only diagnostic API, with the trusted local test CA. */
+async function observedSessions(): Promise<SessionSummary[]> {
+  const ca = readFileSync(process.env.VI_TEST_CA_FILE!);
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest({
+      hostname: "127.0.0.1",
+      port: Number(process.env.VI_HTTPS_PORT),
+      servername: process.env.VI_TLS_SERVERNAME || "localhost",
+      ca,
+      method: "GET",
+      path: "/api/admin/smtp/sessions",
+      headers: { Authorization: "Bearer " + process.env.ADMIN_TOKEN },
+    }, res => {
+      const chunks: Buffer[] = [];
+      res.on("data", chunk => chunks.push(Buffer.from(chunk)));
+      res.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        if (res.statusCode !== 200) return reject(new Error("Admin sessions returned " + res.statusCode));
+        try { resolve(JSON.parse(body) as SessionSummary[]); }
+        catch (error) { reject(error); }
+      });
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 
 for (const { mode, authMethod } of [
   { mode: "plain", authMethod: "PLAIN" },
@@ -54,7 +92,7 @@ for (const { mode, authMethod } of [
           from: "bounce@example.test",
           to: [to.address, cc.address, bcc.address],
         },
-        from: { name: "Sender Display Name", address: "sender@example.test" },
+        from: { name: "Primeira Academia — Testes", address: "sender@example.test" },
         replyTo: "reply@example.test",
         to: to.address,
         cc: cc.address,
@@ -77,12 +115,27 @@ for (const { mode, authMethod } of [
       expect(message.headers).toEqual(expect.arrayContaining([
         expect.objectContaining({ key: "x-message-id", value: marker }),
         expect.objectContaining({ key: "reply-to", value: expect.stringContaining("reply@example.test") }),
-        expect.objectContaining({ key: "from", value: expect.stringContaining("Sender Display Name") }),
+        expect.objectContaining({ key: "from", value: expect.stringContaining("=?UTF-8?") }),
         expect.objectContaining({ key: "cc", value: expect.stringContaining(cc.address) }),
       ]));
       // Bcc is an SMTP envelope recipient even when no Bcc MIME header exists.
       expect(message.headers.some((header: { key: string }) => header.key === "bcc")).toBe(false);
+      expect(message.decodedFrom).toEqual({
+        name: "Primeira Academia — Testes", address: "sender@example.test",
+      });
       expect(JSON.stringify(message)).not.toContain("dummy-password-never-store");
+      // The message must be linked to exactly one recorded transport session.
+      // STARTTLS upgrades an existing TCP session; SMTPS is secure from connect.
+      expect(message.smtpSessionId).toBeTruthy();
+      await expect.poll(async () => {
+        const sessions = await observedSessions();
+        return sessions.find(session => session.id === message.smtpSessionId)?.secure;
+      }).toBe(mode !== "plain");
+      const sessions = await observedSessions();
+      const linked = sessions.filter(session => session.id === message.smtpSessionId);
+      expect(linked).toHaveLength(1);
+      expect(linked[0].messageIds).toContain(message.id);
+      expect(linked[0].authUser).toBe("communication-gateway");
       const htmlResponse = await api.fetch("/mailboxes/" + to.id + "/wait-for-message", {
         method: "POST",
         body: JSON.stringify({ timeoutMs: 1000, match: { htmlContains: marker } }),

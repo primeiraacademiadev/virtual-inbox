@@ -13,6 +13,8 @@ import { useI18n } from "./i18n/context";
 import { LanguageSelector } from "./i18n/LanguageSelector";
 import { CopyButton } from "./components/clipboard/CopyButton";
 import { CopyMenu } from "./components/clipboard/CopyMenu";
+import { useDismissable } from "./hooks/useDismissable";
+import { generateDemoSample } from "./demo-samples";
 import { DocumentSearch, type SearchDestination } from "./search/DocumentSearch";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -111,6 +113,7 @@ export default function App() {
       .catch(() => {});
   }, []);
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigationRef = useDismissable<HTMLDivElement>(menuOpen, () => setMenuOpen(false));
   const [connection, setConnection] = useState<any>(null);
   const [adminToken, setAdminToken] = useState("");
   const [smtpClients, setSmtpClients] = useState<Client[]>([]);
@@ -158,23 +161,15 @@ export default function App() {
   const [error, setError] = useState("");
   const [compose, setCompose] = useState(false);
   const [sender, setSender] = useState("demo@example.test");
-  const [subject, setSubject] = useState(() => t("sampleSubject"));
-  const [body, setBody] = useState(() => t("sampleBody"));
-  const sampleLocaleRef = useRef(locale);
+  const initialDemoSample = useRef(generateDemoSample(locale));
+  const [subject, setSubject] = useState(initialDemoSample.current.subject);
+  const [body, setBody] = useState(initialDemoSample.current.body);
   useEffect(() => {
-    if (sampleLocaleRef.current === locale) return;
-    const previous = sampleLocaleRef.current;
-    sampleLocaleRef.current = locale;
-    const samples: Record<string, { subject: string; body: string }> = {
-      "pt-PT": { subject: "Mensagem de demonstração", body: "Esta é uma mensagem de teste." },
-      en: { subject: "Demo message", body: "This is a test message." },
-      fr: { subject: "Message de démonstration", body: "Ceci est un message de test." },
-    };
-    setSubject((current) =>
-      current === samples[previous]?.subject ? t("sampleSubject") : current,
-    );
-    setBody((current) => (current === samples[previous]?.body ? t("sampleBody") : current));
-  }, [locale, t]);
+    if (compose) return; // Preserve a draft being edited.
+    const sample = generateDemoSample(locale);
+    setSubject(sample.subject);
+    setBody(sample.body);
+  }, [locale]);
   const [outgoingFiles, setOutgoingFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [seen, setSeen] = useState<Record<string, string[]>>({});
@@ -392,6 +387,16 @@ export default function App() {
       setError(localizeError(e, locale));
     }
   }
+  function newDemoSample() {
+    const sample = generateDemoSample(locale, subject);
+    setSubject(sample.subject);
+    setBody(sample.body);
+  }
+  function startCompose() {
+    newDemoSample();
+    setOutgoingFiles([]);
+    setCompose(true);
+  }
   async function send() {
     if (!active) return;
     try {
@@ -438,15 +443,19 @@ export default function App() {
       setError(localizeError(e, locale));
     }
   }
-  async function removeInbox() {
-    if (!active || !observer) return;
+  async function removeInbox(target: Recipient) {
+    if (!observer) return;
+    if (!target.system && !confirm(t("confirmDelete"))) return;
     try {
-      if (!active.system && confirm(t("confirmDelete")))
-        await del(base(active.channel) + "/" + active.id);
-      else await del("/observers/" + observer + "/inboxes/" + active.id);
+      if (target.system) await del("/observers/" + observer + "/inboxes/" + target.id);
+      else await del(base(target.channel) + "/" + target.id);
       await syncObserver(observer);
-      setSelected(null);
-      setView("logs");
+      if (selected === target.id) {
+        setSelected(null);
+        setView("logs");
+        setCompose(false);
+        setDetail(null);
+      }
     } catch (e) {
       setError(localizeError(e, locale));
     }
@@ -548,7 +557,7 @@ export default function App() {
   return (
     <div className="shell">
       <header>
-        <div className="appNavigation">
+        <div className="appNavigation" ref={navigationRef}>
           <button
             aria-label={t("toggleMenu")}
             aria-expanded={menuOpen}
@@ -599,15 +608,15 @@ export default function App() {
                     <button
                       className="ghost groupToggle"
                       onClick={() => setGroups((p) => ({ ...p, [c]: !p[c] }))}
-                      aria-label={t("inboxes") + " — " + t(c === "email" ? "email" : "sms")}
+                      aria-label={t("inboxGroup") + " — " + t(c === "email" ? "email" : "sms")}
                     >
                       {c === "email" ? "✉" : "▣"}{" "}
-                      {!collapsed && t("inboxes") + " — " + t(c === "email" ? "email" : "sms")}{" "}
+                      {!collapsed && t("inboxGroup") + " — " + t(c === "email" ? "email" : "sms")}{" "}
                       {!collapsed && (groups[c] ? "⌄" : "›")}
                     </button>
                     {collapsed && (
                       <div className="hoverTools" role="group">
-                        <span>{t("inboxes") + " — " + t(c === "email" ? "email" : "sms")}</span>
+                        <span>{t("inboxGroup") + " — " + t(c === "email" ? "email" : "sms")}</span>
                         <button
                           onClick={() => {
                             setModal(c);
@@ -640,7 +649,7 @@ export default function App() {
                   inboxes
                     .filter((r) => r.channel === c)
                     .map((r) => (
-                      <div key={r.id} className="navWithTools">
+                      <div key={r.id} className="navWithTools sidebarInboxRow">
                         <button
                           className={
                             "navItem" + (selected === r.id && view !== "logs" ? " active" : "")
@@ -658,6 +667,17 @@ export default function App() {
                           {collapsed && <span>{c === "email" ? "✉" : "▣"}</span>}
                           {unread(r.id) > 0 && <span className="badge">{unread(r.id)}</span>}
                         </button>
+                        {!collapsed && (
+                          <button
+                            type="button"
+                            className="sidebarRemoveInbox"
+                            title={t("removeInbox")}
+                            aria-label={t("removeInbox") + ": " + r.address}
+                            onClick={() => void removeInbox(r)}
+                          >
+                            ×
+                          </button>
+                        )}
                         {collapsed && (
                           <div className="hoverTools" role="group">
                             <strong>{r.address}</strong>
@@ -683,11 +703,12 @@ export default function App() {
                               onClick={() => {
                                 setSelected(r.id);
                                 setView("inbox");
-                                setCompose(true);
+                                startCompose();
                               }}
                             >
                               {t("sendMessage")}
                             </button>
+                            <button onClick={() => void removeInbox(r)}>{t("removeInbox")}</button>
                           </div>
                         )}
                       </div>
@@ -740,7 +761,7 @@ export default function App() {
                           },
                         ]}
                       />
-                      <button title={t("removeInbox")} onClick={() => void removeInbox()}>
+                      <button title={t("removeInbox")} onClick={() => void removeInbox(active)}>
                         ×
                       </button>
                     </>
@@ -752,9 +773,10 @@ export default function App() {
                 {active && compose && (
                   <div className="composeOverlay">
                     <div className="compose">
-                      <strong>
-                        {t("sendTo")} {active.address}
-                      </strong>
+                      <div className="composeHeading">
+                        <strong>{t("sendTo")} {active.address}</strong>
+                        <button type="button" onClick={newDemoSample}>{t("newSample")}</button>
+                      </div>
                       <label>
                         {t("sender")}
                         <input value={sender} onChange={(e) => setSender(e.target.value)} />
@@ -882,7 +904,7 @@ export default function App() {
                     className="fab"
                     aria-label={t("sendMessage")}
                     title={t("sendMessage")}
-                    onClick={() => setCompose((v) => !v)}
+                    onClick={startCompose}
                   >
                     {compose ? "×" : "+"}
                   </button>

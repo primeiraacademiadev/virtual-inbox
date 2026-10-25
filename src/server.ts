@@ -11,6 +11,8 @@ import {
 } from "node:crypto";
 import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import { SmtpSessionStore } from "./smtp-sessions.js";
+import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
+import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachments.js";
@@ -509,6 +511,13 @@ const smtpOptions: SMTPServerOptions = {
     const id = smtpSessionIds.get(session);
     if (id) { smtpSessions.disconnect(id); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
   },
+  // Called after the TLS handshake (STARTTLS or implicit SMTPS).
+  // Implicit SMTPS can invoke this before onConnect, which records session.secure.
+  onSecure(_socket, session, callback) {
+    recordSecuredConnection(session, smtpSessionIds, smtpSessions, id =>
+      sandbox.log("smtp.session.secured", undefined, undefined, { sessionId: id }));
+    callback();
+  },
   // This is a disposable test sandbox, not a credentials validator or public SMTP relay.
   // Supporting AUTH on plaintext matches clients that always authenticate.
   allowInsecureAuth: true,
@@ -551,6 +560,8 @@ const smtpOptions: SMTPServerOptions = {
         headers: parsed.headers.map((header) => ({
           key: header.key, originalKey: header.originalKey || header.key, value: header.value,
         })),
+        // Parsed display names are RFC 2047-decoded; headers[] stays raw.
+        decodedFrom: decodedSender(parsed.from),
         envelope: {
           mailFrom: sender,
           rcptTo: session.envelope.rcptTo.map((recipient: { address: string }) => recipient.address),

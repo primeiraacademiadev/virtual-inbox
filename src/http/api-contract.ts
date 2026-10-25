@@ -50,10 +50,14 @@ export const schemas: Record<string, Schema> = {
   MailEnvelope: object({
     mailFrom: string, rcptTo: array(string),
   }, ["mailFrom", "rcptTo"]),
+  DecodedMailbox: object({
+    name: string, address: string,
+  }, ["name", "address"]),
   Message: object({
     id: uuid, sequence: integer, channel: { enum: ["email", "sms"] }, destinationId: uuid,
     from: string, originalRecipient: string, subject: string, body: string, html: string,
     headers: array(reference("MailHeader")),
+    decodedFrom: reference("DecodedMailbox"),
     envelope: reference("MailEnvelope"),
     authUser: { type: "string", description: "Accepted SMTP AUTH username only; never the password." },
     smtpSessionId: uuid,

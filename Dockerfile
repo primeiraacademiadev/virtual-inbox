@@ -8,6 +8,8 @@ RUN npm ci --prefix web --no-audit --no-fund --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
 COPY test ./test
+# SDK is compiled by the unit tests and TypeScript build; keep it in builder only.
+COPY sdk ./sdk
 COPY scripts ./scripts
 COPY README.md ./
 COPY docs ./docs

@@ -10,7 +10,7 @@ Usa inboxes e marcadores únicos por execução. Não uses sleeps arbitrários p
 4. Verifica HTTP `200`, remetente, conteúdo e bytes dos anexos. `204` não tem JSON: significa timeout sem correspondência ou remoção da inbox.
 5. Elimina `/api/mailboxes/{id}` num bloco `finally`.
 
-`after` é um número de sequência de mensagem exclusivo, não o id de evento SSE. Os filtros `from`, `bodyContains` e `subjectContains` combinam-se por AND. O timeout não pode exceder `MAX_WAIT_TIMEOUT_MS`. `404` significa que a inbox já não existia; não o trates como resultado vazio bem-sucedido.
+`after` é um número de sequência de mensagem exclusivo, não o id de evento SSE. Os filtros `from`, `bodyContains`, `htmlContains`, `subjectContains` e `header` combinam-se por AND. O timeout não pode exceder `MAX_WAIT_TIMEOUT_MS`. `404` significa que a inbox já não existia; não o trates como resultado vazio bem-sucedido.
 
 Os exemplos executáveis estão em `examples/smtp-roundtrip.mjs` e `examples/sms-roundtrip.mjs`. O SDK opcional está em `sdk/client.ts`; o contrato HTTP gerado é a referência dos payloads.
 
@@ -31,3 +31,11 @@ npm run test:all
 ```
 
 O harness gerido inicia uma instância isolada temporária. Não executes rotação TLS ou esgotamento de quotas numa instalação partilhada. Relatórios ficam em `testing/reports/` e não são código-fonte. O CI Docker faz um smoke test real de HTTP/SMTP; não equivale à suite completa de browser contra o contentor.
+
+## Metadados MIME e filtros de pesquisa
+
+O SDK TypeScript `sdk/client.ts` devolve `headers` originais (ordenados e com os valores MIME não descodificados), `envelope` (incluindo destinatários Bcc presentes apenas no envelope), `html`, `authUser`, `smtpSessionId` e `decodedFrom` (`name` e `address`). O nome em `decodedFrom` é descodificado segundo RFC 2047, preservando o header `From` original.
+
+Usa `wait(inbox, { header: { name: "X-Message-ID", valueContains: marcador }, htmlContains: "code" })`. `bodyContains` pesquisa em texto e HTML; `htmlContains` apenas em HTML. Os filtros combinam-se por AND; HTTP `204` devolve `null`. `after` é a sequência da mensagem e não um ID SSE.
+
+Os diagnósticos SMTP requerem HTTPS e `ADMIN_TOKEN`. Não registes tokens ou credenciais em logs. STARTTLS atualiza a sessão de transporte já existente para `secure: true`.

@@ -29,8 +29,10 @@ export type Attachment = {
 };
 export type MailHeader = { key: string; originalKey: string; value: string };
 export type MailEnvelope = { mailFrom: string; rcptTo: string[] };
+export type DecodedMailbox = { name: string; address: string };
 export type MailMetadata = {
   headers?: MailHeader[];
+  decodedFrom?: DecodedMailbox;
   envelope?: MailEnvelope;
   authUser?: string;
   smtpSessionId?: string;
@@ -48,6 +50,8 @@ export type Message = {
   rawMime?: string;
   /** Original MIME headers, in arrival order; duplicated header names are retained. */
   headers?: MailHeader[];
+  /** MIME From with decoded RFC 2047 display name; headers[] retain original encoded values. */
+  decodedFrom?: DecodedMailbox;
   /** SMTP MAIL FROM and all RCPT TO recipients, including envelope-only Bcc recipients. */
   envelope?: MailEnvelope;
   /** Accepted SMTP AUTH username, never the password. */
@@ -256,7 +260,8 @@ export class Sandbox {
     const message: Message = {
       id: randomUUID(), sequence: ++this.msgSeq, channel, destinationId, from,
       originalRecipient: to, body, subject, html, rawMime, attachments,
-      headers: metadata.headers, envelope: metadata.envelope, authUser: metadata.authUser,
+      headers: metadata.headers, decodedFrom: metadata.decodedFrom,
+      envelope: metadata.envelope, authUser: metadata.authUser,
       smtpSessionId: metadata.smtpSessionId,
       receivedAt: new Date().toISOString(), captureReason: reason,
     };

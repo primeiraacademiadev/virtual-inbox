@@ -10,7 +10,7 @@ Utiliser des boîtes et marqueurs uniques par test. Éviter les sleeps arbitrair
 4. Vérifier HTTP `200`, expéditeur, contenu et octets des pièces jointes. `204` n’a pas de corps JSON : délai sans résultat ou suppression de boîte.
 5. DELETE `/api/mailboxes/{id}` dans `finally`.
 
-`after` est une séquence de message exclusive, pas un id SSE. Tous les filtres `from`, `bodyContains`, `subjectContains` doivent correspondre. Respecter `MAX_WAIT_TIMEOUT_MS`. `404` signifie une boîte déjà absente/expirée, pas un résultat vide réussi.
+`after` est une séquence de message exclusive, pas un id SSE. Tous les filtres `from`, `bodyContains`, `htmlContains`, `subjectContains` et `header` doivent correspondre. Respecter `MAX_WAIT_TIMEOUT_MS`. `404` signifie une boîte déjà absente/expirée, pas un résultat vide réussi.
 
 Exemples exécutables : `examples/smtp-roundtrip.mjs` et `examples/sms-roundtrip.mjs`. Le SDK source optionnel est `sdk/client.ts` ; le contrat HTTP généré définit les payloads.
 
@@ -31,3 +31,11 @@ npm run test:all
 ```
 
 Le harness géré lance une instance isolée temporaire. Ne pas exécuter rotation TLS ou saturation sur une installation partagée. Les rapports sous `testing/reports/` sont des artefacts. Le smoke test Docker vérifie réellement HTTP/SMTP mais n’est pas toute la suite navigateur contre le conteneur.
+
+## Métadonnées MIME et filtres
+
+Le SDK TypeScript `sdk/client.ts` renvoie les `headers` MIME originaux (ordonnés, valeurs non décodées), l'`envelope` (y compris les destinataires Bcc présents seulement dans l'enveloppe), `html`, `authUser`, `smtpSessionId` et `decodedFrom` (`name` et `address`). Le nom de `decodedFrom` est décodé selon RFC 2047 sans modifier l'en-tête `From` d'origine.
+
+Exemple : `wait(inbox, { header: { name: "X-Message-ID", valueContains: marker }, htmlContains: "code" })`. `bodyContains` recherche dans le texte et le HTML ; `htmlContains` uniquement dans le HTML. Les filtres sont combinés par ET ; HTTP `204` devient `null`. `after` est une séquence de message, pas un identifiant SSE.
+
+Les diagnostics SMTP exigent HTTPS et `ADMIN_TOKEN`. Ne pas journaliser les mots de passe ni les tokens. STARTTLS actualise la session existante avec `secure: true`.

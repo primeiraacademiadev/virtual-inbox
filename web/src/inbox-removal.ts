@@ -20,3 +20,22 @@ export async function removeInboxRecord(
   await actions.remove(path);
   return true;
 }
+
+/** Coordinates the removal, observer refresh and currently selected inbox state. */
+export async function removeInboxAndReconcile(
+  target: Recipient,
+  observerId: string,
+  selectedId: string | null,
+  actions: {
+    confirmDelete: () => boolean;
+    remove: (path: string) => Promise<unknown>;
+    syncObserver: (id: string) => Promise<unknown>;
+    clearSelected: () => void;
+  },
+): Promise<boolean> {
+  const removed = await removeInboxRecord(target, observerId, actions);
+  if (!removed) return false;
+  await actions.syncObserver(observerId);
+  if (selectedId === target.id) actions.clearSelected();
+  return true;
+}

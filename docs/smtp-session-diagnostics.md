@@ -1,6 +1,6 @@
-# SMTP integration validation V1-V4
+# SMTP integration validation V1-V4 and V7-V9
 
-Status: proposed for main via a dedicated feature branch. CI and external Communication E2E must be verified before deployment.
+Status: V1-V4 merged. V7-V9 proposed in a separate PR following real Communication E2E feedback (20/23 cases passed; three findings). Do not deploy automatically.
 
 ## V1 SMTP authentication and sessions
 Accept arbitrary SMTP test credentials with onAuth. Each SMTP connection has a UUID and records remote address, TLS, authentication attempt metadata, timestamps, messages and errors. Client grouping by IP and authenticated username is observational, not proof of application identity.
@@ -33,3 +33,19 @@ Restrict listener exposure to trusted test networks. Configure NODE_EXTRA_CA_CER
 - VI-A10: Session disconnect and reconnect maintain accurate history.
 
 A code-level diagnosis is not equivalent to successful runtime E2E validation. Confirm Communication retry and DLQ behavior in integration tests.
+
+## V7 STARTTLS diagnostics
+
+The SMTP `onSecure` lifecycle callback updates the existing session after a successful STARTTLS handshake, marking `secure: true`. Implicit SMTPS remains secure from connect. A transport upgrade must not create a second SMTP session or store credentials in logs.
+
+## V8 SDK alignment
+
+`sdk/client.ts` exposes `headers`, `envelope`, `html`, `authUser`, `smtpSessionId`, `decodedFrom`, and `header`/`htmlContains`/HTML-aware `bodyContains` wait filters. `after` is an exclusive message sequence number, not an SSE cursor; HTTP 204 maps to `null`.
+
+## V9 decoded sender
+
+`decodedFrom?: { name: string; address: string }` provides an RFC 2047-decoded sender display name and parsed address. This is **additive**. Preserve the ordered original `headers` values (encoded words included) so tests can assert wire-level MIME as well as readable display names.
+
+## External handoff
+
+Virtual Inbox scope: V7-V9 and tests only. Communication owns classification of connection failures, TLS certificate configuration errors, retry/DLQ policy and the opt-in Vitest N1 suite. Do not start Communication changes until this Virtual Inbox PR is merged into `main` with both CI and E2E gates green. External groups E and F, A06 and observations O1-O4 remain separate verification items.

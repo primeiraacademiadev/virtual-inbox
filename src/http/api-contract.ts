@@ -56,6 +56,7 @@ export const schemas: Record<string, Schema> = {
     headers: array(reference("MailHeader")),
     envelope: reference("MailEnvelope"),
     authUser: { type: "string", description: "Accepted SMTP AUTH username only; never the password." },
+    smtpSessionId: uuid,
     receivedAt: { type: "string", format: "date-time" },
     captureReason: { enum: ["UNKNOWN_RECIPIENT", "EXPIRED_RECIPIENT"] },
     attachments: array(reference("Attachment")),
@@ -87,6 +88,13 @@ export const schemas: Record<string, Schema> = {
       }, ["name", "valueContains"]),
     }),
   }),
+  SmtpClients: array(object({ id: uuid, remoteAddress: string, authUser: string, activeSessions: integer, totalSessions: integer })),
+  SmtpSessions: array(object({ id: uuid, clientId: uuid, remoteAddress: string, connectedAt: string,
+    disconnectedAt: string, connected: boolean, authenticated: boolean, secure: boolean,
+    authUser: string, authAttempts: array(object({ id: uuid, at: string, method: string, authUser: string, accepted: boolean })),
+    messageIds: array(string), errors: array(object({ at: string, responseCode: integer, code: string })) })),
+  VerifySmtp: object({ username: string, password: { type: "string", format: "password", writeOnly: true }, attemptId: uuid }, ["username", "password"]),
+  VerifySmtpResult: object({ sessionId: uuid, attemptId: uuid, usernameMatches: boolean, passwordMatches: boolean, matches: boolean }),
   Observer: object({ observerId: uuid, inboxes: reference("Inboxes") }, ["observerId", "inboxes"]),
   Watch: object({ inboxId: uuid }, ["inboxId"]),
   WatchResult: object({ recipient: reference("Inbox"), messages: reference("Messages") }, [
@@ -125,6 +133,9 @@ const streams = ["logs/events", "observers/events", "observers/{observerId}/even
 );
 
 export const operations: readonly ApiOperation[] = [
+  management({ id: "smtpClients", method: "GET", path: "/admin/smtp/clients", tag: "SMTP diagnostics", status: 200, response: "SmtpClients", admin: true, summary: "List observed SMTP clients." }),
+  management({ id: "smtpSessions", method: "GET", path: "/admin/smtp/sessions", tag: "SMTP diagnostics", status: 200, response: "SmtpSessions", admin: true, query: "clientId", summary: "List SMTP sessions." }),
+  management({ id: "smtpVerify", method: "POST", path: "/admin/smtp/sessions/{sessionId}/verify", tag: "SMTP diagnostics", status: 200, response: "VerifySmtpResult", request: "VerifySmtp", admin: true, summary: "Revalidate recorded SMTP credentials." }),
   management({ id: "health", method: "GET", path: "/health", tag: "Service", status: 200, response: "Health", summary: "Read service health and run identifier." }),
   management({ id: "openapi", method: "GET", path: "/openapi.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the current management API contract." }),
   management({ id: "demoOpenapi", method: "GET", path: "/openapi-demo.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the separate demo sender contract." }),

@@ -42,3 +42,31 @@ export function generateDemoSample(locale: Locale, previousSubject?: string): De
   const pool = alternatives.length ? alternatives : options;
   return { ...pool[Math.floor(Math.random() * pool.length)] };
 }
+
+type DemoUpdates = { setSubject: (subject: string) => void; setBody: (body: string) => void };
+
+/** Apply a locally generated example without overwriting unrelated message fields. */
+export function applyDemoSample(locale: Locale, previousSubject: string | undefined, updates: DemoUpdates) {
+  const sample = generateDemoSample(locale, previousSubject);
+  updates.setSubject(sample.subject);
+  updates.setBody(sample.body);
+  return sample;
+}
+
+/** A new composition gets a fresh message and no attachments. */
+export function beginDemoCompose(
+  locale: Locale,
+  previousSubject: string | undefined,
+  updates: DemoUpdates & { clearAttachments: () => void; showComposer: () => void },
+) {
+  applyDemoSample(locale, previousSubject, updates);
+  updates.clearAttachments();
+  updates.showComposer();
+}
+
+/** Changing locale must not overwrite a draft being edited. */
+export function refreshDemoOnLocaleChange(locale: Locale, composing: boolean, updates: DemoUpdates) {
+  if (composing) return false;
+  applyDemoSample(locale, undefined, updates);
+  return true;
+}

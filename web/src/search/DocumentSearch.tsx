@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/context";
+import { useDismissable } from "../hooks/useDismissable";
 import { search, type SearchIndex, type SearchResult } from "./engine";
 import "./search.css";
 export type SearchDestination = { document: string; ordinal: number };
@@ -16,6 +17,7 @@ export function DocumentSearch({
     [open, setOpen] = useState(false),
     [selected, setSelected] = useState(0);
   const field = useRef<HTMLInputElement>(null);
+  const searchRef = useDismissable<HTMLDivElement>(open, () => setOpen(false));
   useEffect(() => {
     let alive = true;
     setIndex(null);
@@ -77,7 +79,7 @@ export function DocumentSearch({
     setOpen(false);
   }
   return (
-    <div className="docSearch">
+    <div className="docSearch" ref={searchRef}>
       <div className="docSearchBox">
         <input
           ref={field}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDismissable } from "../../hooks/useDismissable";
 import type { IdentityPrefs, GenerationOptions } from "./preferences";
 import { useI18n } from "../../i18n/context";
 import "./identity.css";
@@ -27,11 +28,12 @@ export function IdentityControls({
 }) {
   const { t } = useI18n(),
     [open, setOpen] = useState(false);
+  const pickerRef = useDismissable<HTMLDivElement>(open, () => setOpen(false));
   const active = localeOptions.find((x) => x.value === value.locale) || localeOptions[0];
   const update = (patch: Partial<IdentityPrefs>) => onChange({ ...value, ...patch });
   return (
     <div className="identityControls" aria-label={t("generationOptions")}>
-      <div className="localePicker">
+      <div className="localePicker" ref={pickerRef}>
         <button
           type="button"
           className="localeFlag"

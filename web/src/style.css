@@ -92,3 +92,23 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
 .tlsHelp{max-width:74ch;color:#b9cbe0;font-size:13px;line-height:1.55;margin:5px 0 18px}
 .tlsHelp code{color:#dce7fb}
 .tlsHelp strong{color:#e5edf9}
+
+/* Keep the documentation scroll track at the actual viewport edge, while
+   centering its content in a comfortably readable column. */
+.information{max-width:none;width:100%;margin:0;padding:20px max(24px, calc((100% - 1000px)/2))}
+@media(max-width:650px){.information{padding:12px}}
+
+/* Inbox actions have a dedicated slot; they never overlap the unread badge. */
+.sidebarInboxRow{display:flex;align-items:center;gap:3px;width:100%;min-width:0}
+.sidebarInboxRow>.navItem{flex:1;min-width:0;width:auto}
+.sidebarInboxRow>.navItem .name{min-width:0;flex:1}
+.sidebarInboxRow>.navItem .badge{flex:none}
+.sidebarRemoveInbox{flex:0 0 27px;width:27px;height:30px;padding:0;border:0;background:transparent;color:#c9d6e8;opacity:0;transition:opacity .15s}
+.sidebarInboxRow:hover .sidebarRemoveInbox,
+.sidebarInboxRow:focus-within .sidebarRemoveInbox{opacity:1}
+.sidebarRemoveInbox:hover,.sidebarRemoveInbox:focus-visible{background:#573344;color:#fff}
+.sidebar.closed .sidebarInboxRow{display:block}
+.sidebar.closed .sidebarInboxRow>.navItem{width:100%}
+.composeHeading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.composeHeading>strong{overflow-wrap:anywhere}
+.composeHeading button{font-size:12px;padding:6px 10px;white-space:nowrap}

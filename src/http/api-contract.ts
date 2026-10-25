@@ -50,6 +50,8 @@ export const schemas: Record<string, Schema> = {
     receivedAt: { type: "string", format: "date-time" },
     captureReason: { enum: ["UNKNOWN_RECIPIENT", "EXPIRED_RECIPIENT"] },
     attachments: array(reference("Attachment")),
+    headers: { type: "object", additionalProperties: array(string) },
+    envelope: object({ mailFrom: string, rcptTo: array(string) }), smtpSessionId: uuid,
   }, ["id", "sequence", "channel", "destinationId", "from", "originalRecipient", "body", "receivedAt"]),
   Messages: array(reference("Message")),
   Generation: object({
@@ -67,8 +69,21 @@ export const schemas: Record<string, Schema> = {
   Wait: object({
     after: { type: "integer", minimum: 0, description: "Exclusive message sequence cursor." },
     timeoutMs: { type: "integer", minimum: 1, description: "Must not exceed MAX_WAIT_TIMEOUT_MS." },
-    match: object({ from: string, bodyContains: string, subjectContains: string }),
+    match: object({ from: string, bodyContains: string, htmlContains: string, subjectContains: string,
+      header: object({ name: string, contains: string }) }),
   }),
+  SmtpClient: object({ id: uuid, remoteAddress: string, authUser: string, firstSeenAt: string,
+    lastSeenAt: string, activeSessions: integer, totalSessions: integer, authenticatedSessions: integer }),
+  SmtpClients: array(reference("SmtpClient")),
+  SmtpAttempt: object({ id: uuid, at: string, method: string, authUser: string, accepted: boolean }),
+  SmtpSession: object({ id: uuid, clientId: uuid, remoteAddress: string, connectedAt: string,
+    disconnectedAt: string, connected: boolean, authenticated: boolean, secure: boolean,
+    authUser: string, authAttempts: array(reference("SmtpAttempt")), messageIds: array(uuid),
+    errors: array(object({ at: string, responseCode: integer, code: string })) }),
+  SmtpSessions: array(reference("SmtpSession")),
+  VerifySmtp: object({ username: string, password: { type: "string", format: "password", writeOnly: true }, attemptId: uuid }, ["username", "password"]),
+  VerifySmtpResult: object({ sessionId: uuid, attemptId: uuid, usernameMatches: boolean,
+    passwordMatches: boolean, matches: boolean }),
   Observer: object({ observerId: uuid, inboxes: reference("Inboxes") }, ["observerId", "inboxes"]),
   Watch: object({ inboxId: uuid }, ["inboxId"]),
   WatchResult: object({ recipient: reference("Inbox"), messages: reference("Messages") }, [
@@ -107,6 +122,13 @@ const streams = ["logs/events", "observers/events", "observers/{observerId}/even
 );
 
 export const operations: readonly ApiOperation[] = [
+  management({ id: "smtpClients", method: "GET", path: "/admin/smtp/clients", tag: "SMTP diagnostics",
+    status: 200, response: "SmtpClients", admin: true, summary: "List observed SMTP clients." }),
+  management({ id: "smtpSessions", method: "GET", path: "/admin/smtp/sessions", tag: "SMTP diagnostics",
+    status: 200, response: "SmtpSessions", admin: true, query: "clientId", summary: "List SMTP sessions and authentication attempts." }),
+  management({ id: "smtpVerify", method: "POST", path: "/admin/smtp/sessions/{sessionId}/verify", tag: "SMTP diagnostics",
+    status: 200, response: "VerifySmtpResult", request: "VerifySmtp", admin: true,
+    summary: "Compare supplied credentials with one recorded authentication attempt." }),
   management({ id: "health", method: "GET", path: "/health", tag: "Service", status: 200, response: "Health", summary: "Read service health and run identifier." }),
   management({ id: "openapi", method: "GET", path: "/openapi.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the current management API contract." }),
   management({ id: "demoOpenapi", method: "GET", path: "/openapi-demo.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the separate demo sender contract." }),

@@ -1,4 +1,4 @@
-import type { Locale } from "./i18n/catalog";
+import type { Locale } from "./i18n/catalog.js";
 
 export type DemoSample = { subject: string; body: string };
 

@@ -9,7 +9,7 @@ test("locale switching preserves a usable console", async ({ page }) => {
   await page.goto("/");
   const selector = page.locator(".languageSelector select");
   await selector.selectOption("fr");
-  await expect(page.getByText("Boîtes de réception", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("Boîtes — E-mail", { exact: false }).first()).toBeVisible();
   await expect(page.locator(".groupToggle").first()).toContainText("Boîtes — E-mail");
   await expect(page.locator(".groupToggle").nth(1)).toContainText("Boîtes — SMS");
   await selector.selectOption("pt-PT");

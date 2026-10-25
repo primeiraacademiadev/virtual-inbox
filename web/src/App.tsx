@@ -27,7 +27,9 @@ import {
   type Recipient,
 } from "./api";
 type View = "split" | "inbox" | "logs";
-type Page = "workspace" | "connections" | "documentation" | "api";
+type Page = "workspace" | "connections" | "smtp" | "documentation" | "api";
+type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
+type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
 async function postDemo(path: string, data: unknown) {
   const response = await fetch("/demo" + path, {
     method: "POST",
@@ -111,6 +113,13 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [connection, setConnection] = useState<any>(null);
   const [adminToken, setAdminToken] = useState("");
+  const [smtpClients, setSmtpClients] = useState<Client[]>([]);
+  const [smtpHistory, setSmtpHistory] = useState<SmtpSession[]>([]);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpSelectedSession, setSmtpSelectedSession] = useState("");
+  const [smtpResult, setSmtpResult] = useState("");
+  const [smtpError, setSmtpError] = useState("");
   const [tlsCertFile, setTlsCertFile] = useState<File | null>(null);
   const [tlsKeyFile, setTlsKeyFile] = useState<File | null>(null);
   const [tlsStatus, setTlsStatus] = useState("");
@@ -501,6 +510,37 @@ export default function App() {
       setTlsStatus(localizeError(e, locale));
     }
   }
+  const smtpAdminHeaders = () => ({ Authorization: "Bearer " + adminToken });
+  const reloadSmtp = useCallback(async () => {
+    if (!adminToken || location.protocol !== "https:") return;
+    try {
+      const response = await Promise.all([
+        request<Client[]>("/admin/smtp/clients", { headers: smtpAdminHeaders() }),
+        request<SmtpSession[]>("/admin/smtp/sessions", { headers: smtpAdminHeaders() }),
+      ]);
+      setSmtpClients(response[0]); setSmtpHistory(response[1]); setSmtpError("");
+    } catch (error) { setSmtpError(error instanceof Error ? error.message : "Unable to read SMTP sessions"); }
+  }, [adminToken]);
+  useEffect(() => {
+    if (page !== "smtp" || !adminToken) return;
+    void reloadSmtp();
+    const interval = setInterval(() => { void reloadSmtp(); }, 5000);
+    return () => clearInterval(interval);
+  }, [page, adminToken, reloadSmtp]);
+  async function verifySmtp() {
+    if (!smtpSelectedSession || !adminToken) return;
+    setSmtpResult("");
+    try {
+      const value = await request<{ usernameMatches: boolean; passwordMatches: boolean; matches: boolean }>(
+        "/admin/smtp/sessions/" + smtpSelectedSession + "/verify", {
+          method: "POST", headers: smtpAdminHeaders(),
+          body: JSON.stringify({ username: smtpUser, password: smtpPassword }),
+        });
+      setSmtpResult("User: " + (value.usernameMatches ? "match" : "mismatch") +
+        " · Password: " + (value.passwordMatches ? "match" : "mismatch"));
+    } catch (error) { setSmtpResult(error instanceof Error ? error.message : "Verification failed"); }
+    finally { setSmtpPassword(""); }
+  }
   const filteredLogs = useMemo(
     () => logs.filter((x) => JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),
     [logs, logFilter],
@@ -521,6 +561,7 @@ export default function App() {
             <nav id="primary-nav-menu" className="hamburgerMenu" aria-label={t("documentation")}>
               <button onClick={() => openPage("workspace")}>{t("inboxes")}</button>
               <button onClick={() => openPage("connections")}>{t("tls")}</button>
+              <button onClick={() => openPage("smtp")}>SMTP clients</button>
               <button onClick={() => openPage("documentation")}>{t("documentation")}</button>
               <button onClick={() => openPage("api")}>{t("api")}</button>
             </nav>
@@ -881,6 +922,37 @@ export default function App() {
             )}
           </main>
         </div>
+      )}
+      {page === "smtp" && (
+        <main className="information">
+          <h2>SMTP clients and sessions</h2>
+          <p className="muted">Only accessible via HTTPS with ADMIN_TOKEN. SMTP authentication accepts test credentials; this view compares them with credentials observed previously.</p>
+          <label>Administrator token
+            <input type="password" autoComplete="off" value={adminToken} onChange={e => setAdminToken(e.target.value)} />
+          </label>
+          <div className="actions"><button onClick={() => void reloadSmtp()} disabled={!adminToken || location.protocol !== "https:"}>Refresh</button></div>
+          {location.protocol !== "https:" && <p role="alert">HTTPS is required.</p>}
+          {smtpError && <p role="alert">{smtpError}</p>}
+          <h3>Observed clients ({smtpClients.length})</h3>
+          <table><thead><tr><th>Client / user</th><th>Remote address</th><th>Active</th><th>Sessions</th></tr></thead>
+          <tbody>{smtpClients.map(client => <tr key={client.id}><td>{client.authUser || "Anonymous"}<div className="tiny">{client.id}</div></td><td>{client.remoteAddress}</td><td>{client.activeSessions}</td><td>{client.totalSessions}</td></tr>)}</tbody></table>
+          <h3>SMTP sessions ({smtpHistory.length})</h3>
+          {smtpHistory.map(session => <section className="detail" key={session.id}>
+            <strong>{session.authUser || "Anonymous"} · {session.connected ? "Connected" : "Disconnected"}</strong>
+            <p className="tiny">{session.id} · {session.remoteAddress} · {formatDate(session.connectedAt)} · TLS: {session.secure ? "yes" : "no"}</p>
+            <p>Authenticated: {session.authenticated ? "yes" : "no"} · Messages: {session.messageIds.length} · Errors: {session.errors.length}</p>
+            {session.authAttempts.map(attempt => <p key={attempt.id} className="tiny">AUTH {attempt.method}: {attempt.authUser} · {formatDate(attempt.at)} · {attempt.accepted ? "accepted" : "rejected"}</p>)}
+            {session.errors.map((error, index) => <p key={index} className="tiny">SMTP {error.responseCode}: {error.code}</p>)}
+            {!!session.authAttempts.length && <button type="button" onClick={() => { setSmtpSelectedSession(session.id); setSmtpUser(session.authUser || ""); setSmtpResult(""); }}>Validate credentials</button>}
+          </section>)}
+          {smtpSelectedSession && <section className="detail">
+            <h3>Validate recorded credentials</h3><p className="tiny">Session {smtpSelectedSession}. Compares against the most recent authentication attempt.</p>
+            <label>Username<input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} autoComplete="off" /></label>
+            <label>Password<input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)} autoComplete="off" /></label>
+            <div className="actions"><button onClick={() => void verifySmtp()}>Validate</button><button onClick={() => setSmtpSelectedSession("")}>Close</button></div>
+            {smtpResult && <p role="status">{smtpResult}</p>}
+          </section>}
+        </main>
       )}
       {page === "connections" && (
         <main className="information">

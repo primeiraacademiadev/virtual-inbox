@@ -15,6 +15,7 @@ import { CopyButton } from "./components/clipboard/CopyButton";
 import { CopyMenu } from "./components/clipboard/CopyMenu";
 import { useDismissable } from "./hooks/useDismissable";
 import { generateDemoSample } from "./demo-samples";
+import { removeInboxRecord } from "./inbox-removal";
 import { DocumentSearch, type SearchDestination } from "./search/DocumentSearch";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -445,10 +446,12 @@ export default function App() {
   }
   async function removeInbox(target: Recipient) {
     if (!observer) return;
-    if (!target.system && !confirm(t("confirmDelete"))) return;
     try {
-      if (target.system) await del("/observers/" + observer + "/inboxes/" + target.id);
-      else await del(base(target.channel) + "/" + target.id);
+      const removed = await removeInboxRecord(target, observer, {
+        confirmDelete: () => window.confirm(t("confirmDelete")),
+        remove: del,
+      });
+      if (!removed) return;
       await syncObserver(observer);
       if (selected === target.id) {
         setSelected(null);

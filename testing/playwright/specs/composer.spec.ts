@@ -29,7 +29,7 @@ test("SMTP message captured by API appears in the React console", async ({ page 
 test("new demo messages have distinct offline titles and bodies", async ({ page }) => {
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem("virtual-inbox-observer"))).toBeTruthy();
-  await page.locator(".sidebar .inboxGroup .groupHead button").last().first().click();
+  await page.locator(".sidebar .inboxGroup").first().locator(".groupHead button").last().click();
   await page.locator(".modal .actions button").last().click();
   await expect(page.locator(".panelTitle")).toContainText("@");
   await page.locator(".fab").click();
@@ -44,7 +44,7 @@ test("new demo messages have distinct offline titles and bodies", async ({ page 
 test("sidebar removal preserves unread badge and respects cancellation", async ({ page }) => {
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem("virtual-inbox-observer"))).toBeTruthy();
-  await page.locator(".sidebar .inboxGroup .groupHead button").last().first().click();
+  await page.locator(".sidebar .inboxGroup").first().locator(".groupHead button").last().click();
   await page.locator(".modal .actions button").last().click();
   const address = await page.locator(".panelTitle").innerText();
   const row = page.locator(".sidebarInboxRow").filter({ hasText: address });

@@ -17,10 +17,10 @@ test("TLS upgrade records an existing session, with no duplicates or credential 
   const recorded: string[] = [];
   recordSecuredConnection(plainTransport, ids, store, id => recorded.push(id));
   assert.equal(store.listSessions().find(session => session.id === plainId)?.secure, true);
-  assert.deepEqual(recorded, [plainId]);
+  assert.deepEqual([...recorded], [plainId]);
   recordSecuredConnection(plainTransport, ids, store, id => recorded.push(id));
   assert.equal(store.listSessions().length, 2);
-  assert.deepEqual(recorded, [plainId, plainId]);
+  assert.deepEqual([...recorded], [plainId, plainId]);
   recordSecuredConnection(secureTransport, ids, store, id => recorded.push(id));
   assert.equal(store.listSessions().find(session => session.id === secureId)?.secure, true);
   recordSecuredConnection({}, ids, store, () => { throw Error("Unknown session must not log"); });

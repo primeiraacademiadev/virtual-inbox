@@ -1,6 +1,6 @@
 # SMTP integration validation V1-V4
 
-Status: stacked feature branch on fix/communication-smtp-compat (PR #13). No deployment. CI and external Communication E2E pending.
+Status: proposed for main via a dedicated feature branch. CI and external Communication E2E must be verified before deployment.
 
 ## V1 SMTP authentication and sessions
 Accept arbitrary SMTP test credentials with onAuth. Each SMTP connection has a UUID and records remote address, TLS, authentication attempt metadata, timestamps, messages and errors. Client grouping by IP and authenticated username is observational, not proof of application identity.
@@ -8,13 +8,13 @@ Accept arbitrary SMTP test credentials with onAuth. Each SMTP connection has a U
 Username and password are independently derived with scrypt using random per-value 16-byte salts. Digest and salt remain only in the bounded ephemeral server store, never in REST, SSE or logs. POST /api/admin/smtp/sessions/{sessionId}/verify accepts user and password over HTTPS with ADMIN_TOKEN, checks a recorded attempt and returns match booleans. The console offers an SMTP clients view, history and verification. GET /api/admin/smtp/clients and /api/admin/smtp/sessions are also admin-only over HTTPS.
 
 ## V2 Message metadata
-Email responses expose MIME headers as a multi-value map, the entire SMTP envelope and smtpSessionId. Bcc is derived from RCPT TO even when absent from headers.
+Email responses expose MIME headers as an ordered array (including repetitions), the entire SMTP envelope and smtpSessionId. Bcc is derived from RCPT TO even when absent from headers.
 
 ## V3 Search
-wait-for-message supports match.header with name/contains, match.htmlContains, and bodyContains on plain text and raw HTML.
+wait-for-message supports match.header with name/valueContains, match.htmlContains, and bodyContains on plain text and raw HTML.
 
 ## V4 SMTP errors
-Message size errors return SMTP 552; temporary service/storage errors return SMTP 451.
+Message size errors return SMTP 552; capacity errors return SMTP 452; other unexpected temporary server errors return SMTP 451.
 
 ## TLS and limitations
 Restrict listener exposure to trusted test networks. Configure NODE_EXTRA_CA_CERTS on SMTP clients for test STARTTLS/SMTPS. Do not disable certificate validation. Data is in memory and lost on restart; session retention is bounded.

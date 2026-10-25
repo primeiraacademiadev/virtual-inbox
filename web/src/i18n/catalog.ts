@@ -169,6 +169,7 @@ export const messages = {
     emptyBody: "(sem conteúdo)",
   },
   en: {
+    inboxGroup: "Inboxes",
     tlsHelpNetwork:
       "Addresses and ports define where services listen and how clients connect. Saving may require restarting listeners; it does not replace the active certificate.",
     tlsHelpActive:

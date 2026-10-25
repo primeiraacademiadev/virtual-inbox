@@ -93,6 +93,11 @@ export class SmtpSessionStore {
   }
   connect(remoteAddress: string, secure = false) {
     this.cleanup();
+    if (this.sessions.size >= this.maxSessions) {
+      for (const [id, session] of this.sessions) {
+        if (!session.connected) { this.sessions.delete(id); break; }
+      }
+    }
     if (this.sessions.size >= this.maxSessions)
       throw new Fault(503, "SMTP session capacity reached", "SMTP_SESSION_CAPACITY");
     const id = randomUUID();

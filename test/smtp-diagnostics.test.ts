@@ -128,8 +128,10 @@ test("SMTP revalidation selects an exact authentication attempt and rejects inva
 test("SMTP authentication, message and error histories retain only bounded records", async () => {
   const store = new SmtpSessionStore();
   const id = store.connect("127.0.0.1");
+  let oldestAttemptId = "";
   for (let n = 0; n < 11; n++) {
     await store.authenticate(id, "username-" + n, "password-" + n, "PLAIN");
+    if (n === 0) oldestAttemptId = store.listSessions()[0].authAttempts[0].id;
   }
   for (let n = 0; n < 101; n++) store.recordMessage(id, "message-" + n);
   for (let n = 0; n < 21; n++) store.recordError(id, 450 + n, "TEST_" + n);
@@ -141,7 +143,9 @@ test("SMTP authentication, message and error histories retain only bounded recor
   assert.equal(session.errors[0].code, "TEST_1");
   assert.equal(session.authAttempts[0].authUser, "username-1");
   assert.equal((await store.verifyCredentials(id, "username-10", "password-10")).matches, true);
-  await assert.rejects(store.verifyCredentials(id, "username-0", "password-0"), (e: unknown) =>
+  // An omitted attempt ID checks the latest attempt; removed IDs are not retrievable.
+  assert.equal((await store.verifyCredentials(id, "username-0", "password-0")).matches, false);
+  await assert.rejects(store.verifyCredentials(id, "username-0", "password-0", oldestAttemptId), (e: unknown) =>
     e instanceof Fault && e.code === "SMTP_AUTH_NOT_FOUND");
   assert.ok(!JSON.stringify(store.listSessions()).includes("password-10"));
   assert.ok(!JSON.stringify(store.listClients()).includes("password-10"));

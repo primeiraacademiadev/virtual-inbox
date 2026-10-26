@@ -19,6 +19,7 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
   const address=server.address();
   if (!address || typeof address === "string") throw Error("Expected TCP address");
   const socket=connect(address.port,"127.0.0.1");
+  const closed=once(socket,"close");
   const pending: Array<(line:string)=>void>=[];
   const lines:string[]=[];
   let buffer="";
@@ -46,7 +47,7 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     assert.match(await send("DELE 1"),/^\+OK/);
     assert.match(await send("STAT"),/^\+OK 0 /);
     assert.match(await send("QUIT"),/^\+OK/);
-    await once(socket, "close");
+    await closed;
     assert.equal(sandbox.listMessages(inbox.id).length, 0);
   } finally {
     socket.destroy();server.close();

@@ -4,6 +4,7 @@ type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | 
 type Props = {
   page: AreaPage;
   docPage: string;
+  docText: string;
   onPage: (page: AreaPage) => void;
   onDocument: (doc: string) => void;
 };
@@ -17,7 +18,7 @@ const docs = [
   { id: "development", label: "Development" },
 ];
 /** Each top-level area owns its own context navigation; inbox navigation stays separate. */
-export function ContextSidebar({ page, docPage, onPage, onDocument }: Props) {
+export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const docsArea = page === "documentation" || page === "api";
   const protocolsArea = page === "smtp" || page === "pop3" || page === "simulations";
@@ -27,6 +28,9 @@ export function ContextSidebar({ page, docPage, onPage, onDocument }: Props) {
     : protocolsArea
       ? [{ key: "smtp", label: "SMTP" }, { key: "pop3", label: "POP3" }, { key: "simulations", label: "Simulated errors" }]
       : [{ key: "connections", label: "Connections and TLS" }];
+  const headings = docText.split("\n").filter(line => /^#{1,3}\s+/.test(line)).map((line, i) => ({
+    ordinal: i + 1, label: line.replace(/^#{1,3}\s+/, "").replace(/[*_`]/g, "").trim(), level: line.match(/^#+/)?.[0].length || 2,
+  }));
   return <aside className={"contextSidebar" + (collapsed ? " collapsed" : "")} aria-label={area + " navigation"}>
     <div className="contextSidebarHeader">
       {!collapsed && <strong>{area}</strong>}
@@ -45,6 +49,12 @@ export function ContextSidebar({ page, docPage, onPage, onDocument }: Props) {
         <span className="contextSectionTitle">Pages</span>
         {docs.map(doc => <button key={doc.id} type="button" className={docPage === doc.id ? "active" : ""}
           onClick={() => onDocument(doc.id)}>{doc.label}</button>)}
+      </>}
+      {docsArea && page === "documentation" && !collapsed && headings.length > 0 && <>
+        <hr />
+        <span className="contextSectionTitle">On this page</span>
+        {headings.map(heading => <button key={heading.ordinal} className={heading.level === 3 ? "tocIndented" : ""}
+          type="button" onClick={() => document.getElementById("doc-heading-" + heading.ordinal)?.scrollIntoView({ behavior: "smooth" })}>{heading.label}</button>)}
       </>}
     </nav>
   </aside>;

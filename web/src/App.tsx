@@ -121,6 +121,8 @@ export default function App() {
   const [smtpHistory, setSmtpHistory] = useState<SmtpSession[]>([]);
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
+  const [testGuid, setTestGuid] = useState("");
+  const [testResult, setTestResult] = useState("");
   const [smtpSelectedSession, setSmtpSelectedSession] = useState("");
   const [smtpResult, setSmtpResult] = useState("");
   const [smtpError, setSmtpError] = useState("");
@@ -535,6 +537,16 @@ export default function App() {
     const interval = setInterval(() => { void reloadSmtp(); }, 5000);
     return () => clearInterval(interval);
   }, [page, adminToken, reloadSmtp]);
+  async function verifyTestGuid() {
+    if (!testGuid || !adminToken) return;
+    try {
+      const value = await request<{ matches: boolean }>("/admin/test/sessions/" + encodeURIComponent(testGuid) + "/verify", {
+        method: "POST", headers: smtpAdminHeaders(), body: JSON.stringify({ username: smtpUser, password: smtpPassword }),
+      });
+      setTestResult(value.matches ? "Credentials match" : "Credentials do not match");
+    } catch (error) { setTestResult(error instanceof Error ? error.message : "Verification failed"); }
+    finally { setSmtpPassword(""); }
+  }
   async function verifySmtp() {
     if (!smtpSelectedSession || !adminToken) return;
     setSmtpResult("");
@@ -966,6 +978,15 @@ export default function App() {
             {session.errors.map((error, index) => <p key={index} className="tiny">SMTP {error.responseCode}: {error.code}</p>)}
             {!!session.authAttempts.length && <button type="button" onClick={() => { setSmtpSelectedSession(session.id); setSmtpUser(session.authUser || ""); setSmtpResult(""); }}>Validate credentials</button>}
           </section>)}
+          <section className="detail">
+            <h3>Verify SMTP / POP3 logical test session</h3>
+            <p className="tiny">Both protocols share the same inbox, password and GUID identity.</p>
+            <label>Session GUID<input value={testGuid} onChange={e => setTestGuid(e.target.value)} /></label>
+            <label>Inbox / username<input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} /></label>
+            <label>Password<input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)} autoComplete="off" /></label>
+            <button onClick={() => void verifyTestGuid()} disabled={!adminToken || !testGuid}>Verify shared credentials</button>
+            {testResult && <p role="status">{testResult}</p>}
+          </section>
           {smtpSelectedSession && <section className="detail">
             <h3>Validate recorded credentials</h3><p className="tiny">Session {smtpSelectedSession}. Compares against the most recent authentication attempt.</p>
             <label>Username<input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} autoComplete="off" /></label>

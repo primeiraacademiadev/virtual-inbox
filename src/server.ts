@@ -33,6 +33,12 @@ import {
 
 export const sandbox = new Sandbox(config.logs);
 const credentialStore = new InboxCredentialStore();
+const inboxAddresses = new Map<string, string>();
+sandbox.emitter.on("resource.removed", (id: string) => {
+  const address = inboxAddresses.get(id);
+  if (address) credentialStore.deleteInbox(address);
+  inboxAddresses.delete(id);
+});
 const smtpSessions = new SmtpSessionStore(500, credentialStore);
 const simulations = new SimulationStore();
 const protocolCounters = new ProtocolCounters();

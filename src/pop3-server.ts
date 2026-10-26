@@ -3,9 +3,10 @@ import type { Socket } from "node:net";
 import { randomUUID } from "node:crypto";
 import type { Sandbox } from "./core.js";
 import type { InboxCredentialStore } from "./inbox-credentials.js";
+import type { SimulationStore } from "./simulation-store.js";
 
 /** Test-only POP3 mailbox access, sharing the SMTP inbox/password identity. */
-export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore): Server {
+export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore): Server {
   return createServer((socket: Socket) => {
     const connectionId = randomUUID();
     let username = "";
@@ -40,6 +41,8 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
             return;
           }
           if (!sessionId) { send("-ERR authenticate with USER and PASS"); return; }
+          const rule = simulations.match(sessionId, "POP3", command);
+          if (rule) { send("-ERR " + rule.message); return; }
           const all = messages();
           const index = Number(arg.split(/\s+/)[0]);
           const selected = Number.isInteger(index) && index > 0 ? all[index - 1] : undefined;

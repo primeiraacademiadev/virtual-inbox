@@ -73,7 +73,7 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           }
           if (command === "DELE") { if (!selected) send("-ERR no such message"); else { deleted.add(selected.id); send("+OK marked"); } return; }
           send("-ERR unsupported command");
-        }).catch(() => send("-ERR command failed"));
+        }).catch(() => { send("-ERR command failed"); });
       }
     });
     socket.on("end", () => {

@@ -42,6 +42,10 @@ test("credential store normalizes inboxes, validates credentials, revokes sessio
   await assert.rejects(store.authenticate("alice@example.test", "secret"), (error: unknown) =>
     error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
   assert.equal(store.list().length, 0, "missing inboxes never create identities");
+  for (let n = 0; n < 1000; n++)
+    await assert.rejects(store.authenticate("unknown-" + n + "@example.test", "secret"), (error: unknown) =>
+      error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
+  assert.equal(store.list().length, 0, "repeated unknown authentication must not accumulate GUIDs");
   store.createInbox(" ALICE@example.test ");
   const id = await store.authenticate("alice@EXAMPLE.test", "secret");
   assert.equal(await store.authenticate(" ALICE@example.test ", "secret"), id);

@@ -16,10 +16,10 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
     let buffer = "";
     let queue = Promise.resolve();
     const deleted = new Set<string>();
+    let snapshot: ReturnType<Sandbox["listMessages"]> = [];
     const send = (line: string) => socket.write(line + "\r\n");
-    const messages = () => sessionId ? sandbox.find("email", username)
-      ? sandbox.listMessages(sandbox.find("email", username)!.id).filter(m => !deleted.has(m.id))
-      : [] : [];
+    const messages = () => snapshot.map((message, i) => ({ number: i + 1, message }))
+      .filter(entry => !deleted.has(entry.message.id));
     const multiline = (lines: string[]) => { for (const line of lines) send(line.startsWith(".") ? "." + line : line); send("."); };
     send("+OK Virtual Inbox POP3 ready");
     socket.on("data", chunk => {
@@ -34,12 +34,22 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           const command = (space < 0 ? line : line.slice(0, space)).toUpperCase();
           const arg = space < 0 ? "" : line.slice(space + 1).trim();
           counters.command("POP3");
-          if (command === "QUIT") { send("+OK goodbye"); socket.end(); return; }
+          if (command === "QUIT") {
+            if (sessionId) {
+              const inbox = sandbox.find("email", username);
+              if (inbox) for (const id of deleted) {
+                try { sandbox.removeMessage(inbox.id, id); } catch { /* expired or already deleted */ }
+              }
+            }
+            send("+OK goodbye"); socket.end(); return;
+          }
           if (command === "CAPA") { send("+OK capabilities"); multiline(["USER", "UIDL", "TOP"]); return; }
           if (command === "USER" && !sessionId) { username = arg; send(username ? "+OK user accepted" : "-ERR user required"); return; }
           if (command === "PASS" && !sessionId) {
             if (!username) { send("-ERR send USER first"); return; }
             sessionId = await credentials.authenticate(username, arg);
+            const inbox = sandbox.find("email", username);
+            snapshot = inbox ? sandbox.listMessages(inbox.id) : [];
             counters.auth("POP3");
             send("+OK authenticated");
             return;
@@ -49,18 +59,19 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           if (rule) { counters.error("POP3", true); send("-ERR " + rule.message); return; }
           const all = messages();
           const index = Number(arg.split(/\s+/)[0]);
-          const selected = Number.isInteger(index) && index > 0 ? all[index - 1] : undefined;
-          const bytes = (m: (typeof all)[number]) => Buffer.byteLength(m.rawMime ? Buffer.from(m.rawMime, "base64") : Buffer.from(m.body), "utf8");
+          const selected = Number.isInteger(index) && index > 0 && !deleted.has(snapshot[index - 1]?.id)
+            ? snapshot[index - 1] : undefined;
+          const bytes = (m: (typeof snapshot)[number]) => m.rawMime ? Buffer.from(m.rawMime, "base64").length : Buffer.byteLength(m.body);
           if (command === "NOOP") { send("+OK"); return; }
           if (command === "RSET") { deleted.clear(); send("+OK reset"); return; }
-          if (command === "STAT") { send("+OK " + all.length + " " + all.reduce((n,m)=>n+bytes(m),0)); return; }
+          if (command === "STAT") { send("+OK " + all.length + " " + all.reduce((n, entry)=>n+bytes(entry.message),0)); return; }
           if (command === "LIST" || command === "UIDL") {
             if (arg) {
               if (!selected) { send("-ERR no such message"); return; }
               send("+OK " + index + " " + (command === "LIST" ? bytes(selected) : selected.id));
             } else {
               send("+OK list follows");
-              multiline(all.map((m,i) => (i+1) + " " + (command === "LIST" ? bytes(m) : m.id)));
+              multiline(all.map(entry => entry.number + " " + (command === "LIST" ? bytes(entry.message) : entry.message.id)));
             }
             return;
           }
@@ -82,14 +93,6 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
       }
     });
     socket.on("close", () => { counters.disconnect("POP3"); });
-    socket.on("end", () => {
-      if (!sessionId) return;
-      const inbox = sandbox.find("email", username);
-      if (!inbox) return;
-      for (const id of deleted) {
-        try { sandbox.removeMessage(inbox.id, id); } catch { /* inbox may have expired */ }
-      }
-    });
     void connectionId;
   });
 }

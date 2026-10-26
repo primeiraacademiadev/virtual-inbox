@@ -9,6 +9,7 @@ import {
 import { MarkdownView } from "./components/documentation/MarkdownView";
 import { ContextSidebar } from "./components/ContextSidebar";
 import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
+import { ProtocolMetricsView } from "./components/protocols/ProtocolMetricsView";
 import { eventLabel, captureReasonLabel } from "./i18n/domain";
 import { localizeError } from "./i18n/errors";
 import { useI18n } from "./i18n/context";
@@ -961,6 +962,7 @@ export default function App() {
       {page === "smtp" && (
         <main className="information">
           <h2>SMTP clients and sessions</h2>
+          <ProtocolMetricsView adminToken={adminToken} />
           <p className="muted">Only accessible via HTTPS with ADMIN_TOKEN. SMTP authentication accepts test credentials; this view compares them with credentials observed previously.</p>
           <label>Administrator token
             <input type="password" autoComplete="off" value={adminToken} onChange={e => setAdminToken(e.target.value)} />

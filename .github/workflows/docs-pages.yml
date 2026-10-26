@@ -6,6 +6,8 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - 'scripts/prepare-docs-site.py'
+      - 'scripts/check-docs-site.py'
       - '.github/workflows/docs-pages.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
+      - 'scripts/prepare-docs-site.py'
+      - 'scripts/check-docs-site.py'
       - '.github/workflows/docs-pages.yml'
   workflow_dispatch:
 
@@ -26,6 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,7 +39,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
-      - run: mkdocs build --clean
+      - run: python scripts/prepare-docs-site.py
+      - run: mkdocs build --strict --clean
+      - run: python scripts/check-docs-site.py
       - name: Upload site artifact
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3

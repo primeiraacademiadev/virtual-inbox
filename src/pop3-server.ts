@@ -4,11 +4,13 @@ import { randomUUID } from "node:crypto";
 import type { Sandbox } from "./core.js";
 import type { InboxCredentialStore } from "./inbox-credentials.js";
 import type { SimulationStore } from "./simulation-store.js";
+import type { ProtocolCounters } from "./protocol-metrics.js";
 
 /** Test-only POP3 mailbox access, sharing the SMTP inbox/password identity. */
-export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore): Server {
+export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore, counters: ProtocolCounters): Server {
   return createServer((socket: Socket) => {
     const connectionId = randomUUID();
+    counters.connect("POP3");
     let username = "";
     let sessionId = "";
     let buffer = "";
@@ -31,18 +33,20 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           const space = line.indexOf(" ");
           const command = (space < 0 ? line : line.slice(0, space)).toUpperCase();
           const arg = space < 0 ? "" : line.slice(space + 1).trim();
+          counters.command("POP3");
           if (command === "QUIT") { send("+OK goodbye"); socket.end(); return; }
           if (command === "CAPA") { send("+OK capabilities"); multiline(["USER", "UIDL", "TOP"]); return; }
           if (command === "USER" && !sessionId) { username = arg; send(username ? "+OK user accepted" : "-ERR user required"); return; }
           if (command === "PASS" && !sessionId) {
             if (!username) { send("-ERR send USER first"); return; }
             sessionId = await credentials.authenticate(username, arg);
+            counters.auth("POP3");
             send("+OK authenticated");
             return;
           }
           if (!sessionId) { send("-ERR authenticate with USER and PASS"); return; }
           const rule = simulations.match(sessionId, "POP3", command);
-          if (rule) { send("-ERR " + rule.message); return; }
+          if (rule) { counters.error("POP3", true); send("-ERR " + rule.message); return; }
           const all = messages();
           const index = Number(arg.split(/\s+/)[0]);
           const selected = Number.isInteger(index) && index > 0 ? all[index - 1] : undefined;
@@ -68,14 +72,16 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
             const top = command === "TOP" ? Math.max(0, Number(arg.split(/\s+/)[1]) || 0) : Infinity;
             const boundary = lines.indexOf("");
             send("+OK message follows");
+            if (command === "RETR") counters.message("POP3");
             multiline(command === "TOP" ? lines.slice(0, boundary + 1 + top) : lines);
             return;
           }
           if (command === "DELE") { if (!selected) send("-ERR no such message"); else { deleted.add(selected.id); send("+OK marked"); } return; }
-          send("-ERR unsupported command");
+          counters.error("POP3"); send("-ERR unsupported command");
         }).catch(() => { send("-ERR command failed"); });
       }
     });
+    socket.on("close", () => { counters.disconnect("POP3"); });
     socket.on("end", () => {
       if (!sessionId) return;
       const inbox = sandbox.find("email", username);

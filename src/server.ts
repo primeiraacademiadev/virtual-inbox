@@ -14,6 +14,7 @@ import { SmtpSessionStore } from "./smtp-sessions.js";
 import { InboxCredentialStore } from "./inbox-credentials.js";
 import { createPop3Server } from "./pop3-server.js";
 import { SimulationStore } from "./simulation-store.js";
+import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
@@ -34,7 +35,8 @@ export const sandbox = new Sandbox(config.logs);
 const credentialStore = new InboxCredentialStore();
 const smtpSessions = new SmtpSessionStore(500, credentialStore);
 const simulations = new SimulationStore();
-const pop3 = createPop3Server(sandbox, credentialStore, simulations);
+const protocolCounters = new ProtocolCounters();
+const pop3 = createPop3Server(sandbox, credentialStore, simulations, protocolCounters);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",
@@ -272,6 +274,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "protocolMetrics": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, protocolCounters.snapshot());
+      }
       case "simulationCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const input = await body(req);
@@ -541,6 +547,7 @@ const smtpOptions: SMTPServerOptions = {
     try {
       const id = smtpSessions.connect(session.remoteAddress || "unknown", !!session.secure);
       smtpSessionIds.set(session, id);
+      protocolCounters.connect("SMTP");
       sandbox.log("smtp.session.connected", undefined, undefined, { sessionId: id });
       callback();
     } catch {
@@ -549,7 +556,7 @@ const smtpOptions: SMTPServerOptions = {
   },
   onClose(session) {
     const id = smtpSessionIds.get(session);
-    if (id) { smtpSessions.disconnect(id); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
+    if (id) { smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP"); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
   },
   // Called after the TLS handshake (STARTTLS or implicit SMTPS).
   // Implicit SMTPS can invoke this before onConnect, which records session.secure.
@@ -570,6 +577,7 @@ const smtpOptions: SMTPServerOptions = {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
     void smtpSessions.authenticate(id, auth.username || "", auth.password || "", auth.method).then(() => {
+      protocolCounters.auth("SMTP");
       sandbox.log("smtp.session.authenticated", undefined, undefined, { sessionId: id });
       callback(null, { user: auth.username || "" });
     }).catch(() => callback(Object.assign(new Error("Authentication temporarily unavailable"), { responseCode: 454 })));
@@ -616,11 +624,13 @@ const smtpOptions: SMTPServerOptions = {
         const message = sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
           parsed.html || undefined, raw.toString("base64"), attachments, metadata);
         if (metadata.smtpSessionId) smtpSessions.recordMessage(metadata.smtpSessionId, message.id);
+        protocolCounters.message("SMTP");
       }
       callback(null, "Accepted");
     })().catch((error) => {
       const failure = smtpFailure(error);
       const id = smtpSessionIds.get(session);
+      protocolCounters.error("SMTP", error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE");
       if (id) { smtpSessions.recordError(id, failure.responseCode, error instanceof Fault ? error.code || "SMTP_FAILURE" : "SMTP_FAILURE");
         sandbox.log("smtp.session.error", undefined, undefined, { sessionId: id, responseCode: failure.responseCode }); }
       callback(failure);

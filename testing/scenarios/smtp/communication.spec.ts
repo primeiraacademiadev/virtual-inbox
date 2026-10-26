@@ -52,6 +52,7 @@ for (const { mode, authMethod } of [
   test(`Communication-compatible AUTH ${authMethod} on ${mode} preserves headers/envelope and HTML`, async () => {
     requireManaged();
     const api = new ApiClient();
+    const authInbox = await api.create("email");
     const tls = mode === "plain" ? undefined : {
       ca: readFileSync(process.env.VI_TEST_CA_FILE!),
       servername: process.env.VI_TLS_SERVERNAME || "localhost",
@@ -63,7 +64,7 @@ for (const { mode, authMethod } of [
       secure: mode === "smtps",
       ignoreTLS: mode === "plain",
       requireTLS: mode === "starttls",
-      auth: { user: "communication-gateway", pass: "dummy-password-never-store" },
+      auth: { user: authInbox.address, pass: "dummy-password-never-store" },
       authMethod,
       tls,
       disableFileAccess: true,
@@ -107,7 +108,7 @@ for (const { mode, authMethod } of [
       const message = await response.json();
       expect(message.body).toBe("");
       expect(message.html).toContain(marker);
-      expect(message.authUser).toBe("communication-gateway");
+      expect(message.authUser).toBe(authInbox.address);
       expect(message.envelope).toEqual({
         mailFrom: "bounce@example.test",
         rcptTo: [to.address, cc.address, bcc.address],
@@ -135,7 +136,7 @@ for (const { mode, authMethod } of [
       const linked = sessions.filter(session => session.id === message.smtpSessionId);
       expect(linked).toHaveLength(1);
       expect(linked[0].messageIds).toContain(message.id);
-      expect(linked[0].authUser).toBe("communication-gateway");
+      expect(linked[0].authUser).toBe(authInbox.address);
       const htmlResponse = await api.fetch("/mailboxes/" + to.id + "/wait-for-message", {
         method: "POST",
         body: JSON.stringify({ timeoutMs: 1000, match: { htmlContains: marker } }),

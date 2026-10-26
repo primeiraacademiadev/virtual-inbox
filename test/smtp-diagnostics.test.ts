@@ -1,11 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SmtpSessionStore } from "../src/smtp-sessions.js";
+import { InboxCredentialStore } from "../src/inbox-credentials.js";
 import { Sandbox, Fault } from "../src/core.js";
 
-test("SMTP sessions accept arbitrary credentials and verify salted history privately", async () => {
-  const store = new SmtpSessionStore(5);
+test("SMTP accepts credentials only for registered inboxes and verifies salted history privately", async () => {
+  const credentials = new InboxCredentialStore();
+  credentials.createInbox("client");
+  const store = new SmtpSessionStore(5, credentials);
   const id = store.connect("127.0.0.1");
+  await assert.rejects(store.authenticate(id, "missing", "secret", "PLAIN"), (error: unknown) =>
+    error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
+  assert.equal(store.listSessions()[0].authAttempts.length, 0);
   await store.authenticate(id, "client", "secret", "PLAIN");
   const snapshot = store.listSessions()[0];
   assert.equal(snapshot.authenticated, true);
@@ -43,7 +49,9 @@ test("email HTML, headers, and SMTP metadata can be searched", async () => {
 });
 
 test("SMTP client aggregation distinguishes anonymous and authenticated sessions", async () => {
-  const store = new SmtpSessionStore(8);
+  const credentials = new InboxCredentialStore();
+  credentials.createInbox("integration");
+  const store = new SmtpSessionStore(8, credentials);
   const anonymous = store.connect("10.0.0.10", false);
   const first = store.connect("10.0.0.10");
   const second = store.connect("10.0.0.10");
@@ -103,7 +111,10 @@ test("SMTP history is bounded; active connections cannot be evicted", () => {
 });
 
 test("SMTP revalidation selects an exact authentication attempt and rejects invalid requests", async () => {
-  const store = new SmtpSessionStore();
+  const credentials = new InboxCredentialStore();
+  credentials.createInbox("first");
+  credentials.createInbox("second");
+  const store = new SmtpSessionStore(500, credentials);
   const id = store.connect("127.0.0.1");
   await assert.rejects(store.verifyCredentials(id, "someone", "secret"), (e: unknown) =>
     e instanceof Fault && e.status === 404 && e.code === "SMTP_AUTH_NOT_FOUND");
@@ -126,7 +137,9 @@ test("SMTP revalidation selects an exact authentication attempt and rejects inva
 });
 
 test("SMTP authentication, message and error histories retain only bounded records", async () => {
-  const store = new SmtpSessionStore();
+  const credentials = new InboxCredentialStore();
+  for (let n = 0; n < 11; n++) credentials.createInbox("username-" + n);
+  const store = new SmtpSessionStore(500, credentials);
   const id = store.connect("127.0.0.1");
   let oldestAttemptId = "";
   for (let n = 0; n < 11; n++) {

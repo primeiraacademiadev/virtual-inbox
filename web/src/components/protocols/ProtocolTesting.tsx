@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { request } from "../../api";
+import { ProtocolMetricsView } from "./ProtocolMetricsView";
 
 type Rule = { id: string; sessionId: string; protocol: "SMTP" | "POP3"; command: string; code: number; message: string; remaining: number };
 type Props = { adminToken: string; mode: "pop3" | "simulations" };
@@ -56,6 +57,7 @@ export function ProtocolTesting({ adminToken, mode }: Props) {
   return <main className="information">
     <h2>{mode === "pop3" ? "POP3 test identities" : "Simulation rules"}</h2>
     <p className="muted">SMTP and POP3 share inbox/password-derived sessions. This technical interface requires HTTPS and ADMIN_TOKEN.</p>
+    <ProtocolMetricsView adminToken={adminToken} />
     <div className="detail">
       <h3>Resolve or verify session</h3>
       <label>Inbox / username<input value={inbox} onChange={e => setInbox(e.target.value)} autoComplete="off" /></label>

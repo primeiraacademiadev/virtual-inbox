@@ -1,10 +1,17 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Only validate the latest commit of a PR; keep the main-branch build independent.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 jobs:
   build-test-audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         node: ['24', '26']
@@ -18,7 +25,7 @@ jobs:
       - name: Install console
         run: npm ci --prefix web --ignore-scripts --no-fund
       - name: Tests
-        run: npm test
+        run: timeout --signal=TERM --kill-after=10s 600s npm test
       - name: Integrated backend and console build
         run: npm run build
       - name: Backend dependency audit
@@ -29,6 +36,7 @@ jobs:
   sonar:
     name: SonarCloud Quality Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
@@ -51,7 +59,7 @@ jobs:
           npm ci --ignore-scripts --no-fund
           npm ci --prefix web --ignore-scripts --no-fund
       - name: Run tests with LCOV
-        run: npm run test:coverage
+        run: timeout --signal=TERM --kill-after=10s 600s npm run test:coverage
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602
         env:

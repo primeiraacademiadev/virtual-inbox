@@ -11,6 +11,10 @@ import {
 } from "node:crypto";
 import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import { SmtpSessionStore } from "./smtp-sessions.js";
+import { InboxCredentialStore } from "./inbox-credentials.js";
+import { createPop3Server } from "./pop3-server.js";
+import { SimulationStore } from "./simulation-store.js";
+import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
@@ -28,7 +32,17 @@ import {
 } from "./tls/server-names.js";
 
 export const sandbox = new Sandbox(config.logs);
-const smtpSessions = new SmtpSessionStore();
+const credentialStore = new InboxCredentialStore();
+const inboxAddresses = new Map<string, string>();
+sandbox.emitter.on("resource.removed", (id: string) => {
+  const address = inboxAddresses.get(id);
+  if (address) credentialStore.deleteInbox(address);
+  inboxAddresses.delete(id);
+});
+const smtpSessions = new SmtpSessionStore(500, credentialStore);
+const simulations = new SimulationStore();
+const protocolCounters = new ProtocolCounters();
+const pop3 = createPop3Server(sandbox, credentialStore, simulations, protocolCounters);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",
@@ -56,6 +70,7 @@ function adminAllowed(req: IncomingMessage) {
 
 const port = Number(setting("PORT", "3000"));
 const smtpPort = Number(setting("SMTP_PORT", "2525"));
+const pop3Port = Number(setting("POP3_PORT", "2110"));
 const httpsPort = Number(setting("HTTPS_PORT", "3443"));
 const smtpsPort = Number(setting("SMTPS_PORT", "2465"));
 const demoPort = Number(setting("DEMO_PORT", "3001"));
@@ -265,6 +280,41 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "protocolMetrics": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, protocolCounters.snapshot());
+      }
+      case "simulationCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        if (!credentialStore.resolve(params.sessionId)) throw new Fault(404, "Unknown test session");
+        return json(res, 201, simulations.create({ sessionId: params.sessionId, protocol: input.protocol, command: input.command, code: input.code, message: input.message || "Simulated failure", remaining: input.remaining || 1 }));
+      }
+      case "simulationList": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, simulations.list(params.sessionId));
+      }
+      case "simulationDelete": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        simulations.delete(params.ruleId);
+        return json(res, 204, {});
+      }
+      case "testSessionCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        return json(res, 201, { sessionId: await credentialStore.authenticate(input.username, input.password) });
+      }
+      case "testSessionGet": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const found = credentialStore.resolve(params.sessionId);
+        if (!found) throw new Fault(404, "Test session not found", "TEST_SESSION_NOT_FOUND");
+        return json(res, 200, found);
+      }
+      case "testSessionVerify": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        return json(res, 200, { matches: await credentialStore.verify(input.username, input.password, params.sessionId) });
+      }
       case "smtpClients":
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpSessions.listClients());
@@ -426,16 +476,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "emailCreate":
       case "smsCreate": {
         const input = await body(req);
-        return json(res, 201, sandbox.create(channel,
+        const created = sandbox.create(channel,
           channel === "email" ? input.address : input.phoneNumber,
-          input.ttlSeconds, input.observerId, input.generation));
+          input.ttlSeconds, input.observerId, input.generation);
+        if (created.channel === "email") inboxAddresses.set(created.id, created.address);
+        return json(res, 201, created);
       }
       case "emailGet":
       case "smsGet":
         return json(res, 200, sandbox.resource(inboxId));
       case "emailDelete":
       case "smsDelete":
+        const deletedInbox = sandbox.resource(inboxId);
         sandbox.deleteResource(inboxId);
+        if (deletedInbox.channel === "email") credentialStore.deleteInbox(deletedInbox.address);
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
@@ -492,7 +546,7 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
   const failure = error instanceof Error ? error : new Error(String(error));
   // Permanent message-size rejection must not trigger transport retries.
   const status = error instanceof Fault ? error.status : 500;
-  const responseCode = status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
+  const responseCode = error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE" ? status : status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
   return Object.assign(failure, { responseCode });
 }
 const smtpOptions: SMTPServerOptions = {
@@ -501,6 +555,7 @@ const smtpOptions: SMTPServerOptions = {
     try {
       const id = smtpSessions.connect(session.remoteAddress || "unknown", !!session.secure);
       smtpSessionIds.set(session, id);
+      protocolCounters.connect("SMTP");
       sandbox.log("smtp.session.connected", undefined, undefined, { sessionId: id });
       callback();
     } catch {
@@ -509,7 +564,7 @@ const smtpOptions: SMTPServerOptions = {
   },
   onClose(session) {
     const id = smtpSessionIds.get(session);
-    if (id) { smtpSessions.disconnect(id); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
+    if (id) { smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP"); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
   },
   // Called after the TLS handshake (STARTTLS or implicit SMTPS).
   // Implicit SMTPS can invoke this before onConnect, which records session.secure.
@@ -530,6 +585,7 @@ const smtpOptions: SMTPServerOptions = {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
     void smtpSessions.authenticate(id, auth.username || "", auth.password || "", auth.method).then(() => {
+      protocolCounters.auth("SMTP");
       sandbox.log("smtp.session.authenticated", undefined, undefined, { sessionId: id });
       callback(null, { user: auth.username || "" });
     }).catch(() => callback(Object.assign(new Error("Authentication temporarily unavailable"), { responseCode: 454 })));
@@ -551,6 +607,9 @@ const smtpOptions: SMTPServerOptions = {
         chunks.push(buffer);
       }
       if (oversized || stream.sizeExceeded) throw new Fault(413, "MIME too large", "MESSAGE_TOO_LARGE");
+      const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
+      const rule = simulations.match(identity?.testSessionId, "SMTP", "DATA");
+      if (rule) throw new Fault(rule.code, rule.message, "SIMULATED_SMTP_FAILURE");
       const raw = Buffer.concat(chunks);
       const parsed = await new PostalMime().parse(raw);
       const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
@@ -573,11 +632,13 @@ const smtpOptions: SMTPServerOptions = {
         const message = sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
           parsed.html || undefined, raw.toString("base64"), attachments, metadata);
         if (metadata.smtpSessionId) smtpSessions.recordMessage(metadata.smtpSessionId, message.id);
+        protocolCounters.message("SMTP");
       }
       callback(null, "Accepted");
     })().catch((error) => {
       const failure = smtpFailure(error);
       const id = smtpSessionIds.get(session);
+      protocolCounters.error("SMTP", error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE");
       if (id) { smtpSessions.recordError(id, failure.responseCode, error instanceof Fault ? error.code || "SMTP_FAILURE" : "SMTP_FAILURE");
         sandbox.log("smtp.session.error", undefined, undefined, { sessionId: id, responseCode: failure.responseCode }); }
       callback(failure);
@@ -637,6 +698,7 @@ https?.listen(httpsPort, apiHost, () => console.log("HTTPS and web console liste
 demoHttps?.listen(demoHttpsPort, apiHost, () => console.log("HTTPS demo API listening on " + demoHttpsPort));
 demo.listen(demoPort, apiHost, () => console.log("Demo API listening on " + demoPort));
 smtp.listen(smtpPort, smtpHost, () => console.log("SMTP listening on " + smtpPort));
+pop3.listen(pop3Port, smtpHost, () => console.log("POP3 listening on " + pop3Port));
 smtps?.listen(smtpsPort, smtpHost, () => console.log("SMTPS listening on " + smtpsPort));
 function stop() {
   http.close(); https?.close(); demoHttps?.close(); demo.close(); smtp.close(); smtps?.close();

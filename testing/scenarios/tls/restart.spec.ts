@@ -36,6 +36,7 @@ test("new process recovers the same persisted automatic TLS identity", async () 
     PORT: String(secondaryPort + 1),
     HTTPS_PORT: String(secondaryPort),
     SMTP_PORT: String(secondaryPort + 2),
+    POP3_PORT: String(secondaryPort + 6),
     SMTPS_PORT: String(secondaryPort + 3),
     DEMO_PORT: String(secondaryPort + 4),
     DEMO_HTTPS_PORT: String(secondaryPort + 5),

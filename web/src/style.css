@@ -112,3 +112,26 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
 .composeHeading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .composeHeading>strong{overflow-wrap:anywhere}
 .composeHeading button{font-size:12px;padding:6px 10px;white-space:nowrap}
+
+/* Contextual navigation is independent of the inbox explorer. */
+.shell{position:relative}
+.contextSidebar{position:absolute;z-index:3;top:60px;bottom:0;left:0;width:240px;background:#121c2c;border-right:1px solid #34435d;padding:12px;overflow-y:auto}
+.contextSidebar.collapsed{width:66px;padding:8px}
+.contextSidebarHeader{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.contextSidebarHeader button{padding:6px}
+.contextSidebar nav{display:flex;flex-direction:column;gap:5px}
+.contextSidebar nav button{width:100%;text-align:left;border:0;background:transparent;padding:10px;overflow-wrap:anywhere}
+.contextSidebar nav button:hover,.contextSidebar nav button.active{background:#273956}
+.contextSidebar .contextSectionTitle{font-size:12px;color:#afc2d9;margin-top:10px}
+.contextSidebar hr{width:100%;border:0;border-top:1px solid #34435d}
+.shell:has(.contextSidebar)>.information{margin-left:240px;width:calc(100% - 240px)}
+.shell:has(.contextSidebar.collapsed)>.information{margin-left:66px;width:calc(100% - 66px)}
+@media(max-width:650px){
+ .contextSidebar{width:156px;padding:8px}
+ .shell:has(.contextSidebar)>.information{margin-left:156px;width:calc(100% - 156px)}
+ .contextSidebar.collapsed{width:44px}
+ .shell:has(.contextSidebar.collapsed)>.information{margin-left:44px;width:calc(100% - 44px)}
+}
+
+.contextSidebar nav button.tocIndented{padding-left:22px;font-size:0.88rem;color:#b7c9de}
+.docMarkdown [id^='doc-heading-']{scroll-margin-top:20px}

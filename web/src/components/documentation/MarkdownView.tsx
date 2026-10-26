@@ -1,3 +1,4 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -13,10 +14,12 @@ const downloads: Record<string, string> = {
 type Props = { markdown: string; onDocument: (id: string) => void };
 
 export function MarkdownView({ markdown, onDocument }: Props) {
+  let headingOrdinal = 0;
   function navigate(href: string) {
     const [raw, anchor] = href.split("#", 2);
     if (!raw && anchor) {
-      document.getElementById(decodeURIComponent(anchor))?.scrollIntoView({ behavior: "smooth" });
+      const id = decodeURIComponent(anchor);
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
       return;
     }
     const normalized = raw.replace(/^\.\.\//, "").replace(/^docs\//, "");
@@ -36,6 +39,9 @@ export function MarkdownView({ markdown, onDocument }: Props) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
+        h1: ({ children }) => <h1 id={"doc-heading-" + ++headingOrdinal}>{children}</h1>,
+        h2: ({ children }) => <h2 id={"doc-heading-" + ++headingOrdinal}>{children}</h2>,
+        h3: ({ children }) => <h3 id={"doc-heading-" + ++headingOrdinal}>{children}</h3>,
         a: ({ href, children }) => {
           if (!href) return <>{children}</>;
           if (Object.hasOwn(downloads, href)) {

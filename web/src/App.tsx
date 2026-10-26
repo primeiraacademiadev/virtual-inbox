@@ -7,6 +7,9 @@ import {
   type GenerationOptions,
 } from "./components/identity/preferences";
 import { MarkdownView } from "./components/documentation/MarkdownView";
+import { ContextSidebar } from "./components/ContextSidebar";
+import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
+import { ProtocolMetricsView } from "./components/protocols/ProtocolMetricsView";
 import { eventLabel, captureReasonLabel } from "./i18n/domain";
 import { localizeError } from "./i18n/errors";
 import { useI18n } from "./i18n/context";
@@ -30,7 +33,7 @@ import {
   type Recipient,
 } from "./api";
 type View = "split" | "inbox" | "logs";
-type Page = "workspace" | "connections" | "smtp" | "documentation" | "api";
+type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api";
 type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
 type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
 async function postDemo(path: string, data: unknown) {
@@ -121,6 +124,8 @@ export default function App() {
   const [smtpHistory, setSmtpHistory] = useState<SmtpSession[]>([]);
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
+  const [testGuid, setTestGuid] = useState("");
+  const [testResult, setTestResult] = useState("");
   const [smtpSelectedSession, setSmtpSelectedSession] = useState("");
   const [smtpResult, setSmtpResult] = useState("");
   const [smtpError, setSmtpError] = useState("");
@@ -535,6 +540,16 @@ export default function App() {
     const interval = setInterval(() => { void reloadSmtp(); }, 5000);
     return () => clearInterval(interval);
   }, [page, adminToken, reloadSmtp]);
+  async function verifyTestGuid() {
+    if (!testGuid || !adminToken) return;
+    try {
+      const value = await request<{ matches: boolean }>("/admin/test/sessions/" + encodeURIComponent(testGuid) + "/verify", {
+        method: "POST", headers: smtpAdminHeaders(), body: JSON.stringify({ username: smtpUser, password: smtpPassword }),
+      });
+      setTestResult(value.matches ? "Credentials match" : "Credentials do not match");
+    } catch (error) { setTestResult(error instanceof Error ? error.message : "Verification failed"); }
+    finally { setSmtpPassword(""); }
+  }
   async function verifySmtp() {
     if (!smtpSelectedSession || !adminToken) return;
     setSmtpResult("");
@@ -568,10 +583,9 @@ export default function App() {
           {menuOpen && (
             <nav id="primary-nav-menu" className="hamburgerMenu" aria-label={t("documentation")}>
               <button onClick={() => openPage("workspace")}>{t("inboxes")}</button>
-              <button onClick={() => openPage("connections")}>{t("tls")}</button>
-              <button onClick={() => openPage("smtp")}>SMTP clients</button>
+              <button onClick={() => openPage("smtp")}>Protocols</button>
               <button onClick={() => openPage("documentation")}>{t("documentation")}</button>
-              <button onClick={() => openPage("api")}>{t("api")}</button>
+              <button onClick={() => openPage("connections")}>System</button>
             </nav>
           )}
         </div>
@@ -584,6 +598,7 @@ export default function App() {
         </span>
         <CopyButton value={observer} label={t("copySession")} />
       </header>
+      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} docText={docText} onPage={openPage} onDocument={openDocument} />}
       {page === "workspace" && (
         <div className="workspace">
           <aside className={"sidebar" + (collapsed ? " closed" : "")}>
@@ -947,6 +962,7 @@ export default function App() {
       {page === "smtp" && (
         <main className="information">
           <h2>SMTP clients and sessions</h2>
+          <ProtocolMetricsView adminToken={adminToken} />
           <p className="muted">Only accessible via HTTPS with ADMIN_TOKEN. SMTP authentication accepts test credentials; this view compares them with credentials observed previously.</p>
           <label>Administrator token
             <input type="password" autoComplete="off" value={adminToken} onChange={e => setAdminToken(e.target.value)} />
@@ -966,6 +982,15 @@ export default function App() {
             {session.errors.map((error, index) => <p key={index} className="tiny">SMTP {error.responseCode}: {error.code}</p>)}
             {!!session.authAttempts.length && <button type="button" onClick={() => { setSmtpSelectedSession(session.id); setSmtpUser(session.authUser || ""); setSmtpResult(""); }}>Validate credentials</button>}
           </section>)}
+          <section className="detail">
+            <h3>Verify SMTP / POP3 logical test session</h3>
+            <p className="tiny">Both protocols share the same inbox, password and GUID identity.</p>
+            <label>Session GUID<input value={testGuid} onChange={e => setTestGuid(e.target.value)} /></label>
+            <label>Inbox / username<input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} /></label>
+            <label>Password<input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)} autoComplete="off" /></label>
+            <button onClick={() => void verifyTestGuid()} disabled={!adminToken || !testGuid}>Verify shared credentials</button>
+            {testResult && <p role="status">{testResult}</p>}
+          </section>
           {smtpSelectedSession && <section className="detail">
             <h3>Validate recorded credentials</h3><p className="tiny">Session {smtpSelectedSession}. Compares against the most recent authentication attempt.</p>
             <label>Username<input value={smtpUser} onChange={e => setSmtpUser(e.target.value)} autoComplete="off" /></label>
@@ -975,6 +1000,7 @@ export default function App() {
           </section>}
         </main>
       )}
+      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} />}
       {page === "connections" && (
         <main className="information">
           <h2>{t("connectionTitle")}</h2>

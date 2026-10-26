@@ -16,13 +16,13 @@ Each language includes introductory, integration, API, SDK, TLS, architecture, d
 
 - [Docker setup](docker.md)
 - [HTTP API](api.md) and [generated OpenAPI guidance](openapi.md)
-- [SMTP and POP3 test identities](test-identities-and-pop3.md), including shared test sessions, fault injection and diagnostics from the pending development branch
+- [SMTP and POP3 test identities](test-identities-and-pop3.md), including shared test sessions, fault injection and diagnostics
 - [Configuration](configuration.md) and [TLS](tls.md)
 
 ## Important security note
 
 Virtual Inbox is a **disposable test tool**, not a production mailbox or authentication service. Message APIs are intentionally unauthenticated. Run it on a trusted test network; protect administrative interfaces and do not expose sandbox data or credentials to untrusted clients.
 
-[View repository](https://github.com/primeiraacademiadev/virtual-inbox) · [Review the pending POP3/session work](https://github.com/primeiraacademiadev/virtual-inbox/pull/20)
+[View repository](https://github.com/primeiraacademiadev/virtual-inbox)
 
 The hosted website contains documentation only; it does not host a running Virtual Inbox instance.

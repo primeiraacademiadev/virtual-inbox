@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 
 type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api";
 type Props = {

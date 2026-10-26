@@ -29,8 +29,9 @@ test("floating navigation, copy and search close on outside click or Escape", as
   await expect(page.locator("#primary-nav-menu")).toBeHidden();
 
   await toggle.click();
-  await page.locator("#primary-nav-menu button").nth(3).click();
+  await page.locator("#primary-nav-menu button").nth(2).click();
   const search = page.locator(".docSearch input");
+  await expect(search).toBeVisible();
   await search.click();
   await expect(page.locator(".docSearchResults")).toBeVisible();
   await page.locator(".information h2").first().click();

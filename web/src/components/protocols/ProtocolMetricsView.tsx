@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { request } from "../../api";
 type Counter = {
  connectionsTotal: number; connectionsActive: number; authentications: number;

@@ -272,6 +272,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "simulationCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        if (!credentialStore.resolve(params.sessionId)) throw new Fault(404, "Unknown test session");
+        return json(res, 201, simulations.create({ sessionId: params.sessionId, protocol: input.protocol, command: input.command, code: input.code, message: input.message || "Simulated failure", remaining: input.remaining || 1 }));
+      }
+      case "simulationList": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, simulations.list(params.sessionId));
+      }
+      case "simulationDelete": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        simulations.delete(params.ruleId);
+        return json(res, 204, {});
+      }
       case "testSessionCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const input = await body(req);

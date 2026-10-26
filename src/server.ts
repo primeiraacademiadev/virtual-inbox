@@ -11,6 +11,8 @@ import {
 } from "node:crypto";
 import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import { SmtpSessionStore } from "./smtp-sessions.js";
+import { InboxCredentialStore } from "./inbox-credentials.js";
+import { createPop3Server } from "./pop3-server.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
@@ -28,7 +30,9 @@ import {
 } from "./tls/server-names.js";
 
 export const sandbox = new Sandbox(config.logs);
-const smtpSessions = new SmtpSessionStore();
+const credentialStore = new InboxCredentialStore();
+const smtpSessions = new SmtpSessionStore(500, credentialStore);
+const pop3 = createPop3Server(sandbox, credentialStore);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",
@@ -56,6 +60,7 @@ function adminAllowed(req: IncomingMessage) {
 
 const port = Number(setting("PORT", "3000"));
 const smtpPort = Number(setting("SMTP_PORT", "2525"));
+const pop3Port = Number(setting("POP3_PORT", "2110"));
 const httpsPort = Number(setting("HTTPS_PORT", "3443"));
 const smtpsPort = Number(setting("SMTPS_PORT", "2465"));
 const demoPort = Number(setting("DEMO_PORT", "3001"));
@@ -265,6 +270,22 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "testSessionCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        return json(res, 201, { sessionId: await credentialStore.authenticate(input.username, input.password) });
+      }
+      case "testSessionGet": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const found = credentialStore.resolve(params.sessionId);
+        if (!found) throw new Fault(404, "Test session not found", "TEST_SESSION_NOT_FOUND");
+        return json(res, 200, found);
+      }
+      case "testSessionVerify": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const input = await body(req);
+        return json(res, 200, { matches: await credentialStore.verify(input.username, input.password, params.sessionId) });
+      }
       case "smtpClients":
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpSessions.listClients());
@@ -435,7 +456,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 200, sandbox.resource(inboxId));
       case "emailDelete":
       case "smsDelete":
+        const deletedInbox = sandbox.resource(inboxId);
         sandbox.deleteResource(inboxId);
+        if (deletedInbox.channel === "email") credentialStore.deleteInbox(deletedInbox.address);
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
@@ -637,6 +660,7 @@ https?.listen(httpsPort, apiHost, () => console.log("HTTPS and web console liste
 demoHttps?.listen(demoHttpsPort, apiHost, () => console.log("HTTPS demo API listening on " + demoHttpsPort));
 demo.listen(demoPort, apiHost, () => console.log("Demo API listening on " + demoPort));
 smtp.listen(smtpPort, smtpHost, () => console.log("SMTP listening on " + smtpPort));
+pop3.listen(pop3Port, smtpHost, () => console.log("POP3 listening on " + pop3Port));
 smtps?.listen(smtpsPort, smtpHost, () => console.log("SMTPS listening on " + smtpsPort));
 function stop() {
   http.close(); https?.close(); demoHttps?.close(); demo.close(); smtp.close(); smtps?.close();

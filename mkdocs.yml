@@ -1,0 +1,81 @@
+site_name: Virtual Inbox
+site_description: Ephemeral email and SMS sandbox for demonstrations, integration and automated tests
+site_url: https://primeiraacademiadev.github.io/virtual-inbox/
+repo_url: https://github.com/primeiraacademiadev/virtual-inbox
+repo_name: primeiraacademiadev/virtual-inbox
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+plugins:
+  - search
+nav:
+  - Home: index.md
+  - English:
+      - Getting started: i18n/en/overview.md
+      - Demo: i18n/en/demo.md
+      - Integration: i18n/en/integration.md
+      - API: i18n/en/api.md
+      - Tests and SDK: i18n/en/sdk.md
+      - TLS: i18n/en/tls.md
+      - Architecture: i18n/en/architecture.md
+      - Development: i18n/en/development.md
+  - Português:
+      - Começar: i18n/pt-PT/overview.md
+      - Demonstração: i18n/pt-PT/demo.md
+      - Integração: i18n/pt-PT/integration.md
+      - API: i18n/pt-PT/api.md
+      - Testes e SDK: i18n/pt-PT/sdk.md
+      - TLS: i18n/pt-PT/tls.md
+      - Arquitetura: i18n/pt-PT/architecture.md
+      - Desenvolvimento: i18n/pt-PT/development.md
+  - Français:
+      - Démarrer: i18n/fr/overview.md
+      - Démonstration: i18n/fr/demo.md
+      - Intégration: i18n/fr/integration.md
+      - API: i18n/fr/api.md
+      - Tests et SDK: i18n/fr/sdk.md
+      - TLS: i18n/fr/tls.md
+      - Architecture: i18n/fr/architecture.md
+      - Développement: i18n/fr/development.md
+  - Reference:
+      - HTTP API: api.md
+      - OpenAPI maintenance: openapi.md
+      - SMTP and POP3 test identities: test-identities-and-pop3.md
+      - Docker: docker.md
+      - Configuration: configuration.md
+      - Identity generation: identity-generation.md
+      - SMTP diagnostics: smtp-session-diagnostics.md
+      - Internationalization: i18n.md
+      - Integration notes: integration.md
+      - Search: search.md
+      - SDK: sdk.md
+      - Architecture: architecture.md
+      - TLS: tls.md
+exclude_docs: |
+  revisions/
+  backlog.md
+  documentation-review.md
+  code-style.md
+  sonarcloud-quality-gate.md
+  sonarqube.md
+  .gitignore

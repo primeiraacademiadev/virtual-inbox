@@ -307,7 +307,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const input = await body(req);
         if (typeof input.username !== "string" || !input.username.trim())
           throw new Fault(400, "Inbox required", "INVALID_INBOX");
-        if (!sandbox.find("email", input.username))
+        let available = false;
+        try { available = !!sandbox.find("email", input.username); } catch { /* expired inbox */ }
+        if (!available)
           throw new Fault(404, "Test inbox does not exist", "TEST_INBOX_NOT_FOUND");
         return json(res, 201, { sessionId: await credentialStore.authenticate(input.username, input.password) });
       }

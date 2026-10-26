@@ -153,6 +153,28 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal((await api("GET", "/admin/test/sessions/" + id)).status, 404);
     assert.deepEqual((await api("GET", endpoint)).data, [], "delete removes session simulation rules");
     assert.equal((await api("POST", "/admin/test/sessions", credentials)).status, 404);
+
+    // An expired inbox must not allow a new identity even before the next cleanup tick.
+    const ttlInboxResponse = await fetch("http://127.0.0.1:" + port + "/api/mailboxes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: "short-lived@example.test", ttlSeconds: 1 }),
+    });
+    assert.equal(ttlInboxResponse.status, 201);
+    const ttlInbox = await ttlInboxResponse.json() as { id: string };
+    const ttlCredentials = { username: "short-lived@example.test", password: "short-password" };
+    const ttlSession = await api("POST", "/admin/test/sessions", ttlCredentials);
+    assert.equal(ttlSession.status, 201);
+    await delay(1200);
+    const expiredAuth = await api("POST", "/admin/test/sessions", ttlCredentials);
+    assert.equal(expiredAuth.status, 404);
+    assert.equal(expiredAuth.data.errorCode, "TEST_INBOX_NOT_FOUND");
+    let expiredLookup = await api("GET", "/admin/test/sessions/" + ttlSession.data.sessionId);
+    for (let retry = 0; retry < 10 && expiredLookup.status !== 404; retry++) {
+      await delay(200);
+      expiredLookup = await api("GET", "/admin/test/sessions/" + ttlSession.data.sessionId);
+    }
+    assert.equal(expiredLookup.status, 404, "TTL cleanup must revoke the existing GUID");
+    assert.equal((await fetch("http://127.0.0.1:" + port + "/api/mailboxes/" + ttlInbox.id)).status, 404);
   } finally {
     if (child.exitCode === null) {
       child.kill("SIGTERM");

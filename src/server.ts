@@ -13,6 +13,7 @@ import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import { SmtpSessionStore } from "./smtp-sessions.js";
 import { InboxCredentialStore } from "./inbox-credentials.js";
 import { createPop3Server } from "./pop3-server.js";
+import { SimulationStore } from "./simulation-store.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
@@ -32,7 +33,8 @@ import {
 export const sandbox = new Sandbox(config.logs);
 const credentialStore = new InboxCredentialStore();
 const smtpSessions = new SmtpSessionStore(500, credentialStore);
-const pop3 = createPop3Server(sandbox, credentialStore);
+const simulations = new SimulationStore();
+const pop3 = createPop3Server(sandbox, credentialStore, simulations);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",

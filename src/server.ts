@@ -532,7 +532,7 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
   const failure = error instanceof Error ? error : new Error(String(error));
   // Permanent message-size rejection must not trigger transport retries.
   const status = error instanceof Fault ? error.status : 500;
-  const responseCode = status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
+  const responseCode = error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE" ? status : status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
   return Object.assign(failure, { responseCode });
 }
 const smtpOptions: SMTPServerOptions = {
@@ -591,6 +591,9 @@ const smtpOptions: SMTPServerOptions = {
         chunks.push(buffer);
       }
       if (oversized || stream.sizeExceeded) throw new Fault(413, "MIME too large", "MESSAGE_TOO_LARGE");
+      const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
+      const rule = simulations.match(identity?.testSessionId, "SMTP", "DATA");
+      if (rule) throw new Fault(rule.code, rule.message, "SIMULATED_SMTP_FAILURE");
       const raw = Buffer.concat(chunks);
       const parsed = await new PostalMime().parse(raw);
       const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"

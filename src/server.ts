@@ -476,9 +476,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "emailCreate":
       case "smsCreate": {
         const input = await body(req);
-        return json(res, 201, sandbox.create(channel,
+        const created = sandbox.create(channel,
           channel === "email" ? input.address : input.phoneNumber,
-          input.ttlSeconds, input.observerId, input.generation));
+          input.ttlSeconds, input.observerId, input.generation);
+        if (created.channel === "email") inboxAddresses.set(created.id, created.address);
+        return json(res, 201, created);
       }
       case "emailGet":
       case "smsGet":

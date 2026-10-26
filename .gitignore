@@ -157,3 +157,6 @@ data/network-settings.json
 
 # Playwright-generated reports and traces
 testing/reports/
+
+# Generated MkDocs site (staging is under the existing .cache ignore)
+site/

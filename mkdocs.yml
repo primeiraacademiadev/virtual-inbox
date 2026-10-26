@@ -4,13 +4,15 @@ site_url: https://primeiraacademiadev.github.io/virtual-inbox/
 repo_url: https://github.com/primeiraacademiadev/virtual-inbox
 repo_name: primeiraacademiadev/virtual-inbox
 edit_uri: edit/main/docs/
-docs_dir: docs
+# Generated only for the website. The canonical Markdown remains in docs/.
+docs_dir: .cache/docs-site/docs
 site_dir: site
+watch:
+  - docs
 theme:
   name: material
   language: en
   features:
-    - navigation.sections
     - navigation.indexes
     - search.highlight
     - content.code.copy
@@ -28,54 +30,82 @@ markdown_extensions:
   - tables
 plugins:
   - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+        - locale: pt
+          name: Português
+          nav_translations:
+            Getting started: Começar
+            Demo: Demonstração
+            Integration: Integração
+            API: API
+            Tests and SDK: Testes e SDK
+            TLS: TLS
+            Architecture: Arquitetura
+            Development: Desenvolvimento
+            Technical reference: Referência técnica
+            HTTP API: API HTTP
+            OpenAPI maintenance: Manutenção OpenAPI
+            SMTP and POP3 test identities: Identidades SMTP e POP3
+            Docker: Docker
+            Configuration: Configuração
+            Identity generation: Geração de identidades
+            SMTP diagnostics: Diagnósticos SMTP
+            Internationalization: Internacionalização
+            Integration notes: Notas de integração
+            Search: Pesquisa
+            SDK: SDK
+        - locale: fr
+          name: Français
+          nav_translations:
+            Getting started: Démarrer
+            Demo: Démonstration
+            Integration: Intégration
+            API: API
+            Tests and SDK: Tests et SDK
+            TLS: TLS
+            Architecture: Architecture
+            Development: Développement
+            Technical reference: Référence technique
+            HTTP API: API HTTP
+            OpenAPI maintenance: Maintenance OpenAPI
+            SMTP and POP3 test identities: Identités SMTP et POP3
+            Docker: Docker
+            Configuration: Configuration
+            Identity generation: Génération des identités
+            SMTP diagnostics: Diagnostics SMTP
+            Internationalization: Internationalisation
+            Integration notes: Notes d'intégration
+            Search: Recherche
+            SDK: SDK
+# Only the selected language appears in the sidebar; reference starts collapsed.
 nav:
-  - Home: index.md
-  - English:
-      - Getting started: i18n/en/overview.md
-      - Demo: i18n/en/demo.md
-      - Integration: i18n/en/integration.md
-      - API: i18n/en/api.md
-      - Tests and SDK: i18n/en/sdk.md
-      - TLS: i18n/en/tls.md
-      - Architecture: i18n/en/architecture.md
-      - Development: i18n/en/development.md
-  - Português:
-      - Começar: i18n/pt-PT/overview.md
-      - Demonstração: i18n/pt-PT/demo.md
-      - Integração: i18n/pt-PT/integration.md
-      - API: i18n/pt-PT/api.md
-      - Testes e SDK: i18n/pt-PT/sdk.md
-      - TLS: i18n/pt-PT/tls.md
-      - Arquitetura: i18n/pt-PT/architecture.md
-      - Desenvolvimento: i18n/pt-PT/development.md
-  - Français:
-      - Démarrer: i18n/fr/overview.md
-      - Démonstration: i18n/fr/demo.md
-      - Intégration: i18n/fr/integration.md
-      - API: i18n/fr/api.md
-      - Tests et SDK: i18n/fr/sdk.md
-      - TLS: i18n/fr/tls.md
-      - Architecture: i18n/fr/architecture.md
-      - Développement: i18n/fr/development.md
-  - Reference:
-      - HTTP API: api.md
-      - OpenAPI maintenance: openapi.md
-      - SMTP and POP3 test identities: test-identities-and-pop3.md
-      - Docker: docker.md
-      - Configuration: configuration.md
-      - Identity generation: identity-generation.md
-      - SMTP diagnostics: smtp-session-diagnostics.md
-      - Internationalization: i18n.md
-      - Integration notes: integration.md
-      - Search: search.md
-      - SDK: sdk.md
-      - Architecture: architecture.md
-      - TLS: tls.md
-exclude_docs: |
-  revisions/
-  backlog.md
-  documentation-review.md
-  code-style.md
-  sonarcloud-quality-gate.md
-  sonarqube.md
-  .gitignore
+  - Getting started: index.md
+  - Demo: demo.md
+  - Integration: integration.md
+  - API: api.md
+  - Tests and SDK: sdk.md
+  - TLS: tls.md
+  - Architecture: architecture.md
+  - Development: development.md
+  - Technical reference:
+      - HTTP API: reference/api.md
+      - OpenAPI maintenance: reference/openapi.md
+      - SMTP and POP3 test identities: reference/test-identities-and-pop3.md
+      - Docker: reference/docker.md
+      - Configuration: reference/configuration.md
+      - Identity generation: reference/identity-generation.md
+      - SMTP diagnostics: reference/smtp-session-diagnostics.md
+      - Internationalization: reference/i18n.md
+      - Integration notes: reference/integration.md
+      - Search: reference/search.md
+      - SDK: reference/sdk.md
+      - Architecture: reference/architecture.md
+      - TLS: reference/tls.md

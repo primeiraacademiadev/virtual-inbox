@@ -97,6 +97,10 @@ export const schemas: Record<string, Schema> = {
     disconnectedAt: string, connected: boolean, authenticated: boolean, secure: boolean,
     authUser: string, authAttempts: array(object({ id: uuid, at: string, method: string, authUser: string, accepted: boolean })),
     messageIds: array(string), errors: array(object({ at: string, responseCode: integer, code: string })) })),
+  TestSessionCredentials: object({ username: string, password: { type: "string", format: "password", writeOnly: true } }, ["username", "password"]),
+  TestSessionId: object({ sessionId: uuid }, ["sessionId"]),
+  TestSession: object({ sessionId: uuid, inbox: string }, ["sessionId", "inbox"]),
+  TestSessionVerification: object({ matches: boolean }, ["matches"]),
   VerifySmtp: object({ username: string, password: { type: "string", format: "password", writeOnly: true }, attemptId: uuid }, ["username", "password"]),
   VerifySmtpResult: object({ sessionId: uuid, attemptId: uuid, usernameMatches: boolean, passwordMatches: boolean, matches: boolean }),
   Observer: object({ observerId: uuid, inboxes: reference("Inboxes") }, ["observerId", "inboxes"]),
@@ -137,6 +141,9 @@ const streams = ["logs/events", "observers/events", "observers/{observerId}/even
 );
 
 export const operations: readonly ApiOperation[] = [
+  management({ id: "testSessionCreate", method: "POST", path: "/admin/test/sessions", tag: "Test sessions", admin: true, status: 201, request: "TestSessionCredentials", response: "TestSessionId", summary: "Resolve or create a test session from inbox and password." }),
+  management({ id: "testSessionGet", method: "GET", path: "/admin/test/sessions/{sessionId}", tag: "Test sessions", admin: true, status: 200, response: "TestSession", summary: "Resolve the inbox of a logical test session." }),
+  management({ id: "testSessionVerify", method: "POST", path: "/admin/test/sessions/{sessionId}/verify", tag: "Test sessions", admin: true, status: 200, request: "TestSessionCredentials", response: "TestSessionVerification", summary: "Verify credentials against a shared SMTP/POP3 test session." }),
   management({ id: "smtpClients", method: "GET", path: "/admin/smtp/clients", tag: "SMTP diagnostics", status: 200, response: "SmtpClients", admin: true, summary: "List observed SMTP clients." }),
   management({ id: "smtpSessions", method: "GET", path: "/admin/smtp/sessions", tag: "SMTP diagnostics", status: 200, response: "SmtpSessions", admin: true, query: "clientId", summary: "List SMTP sessions." }),
   management({ id: "smtpVerify", method: "POST", path: "/admin/smtp/sessions/{sessionId}/verify", tag: "SMTP diagnostics", status: 200, response: "VerifySmtpResult", request: "VerifySmtp", admin: true, summary: "Revalidate recorded SMTP credentials." }),

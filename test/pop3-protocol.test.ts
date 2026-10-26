@@ -43,7 +43,11 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     rules.create({sessionId,protocol:"POP3",command:"STAT",code:451,message:"Simulated",remaining:1});
     assert.match(await send("STAT"),/^-ERR Simulated/);
     assert.match(await send("STAT"),/^\+OK 1 /);
+    assert.match(await send("DELE 1"),/^\+OK/);
+    assert.match(await send("STAT"),/^\+OK 0 /);
     assert.match(await send("QUIT"),/^\+OK/);
+    await once(socket, "close");
+    assert.equal(sandbox.listMessages(inbox.id).length, 0);
   } finally {
     socket.destroy();server.close();
   }

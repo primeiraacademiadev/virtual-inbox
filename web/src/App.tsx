@@ -598,7 +598,7 @@ export default function App() {
         </span>
         <CopyButton value={observer} label={t("copySession")} />
       </header>
-      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} onPage={openPage} onDocument={openDocument} />}
+      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} docText={docText} onPage={openPage} onDocument={openDocument} />}
       {page === "workspace" && (
         <div className="workspace">
           <aside className={"sidebar" + (collapsed ? " closed" : "")}>

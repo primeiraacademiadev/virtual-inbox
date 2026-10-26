@@ -5,6 +5,7 @@ import { SimulationStore } from "../src/simulation-store.js";
 
 test("same inbox and password yield stable GUID", async () => {
  const store = new InboxCredentialStore();
+ store.createInbox("alice@example.test");
  const id = await store.authenticate("alice@example.test","one");
  assert.equal(await store.authenticate("alice@example.test","one"),id);
  assert.equal(await store.verify("alice@example.test","one",id),true);
@@ -12,6 +13,7 @@ test("same inbox and password yield stable GUID", async () => {
 });
 test("passwords isolate different sessions in same inbox", async () => {
  const store=new InboxCredentialStore();
+ store.createInbox("inbox@example.test");
  const first=await store.authenticate("inbox@example.test","one");
  const second=await store.authenticate("inbox@example.test","two");
  assert.notEqual(first,second);

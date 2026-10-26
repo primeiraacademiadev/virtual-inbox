@@ -109,6 +109,15 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal(metrics.data.POP3.connectionsActive, 0);
 
     const credentials = { username: "admin-test@example.test", password: "a-test-secret" };
+    const unknown = await api("POST", "/admin/test/sessions", credentials);
+    assert.equal(unknown.status, 404, "unknown username must not allocate logical sessions");
+    assert.equal(unknown.data.errorCode, "TEST_INBOX_NOT_FOUND");
+    const inboxResponse = await fetch("http://127.0.0.1:" + port + "/api/mailboxes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: credentials.username, ttlSeconds: 180 }),
+    });
+    assert.equal(inboxResponse.status, 201);
+    const inbox = await inboxResponse.json() as { id: string };
     const created = await api("POST", "/admin/test/sessions", credentials);
     assert.equal(created.status, 201);
     const id = created.data.sessionId as string;
@@ -135,6 +144,15 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal((await api("DELETE", endpoint + "/" + rule.data.id)).status, 204);
     assert.deepEqual((await api("GET", endpoint)).data, []);
     assert.equal((await api("GET", "/admin/test/sessions/" + randomUUID())).status, 404);
+    const retainedRule = await api("POST", endpoint, {
+      protocol: "SMTP", command: "DATA", code: 451, remaining: 1,
+    });
+    assert.equal(retainedRule.status, 201);
+    const deleted = await fetch("http://127.0.0.1:" + port + "/api/mailboxes/" + inbox.id, { method: "DELETE" });
+    assert.equal(deleted.status, 204);
+    assert.equal((await api("GET", "/admin/test/sessions/" + id)).status, 404);
+    assert.deepEqual((await api("GET", endpoint)).data, [], "delete removes session simulation rules");
+    assert.equal((await api("POST", "/admin/test/sessions", credentials)).status, 404);
   } finally {
     if (child.exitCode === null) {
       child.kill("SIGTERM");

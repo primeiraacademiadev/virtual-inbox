@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { Fault } from "./domain-types.js";
+import { InboxCredentialStore } from "./inbox-credentials.js";
 
 type SaltedHash = { salt: Buffer; digest: Buffer };
 type SecretAttempt = {
@@ -22,6 +23,7 @@ export type PublicSmtpSession = {
   authenticated: boolean;
   secure: boolean;
   authUser?: string;
+  testSessionId?: string;
   authAttempts: PublicSmtpAttempt[];
   messageIds: string[];
   errors: Array<{ at: string; responseCode: number; code: string }>;
@@ -72,7 +74,7 @@ export class SmtpSessionStore {
   private readonly sessions = new Map<string, SmtpSessionRecord>();
   private readonly clientIds = new Map<string, string>();
 
-  constructor(private readonly maxSessions = 500) {}
+  constructor(private readonly maxSessions = 500, private readonly credentialStore = new InboxCredentialStore()) {}
 
   private clientKey(address: string, username?: string) {
     return address + "\0" + (username ?? "");
@@ -117,6 +119,7 @@ export class SmtpSessionStore {
       throw new Fault(400, "Invalid SMTP credentials", "INVALID_SMTP_CREDENTIALS");
     const session = this.session(id);
     // Keep bounded history, including the password verification material.
+    const testSessionId = await this.credentialStore.authenticate(username, password);
     const [userHash, passwordHash] = await Promise.all([hash(username), hash(password)]);
     const attempt: SecretAttempt = {
       id: randomUUID(), at: new Date().toISOString(), method,
@@ -125,9 +128,10 @@ export class SmtpSessionStore {
     session.authAttempts.push(attempt);
     if (session.authAttempts.length > MAX_ATTEMPTS) session.authAttempts.shift();
     session.authUser = username;
+    session.testSessionId = testSessionId;
     session.clientId = this.clientId(session.remoteAddress, username);
     session.authenticated = true;
-    return { id: attempt.id, clientId: session.clientId };
+    return { id: attempt.id, clientId: session.clientId, testSessionId };
   }
   disconnect(id: string) {
     const session = this.sessions.get(id);
@@ -152,7 +156,7 @@ export class SmtpSessionStore {
         id: s.id, clientId: s.clientId, remoteAddress: s.remoteAddress,
         connectedAt: s.connectedAt, disconnectedAt: s.disconnectedAt,
         connected: s.connected, authenticated: s.authenticated, secure: s.secure,
-        authUser: s.authUser, messageIds: [...s.messageIds],
+        authUser: s.authUser, testSessionId: s.testSessionId, messageIds: [...s.messageIds],
         authAttempts: s.authAttempts.map(({ id, at, method, authUser, accepted }) =>
           ({ id, at, method, authUser, accepted })),
         errors: s.errors.map((error) => ({ ...error })),

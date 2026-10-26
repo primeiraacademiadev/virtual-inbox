@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { ContextSidebar } from "../web/src/components/ContextSidebar.js";
-import { ProtocolTesting } from "../web/src/components/protocols/ProtocolTesting.js";
-import { ProtocolMetricsView } from "../web/src/components/protocols/ProtocolMetricsView.js";
-import { MarkdownView } from "../web/src/components/documentation/MarkdownView.js";
+// Keep UI modules out of the server TypeScript build, while loading the actual
+// TSX source during the Node tests for meaningful c8 coverage.
+const modulePath = (name: string) => "../web/src/components/" + name + ".js";
+const { ContextSidebar } = await import(modulePath("ContextSidebar"));
+const { ProtocolTesting } = await import(modulePath("protocols/ProtocolTesting"));
+const { ProtocolMetricsView } = await import(modulePath("protocols/ProtocolMetricsView"));
+const { MarkdownView } = await import(modulePath("documentation/MarkdownView"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.

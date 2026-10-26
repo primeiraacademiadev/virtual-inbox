@@ -7,6 +7,8 @@ import {
   type GenerationOptions,
 } from "./components/identity/preferences";
 import { MarkdownView } from "./components/documentation/MarkdownView";
+import { ContextSidebar } from "./components/ContextSidebar";
+import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
 import { eventLabel, captureReasonLabel } from "./i18n/domain";
 import { localizeError } from "./i18n/errors";
 import { useI18n } from "./i18n/context";
@@ -30,7 +32,7 @@ import {
   type Recipient,
 } from "./api";
 type View = "split" | "inbox" | "logs";
-type Page = "workspace" | "connections" | "smtp" | "documentation" | "api";
+type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api";
 type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
 type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
 async function postDemo(path: string, data: unknown) {
@@ -580,10 +582,9 @@ export default function App() {
           {menuOpen && (
             <nav id="primary-nav-menu" className="hamburgerMenu" aria-label={t("documentation")}>
               <button onClick={() => openPage("workspace")}>{t("inboxes")}</button>
-              <button onClick={() => openPage("connections")}>{t("tls")}</button>
-              <button onClick={() => openPage("smtp")}>SMTP clients</button>
+              <button onClick={() => openPage("smtp")}>Protocols</button>
               <button onClick={() => openPage("documentation")}>{t("documentation")}</button>
-              <button onClick={() => openPage("api")}>{t("api")}</button>
+              <button onClick={() => openPage("connections")}>System</button>
             </nav>
           )}
         </div>
@@ -596,6 +597,7 @@ export default function App() {
         </span>
         <CopyButton value={observer} label={t("copySession")} />
       </header>
+      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} onPage={openPage} onDocument={openDocument} />}
       {page === "workspace" && (
         <div className="workspace">
           <aside className={"sidebar" + (collapsed ? " closed" : "")}>
@@ -996,6 +998,7 @@ export default function App() {
           </section>}
         </main>
       )}
+      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} />}
       {page === "connections" && (
         <main className="information">
           <h2>{t("connectionTitle")}</h2>

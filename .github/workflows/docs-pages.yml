@@ -40,7 +40,7 @@ jobs:
           cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
       - run: python scripts/prepare-docs-site.py
-      - run: mkdocs build --clean
+      - run: mkdocs build --strict --clean
       - run: python scripts/check-docs-site.py
       - name: Upload site artifact
         if: github.event_name != 'pull_request'

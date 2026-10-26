@@ -22,7 +22,7 @@ For a deployment-equivalent validation:
 
 ```sh
 python scripts/prepare-docs-site.py
-mkdocs build --clean
+mkdocs build --strict --clean
 python scripts/check-docs-site.py
 ```
 

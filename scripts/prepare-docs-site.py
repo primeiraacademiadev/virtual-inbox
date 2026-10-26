@@ -28,8 +28,25 @@ def main() -> None:
     reference.mkdir()
 
     for source in SOURCE.glob("*.md"):
-        if source.name not in OMIT_REFERENCE:
-            shutil.copyfile(source, reference / source.name)
+        if source.name in OMIT_REFERENCE:
+            continue
+        # Reference pages contain legacy links to each localized source folder.
+        # Resolve those to the published language URLs without touching the
+        # canonical sources that are also consumed by the React console.
+        content = source.read_text(encoding="utf-8")
+        site_base = "https://primeiraacademiadev.github.io/virtual-inbox/"
+        def remap(match: re.Match[str]) -> str:
+            source_locale, page, anchor = match.groups()
+            locale = {"en": "", "pt-PT": "pt/", "fr": "fr/"}[source_locale]
+            slug = "" if page == "overview" else page + "/"
+            return "](" + site_base + locale + slug + (anchor or "") + ")"
+        content = re.sub(
+            r"\]\(i18n/(en|pt-PT|fr)/(overview|demo|integration|api|sdk|tls|architecture|development)\.md(#[^)]*)?\)",
+            remap, content,
+        )
+        # The internal style guide is intentionally not part of the public site.
+        content = re.sub(r"\[([^\]]+)\]\(code-style\.md\)", r"\1", content)
+        (reference / source.name).write_text(content, encoding="utf-8")
 
     for source_locale, suffix in LANGUAGES.items():
         for page in PAGES:

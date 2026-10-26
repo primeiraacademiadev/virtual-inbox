@@ -132,3 +132,6 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
  .contextSidebar.collapsed{width:44px}
  .shell:has(.contextSidebar.collapsed)>.information{margin-left:44px;width:calc(100% - 44px)}
 }
+
+.contextSidebar nav button.tocIndented{padding-left:22px;font-size:0.88rem;color:#b7c9de}
+.docMarkdown [id^='doc-heading-']{scroll-margin-top:20px}

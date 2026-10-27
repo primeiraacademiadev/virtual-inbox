@@ -1,15 +1,17 @@
 import { createServer, type Server } from "node:net";
 import type { Socket } from "node:net";
-import { randomUUID } from "node:crypto";
+import { Pop3ConnectionStore } from "./pop3-connections.js";
 import type { Sandbox } from "./core.js";
 import type { InboxCredentialStore } from "./inbox-credentials.js";
 import type { SimulationStore } from "./simulation-store.js";
 import type { ProtocolCounters } from "./protocol-metrics.js";
 
 /** Test-only POP3 mailbox access, sharing the SMTP inbox/password identity. */
-export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore, counters: ProtocolCounters): Server {
+export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore, counters: ProtocolCounters, connections = new Pop3ConnectionStore()): Server {
   return createServer((socket: Socket) => {
-    const connectionId = randomUUID();
+    let connectionId: string;
+    try { connectionId = connections.connect(socket.remoteAddress || "unknown"); }
+    catch { socket.end("-ERR too many POP3 connections\r\n"); return; }
     counters.connect("POP3");
     let username = "";
     let sessionId = "";
@@ -34,6 +36,7 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           const command = (space < 0 ? line : line.slice(0, space)).toUpperCase();
           const arg = space < 0 ? "" : line.slice(space + 1).trim();
           counters.command("POP3");
+          connections.activity(connectionId);
           if (command === "QUIT") {
             if (sessionId) {
               const inbox = sandbox.find("email", username);
@@ -52,6 +55,7 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
             if (!inbox) { send("-ERR test inbox unavailable"); return; }
             sessionId = await credentials.authenticate(username, arg);
             snapshot = sandbox.listMessages(inbox.id);
+            connections.authenticate(connectionId, username, sessionId);
             counters.auth("POP3");
             send("+OK authenticated");
             return;
@@ -94,7 +98,6 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
         }).catch(() => { send("-ERR command failed"); });
       }
     });
-    socket.on("close", () => { counters.disconnect("POP3"); });
-    void connectionId;
+    socket.on("close", () => { connections.disconnect(connectionId); counters.disconnect("POP3"); });
   });
 }

@@ -13,6 +13,8 @@ import { SMTPServer, type SMTPServerOptions } from "smtp-server";
 import { SmtpSessionStore } from "./smtp-sessions.js";
 import { InboxCredentialStore } from "./inbox-credentials.js";
 import { createPop3Server } from "./pop3-server.js";
+import { Pop3ConnectionStore } from "./pop3-connections.js";
+import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
@@ -37,6 +39,8 @@ const inboxAddresses = new Map<string, string>();
 const smtpSessions = new SmtpSessionStore(500, credentialStore);
 const simulations = new SimulationStore();
 const protocolCounters = new ProtocolCounters();
+const pop3Connections = new Pop3ConnectionStore();
+let lastCleanupAt: string | null = null;
 sandbox.emitter.on("resource.removed", (id: string) => {
   const address = inboxAddresses.get(id);
   if (address) {
@@ -45,7 +49,7 @@ sandbox.emitter.on("resource.removed", (id: string) => {
   }
   inboxAddresses.delete(id);
 });
-const pop3 = createPop3Server(sandbox, credentialStore, simulations, protocolCounters);
+const pop3 = createPop3Server(sandbox, credentialStore, simulations, protocolCounters, pop3Connections);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
   process.env.NETWORK_SETTINGS_FILE || "./data/network-settings.json",
@@ -283,6 +287,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
+      case "pop3Connections": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, pop3Connections.list());
+      }
+      case "applicationFootprint": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, applicationFootprint(sandbox, smtpSessions, pop3Connections,
+          credentialStore, simulations, lastCleanupAt));
+      }
       case "protocolMetrics": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, protocolCounters.snapshot());
@@ -705,7 +718,10 @@ if (tlsMode === "external" && tlsCertPath && tlsKeyPath) {
   }, 10000);
   externalRefresh.unref();
 }
-const clean = setInterval(() => { sandbox.cleanup(); smtpSessions.cleanup(); }, 1000);
+const clean = setInterval(() => {
+  sandbox.cleanup(); smtpSessions.cleanup(); pop3Connections.cleanup();
+  lastCleanupAt = new Date().toISOString();
+}, 1000);
 clean.unref();
 http.listen(port, apiHost, () => console.log("REST listening on " + port));
 const https = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res); }) : null;

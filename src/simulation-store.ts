@@ -8,6 +8,9 @@ export class SimulationStore {
  }
  list(sessionId?:string) {return [...this.rules.values()].filter(r=>!sessionId||r.sessionId===sessionId);}
  delete(id:string) {this.rules.delete(id);}
+ deleteSession(sessionId:string) {
+  for(const [id, rule] of this.rules) if(rule.sessionId===sessionId) this.rules.delete(id);
+ }
  match(sessionId:string|undefined,protocol:"SMTP"|"POP3",command:string) {
   if (!sessionId) return undefined;
   const rule=this.list(sessionId).find(r=>r.protocol===protocol&&r.command===command&&r.remaining>0);

@@ -24,9 +24,12 @@ export class InboxCredentialStore {
   async authenticate(inbox: string, password: string): Promise<string> {
     if (typeof password !== "string") throw new Fault(400, "Password required", "INVALID_CREDENTIALS");
     const name = this.normalize(inbox);
-    this.createInbox(name);
-    const record = this.inboxes.get(name)!;
+    const record = this.inboxes.get(name);
+    if (!record) throw new Fault(404, "Test inbox does not exist", "TEST_INBOX_NOT_FOUND");
     const digest = await derive(password, record.salt);
+    // The inbox can be removed or recreated while scrypt is running.
+    if (this.inboxes.get(name) !== record)
+      throw new Fault(404, "Test inbox no longer exists", "TEST_INBOX_NOT_FOUND");
     const key = digest.toString("hex");
     let entry = record.sessions.get(key);
     if (!entry) {

@@ -13,6 +13,7 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
   const inbox = sandbox.create("email", "pop3-check@example.test");
   sandbox.deliver("email","sender@example.test",inbox.address,"hello test","subject");
   const credentials = new InboxCredentialStore();
+  credentials.createInbox(inbox.address);
   const rules = new SimulationStore();
   const server = createPop3Server(sandbox,credentials,rules,new ProtocolCounters());
   server.listen(0,"127.0.0.1");
@@ -53,6 +54,9 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
   const send=async(command:string)=>{socket.write(command+"\r\n");return read();};
   try {
     assert.match(await read(),/^\+OK/);
+    assert.match(await send("USER missing@example.test"),/^\+OK/);
+    assert.match(await send("PASS secret"),/^-ERR/);
+    assert.equal(credentials.list().length, 0);
     assert.match(await send("USER "+inbox.address),/^\+OK/);
     assert.match(await send("PASS secret"),/^\+OK/);
     const sessionId=await credentials.authenticate(inbox.address,"secret");

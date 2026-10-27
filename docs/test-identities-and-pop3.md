@@ -3,19 +3,21 @@
 The Virtual Inbox is a disposable test tool. Credentials are not production accounts. Both
 SMTP AUTH and POP3 USER/PASS resolve the same logical test session.
 
-- Identity = lowercase inbox / username plus password.
-- Each inbox receives one randomly generated 16-byte salt, kept in memory.
+- Create a disposable email inbox through the mailboxes API **before** authenticating.
+- Identity = lowercase existing inbox address / username plus password; arbitrary usernames are rejected.
+- Each inbox receives one randomly generated 16-byte salt on creation, kept in memory.
 - The password digest is derived with scrypt and is not exposed through HTTP, logs or events.
 - The same inbox/password pair resolves the same GUID for the lifetime of the inbox.
 - Different passwords for the same inbox select different logical sessions.
 - Separate SMTP connections still have their own transport-session identifiers.
-- Deleting an inbox removes its identity sessions.
+- Deleting or expiring an inbox removes its identity sessions and their simulation rules.
+- SMTP AUTH rejects unknown inboxes with a permanent authentication error (535); POP3 and the admin session API also reject unknown or expired inboxes.
 
 ## Technical API
 
 Administrative HTTPS requests require `Authorization: Bearer <ADMIN_TOKEN>`.
 Use `POST /api/admin/test/sessions` with JSON `{"username":"case@example.test","password":"secret"}`
-to obtain `sessionId`. Subsequent calls may address the GUID:
+to obtain `sessionId` after creating the email inbox. Unknown or expired inboxes result in HTTP 404 (`TEST_INBOX_NOT_FOUND`). Subsequent calls may address the GUID:
 
 - `GET /api/admin/test/sessions/{sessionId}` — resolve the inbox.
 - `POST /api/admin/test/sessions/{sessionId}/verify` — verify username/password.

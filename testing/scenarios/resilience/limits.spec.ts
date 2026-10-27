@@ -85,7 +85,11 @@ test("resource quota rejects excess inboxes and service remains healthy", async 
   requireManaged();
   const api = new ApiClient();
   try {
-    for (let i = 0; i < 40; i++) await api.create("email");
+    // Shared managed SUT: earlier scenarios may still own live inboxes.
+    const existing = await api.json<Array<{ system?: boolean }>>("/mailboxes");
+    const active = existing.filter(inbox => !inbox.system).length;
+    expect(active).toBeLessThan(40);
+    for (let i = active; i < 40; i++) await api.create("email");
     const rejected = await post("/mailboxes", { ttlSeconds: 60 });
     expect(rejected.status).toBe(507);
     const health = await fetch(baseUrl + "/health");

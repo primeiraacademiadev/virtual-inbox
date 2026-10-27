@@ -34,14 +34,17 @@ import {
 export const sandbox = new Sandbox(config.logs);
 const credentialStore = new InboxCredentialStore();
 const inboxAddresses = new Map<string, string>();
-sandbox.emitter.on("resource.removed", (id: string) => {
-  const address = inboxAddresses.get(id);
-  if (address) credentialStore.deleteInbox(address);
-  inboxAddresses.delete(id);
-});
 const smtpSessions = new SmtpSessionStore(500, credentialStore);
 const simulations = new SimulationStore();
 const protocolCounters = new ProtocolCounters();
+sandbox.emitter.on("resource.removed", (id: string) => {
+  const address = inboxAddresses.get(id);
+  if (address) {
+    for (const session of credentialStore.list(address)) simulations.deleteSession(session.id);
+    credentialStore.deleteInbox(address);
+  }
+  inboxAddresses.delete(id);
+});
 const pop3 = createPop3Server(sandbox, credentialStore, simulations, protocolCounters);
 const smtpSessionIds = new WeakMap<object, string>();
 const networkSettingsFile = resolve(
@@ -302,6 +305,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "testSessionCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const input = await body(req);
+        if (typeof input.username !== "string" || !input.username.trim())
+          throw new Fault(400, "Inbox required", "INVALID_INBOX");
+        let available = false;
+        try { available = !!sandbox.find("email", input.username); } catch { /* expired inbox */ }
+        if (!available)
+          throw new Fault(404, "Test inbox does not exist", "TEST_INBOX_NOT_FOUND");
         return json(res, 201, { sessionId: await credentialStore.authenticate(input.username, input.password) });
       }
       case "testSessionGet": {
@@ -479,7 +488,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const created = sandbox.create(channel,
           channel === "email" ? input.address : input.phoneNumber,
           input.ttlSeconds, input.observerId, input.generation);
-        if (created.channel === "email") inboxAddresses.set(created.id, created.address);
+        if (created.channel === "email") {
+          credentialStore.createInbox(created.address);
+          inboxAddresses.set(created.id, created.address);
+        }
         return json(res, 201, created);
       }
       case "emailGet":
@@ -487,9 +499,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 200, sandbox.resource(inboxId));
       case "emailDelete":
       case "smsDelete":
-        const deletedInbox = sandbox.resource(inboxId);
         sandbox.deleteResource(inboxId);
-        if (deletedInbox.channel === "email") credentialStore.deleteInbox(deletedInbox.address);
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
@@ -584,11 +594,19 @@ const smtpOptions: SMTPServerOptions = {
   onAuth(auth, session, callback) {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
+    let inboxAvailable = false;
+    try { inboxAvailable = !!sandbox.find("email", auth.username || ""); } catch { /* expired inbox */ }
+    if (!inboxAvailable)
+      return callback(Object.assign(new Error("Test inbox unavailable"), { responseCode: 535 }));
     void smtpSessions.authenticate(id, auth.username || "", auth.password || "", auth.method).then(() => {
       protocolCounters.auth("SMTP");
       sandbox.log("smtp.session.authenticated", undefined, undefined, { sessionId: id });
       callback(null, { user: auth.username || "" });
-    }).catch(() => callback(Object.assign(new Error("Authentication temporarily unavailable"), { responseCode: 454 })));
+    }).catch(error => {
+      const unavailable = error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND";
+      callback(Object.assign(new Error(unavailable ? "Test inbox unavailable" : "Authentication temporarily unavailable"),
+        { responseCode: unavailable ? 535 : 454 }));
+    });
   },
   onRcptTo(_address: unknown, _session: unknown, callback: (error?: Error | null) => void) { callback(); },
   onData(stream: any, session: any, callback: any) {

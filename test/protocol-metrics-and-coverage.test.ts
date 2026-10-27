@@ -39,6 +39,13 @@ test("credential store normalizes inboxes, validates credentials, revokes sessio
   const store = new InboxCredentialStore();
   assert.throws(() => store.createInbox("  "), (error: unknown) => error instanceof Fault);
   await assert.rejects(store.authenticate("alice@example.test", null as unknown as string), (error: unknown) => error instanceof Fault);
+  await assert.rejects(store.authenticate("alice@example.test", "secret"), (error: unknown) =>
+    error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
+  assert.equal(store.list().length, 0, "missing inboxes never create identities");
+  for (let n = 0; n < 1000; n++)
+    await assert.rejects(store.authenticate("unknown-" + n + "@example.test", "secret"), (error: unknown) =>
+      error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
+  assert.equal(store.list().length, 0, "repeated unknown authentication must not accumulate GUIDs");
   store.createInbox(" ALICE@example.test ");
   const id = await store.authenticate("alice@EXAMPLE.test", "secret");
   assert.equal(await store.authenticate(" ALICE@example.test ", "secret"), id);
@@ -60,6 +67,9 @@ test("credential store normalizes inboxes, validates credentials, revokes sessio
   store.deleteInbox("missing@example.test");
   store.deleteInbox(" ALICE@example.test ");
   assert.equal(store.resolve(replacement), undefined);
+  await assert.rejects(store.authenticate("alice@example.test", "secret"), (error: unknown) =>
+    error instanceof Fault && error.code === "TEST_INBOX_NOT_FOUND");
+  assert.equal(store.list().length, 0);
 });
 
 test("simulation store validates inputs, scopes rules, exhausts budgets and deletes rules", () => {
@@ -83,4 +93,9 @@ test("simulation store validates inputs, scopes rules, exhausts budgets and dele
   assert.equal(store.list("session-a").length, 1);
   store.delete(rule.id);
   assert.equal(store.list().length, 0);
+  store.create({ ...base, sessionId: "session-a" });
+  store.create({ ...base, sessionId: "session-b" });
+  store.deleteSession("session-a");
+  assert.equal(store.list("session-a").length, 0);
+  assert.equal(store.list("session-b").length, 1);
 });

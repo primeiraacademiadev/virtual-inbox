@@ -47,9 +47,11 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
           if (command === "USER" && !sessionId) { username = arg; send(username ? "+OK user accepted" : "-ERR user required"); return; }
           if (command === "PASS" && !sessionId) {
             if (!username) { send("-ERR send USER first"); return; }
+            let inbox;
+            try { inbox = sandbox.find("email", username); } catch { /* expired inbox */ }
+            if (!inbox) { send("-ERR test inbox unavailable"); return; }
             sessionId = await credentials.authenticate(username, arg);
-            const inbox = sandbox.find("email", username);
-            snapshot = inbox ? sandbox.listMessages(inbox.id) : [];
+            snapshot = sandbox.listMessages(inbox.id);
             counters.auth("POP3");
             send("+OK authenticated");
             return;

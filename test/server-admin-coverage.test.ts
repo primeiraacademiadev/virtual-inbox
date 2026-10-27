@@ -105,6 +105,14 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     const forbidden = await fetch("http://127.0.0.1:" + port + "/api/admin/test/metrics");
     assert.equal(forbidden.status, 403, "admin routes must require authenticated HTTPS");
     assert.equal((await api("GET", "/admin/test/metrics", undefined, false)).status, 403);
+    assert.equal((await api("GET","/admin/pop3/connections",undefined,false)).status,403);
+    assert.equal((await api("GET","/admin/footprint",undefined,false)).status,403);
+    const emptyPop3 = await api("GET","/admin/pop3/connections");
+    assert.deepEqual(emptyPop3.data,[]);
+    const footprint = await api("GET","/admin/footprint");
+    assert.equal(footprint.status,200);
+    assert.ok(footprint.data.memory.rss>0);
+    assert.equal(footprint.data.resources.systemInboxes,2);
     const metrics = await api("GET", "/admin/test/metrics");
     assert.equal(metrics.status, 200);
     assert.equal(metrics.data.POP3.connectionsActive, 0);
@@ -153,6 +161,7 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal(smtpSessions.status, 200);
     assert.ok(smtpSessions.data.some((session: { authenticated: boolean; authUser?: string }) =>
       session.authenticated && session.authUser === credentials.username));
+    assert.equal((await api("GET","/admin/footprint")).data.resources.emailInboxes,1);
     const created = await api("POST", "/admin/test/sessions", credentials);
     assert.equal(created.status, 201);
     const id = created.data.sessionId as string;
@@ -188,6 +197,7 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal((await api("GET", "/admin/test/sessions/" + id)).status, 404);
     assert.deepEqual((await api("GET", endpoint)).data, [], "delete removes session simulation rules");
     assert.equal((await api("POST", "/admin/test/sessions", credentials)).status, 404);
+    assert.equal((await api("GET","/admin/footprint")).data.resources.emailInboxes,0);
     // Deleting the inbox revokes access for subsequent SMTP connections.
     await assert.rejects(smtpAuth(credentials.username, credentials.password), (error: unknown) =>
       typeof error === "object" && error !== null &&

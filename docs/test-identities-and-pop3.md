@@ -42,3 +42,16 @@ Use it only on a trusted test network. TLS / POP3S and further end-to-end covera
 
 The existing SMTP transport-session password verifier is preserved.
 The console also offers logical-session credential verification by GUID for SMTP and POP3.
+
+## Connection diagnostics and footprint
+
+SMTP and POP3 keep separate bounded connection histories. The HTTPS administrator
+endpoints `GET /api/admin/smtp/sessions` and `GET /api/admin/pop3/connections`
+include state, last activity and inbox identity when authenticated, but never
+passwords. Closed connections expire after one hour.
+
+`GET /api/admin/footprint` reports process RSS/heap, logical stored payload
+bytes, bounded resource counts, connections and last cleanup. Process memory is
+not equivalent to stored payload. All these endpoints require HTTPS and
+`ADMIN_TOKEN`. The System → Footprint dashboard is read-only, refreshing every
+five seconds.

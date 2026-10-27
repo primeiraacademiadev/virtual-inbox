@@ -8,6 +8,9 @@ const { ContextSidebar } = await import(modulePath("ContextSidebar"));
 const { ProtocolTesting } = await import(modulePath("protocols/ProtocolTesting"));
 const { ProtocolMetricsView } = await import(modulePath("protocols/ProtocolMetricsView"));
 const { MarkdownView } = await import(modulePath("documentation/MarkdownView"));
+const { ProtocolConnections, filteredConnections } = await import(modulePath("protocols/ProtocolConnections"));
+const { NavigationIcon } = await import(modulePath("NavigationIcon"));
+const { FootprintView } = await import(modulePath("FootprintView"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.
@@ -36,6 +39,8 @@ test("context navigation renders the appropriate links and documentation heading
   const system = render(ContextSidebar, { ...props, page: "connections" });
   assert.match(system, /System navigation/);
   assert.match(system, /Connections and TLS/);
+  assert.match(system, /Footprint/);
+  assert.match(protocols, /<svg/);
   assert.doesNotMatch(system, /Simulated errors/);
 });
 
@@ -45,7 +50,9 @@ test("protocol test console renders disabled credentials and mode-specific guida
   assert.match(pop3, /POP3 connection/);
   assert.match(pop3, /Resolve GUID/);
   assert.match(pop3, /disabled=""/);
-  assert.match(pop3, /Simulated protocol errors/);
+  assert.doesNotMatch(pop3, /<h3>Simulated protocol errors<\/h3>/);
+  assert.match(pop3, /Open Simulated errors/);
+  assert.match(pop3, /POP3 connections/);
   assert.match(pop3, /Protocol counters/);
   const simulation = render(ProtocolTesting, { mode: "simulations", adminToken: "test-token" });
   assert.match(simulation, /Simulation rules/);
@@ -77,4 +84,22 @@ test("markdown renders headings, internal navigation, external links, and permit
   assert.match(html, /download="virtual-inbox-openapi.json"/);
   assert.match(html, /target="_blank"/);
   assert.match(html, /href="unknown.txt"/);
+});
+
+test("filtered protocol history and rendered footprint controls", () => {
+  const items = [
+    {id:"1", remoteAddress:"one", connectedAt:"2026-10-27T00:00:00Z",
+      lastActivityAt:"2026-10-27T00:01:00Z", connected:false, authenticated:true, inbox:"alice@test.local"},
+    {id:"2", remoteAddress:"two", connectedAt:"2026-10-27T00:00:00Z",
+      lastActivityAt:"2026-10-27T00:03:00Z", connected:true, authenticated:true, inbox:"bob@test.local"},
+  ];
+  assert.deepEqual(filteredConnections(items,"ALI","all","activity",true).map((v:{id:string})=>v.id),["1"]);
+  assert.deepEqual(filteredConnections(items,"","connected","inbox",false).map((v:{id:string})=>v.id),["2"]);
+  assert.deepEqual(filteredConnections(items,"","all","activity",true).map((v:{id:string})=>v.id),["2","1"]);
+  const html = render(ProtocolConnections,{protocol:"SMTP",records:items});
+  assert.match(html,/SMTP connections/);
+  assert.match(html,/Last activity/);
+  assert.match(html,/Reverse sort/);
+  assert.match(render(NavigationIcon,{name:"sms"}),/<svg/);
+  assert.match(render(FootprintView,{adminToken:""}),/Application Footprint/);
 });

@@ -1,21 +1,42 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { request } from "../../api";
 import { ProtocolMetricsView } from "./ProtocolMetricsView";
+import { ProtocolConnections, type ConnectionRow } from "./ProtocolConnections";
 
 type Rule = { id: string; sessionId: string; protocol: "SMTP" | "POP3"; command: string; code: number; message: string; remaining: number };
-type Props = { adminToken: string; mode: "pop3" | "simulations" };
-export function ProtocolTesting({ adminToken, mode }: Props) {
+type Props = { adminToken: string; mode: "pop3" | "simulations"; onNavigate?: (page: "simulations") => void };
+export function ProtocolTesting({ adminToken, mode, onNavigate }: Props) {
   const [inbox, setInbox] = useState("");
   const [password, setPassword] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [result, setResult] = useState("");
   const [rules, setRules] = useState<Rule[]>([]);
+  const [connections, setConnections] = useState<ConnectionRow[]>([]);
+  const [connectionError, setConnectionError] = useState("");
+  const [selectedConnection, setSelectedConnection] = useState("");
   const [protocol, setProtocol] = useState<"SMTP" | "POP3">(mode === "pop3" ? "POP3" : "SMTP");
   const [command, setCommand] = useState("DATA");
   const [code, setCode] = useState(451);
   const [remaining, setRemaining] = useState(1);
   const headers = { Authorization: "Bearer " + adminToken };
   const endpoint = () => "/admin/test/sessions/" + sessionId + "/simulations";
+  useEffect(() => {
+    if (mode !== "pop3" || !adminToken || window.location.protocol !== "https:") return;
+    let mounted = true;
+    const load = async () => {
+      try {
+        const list = await request<ConnectionRow[]>("/admin/pop3/connections", { headers: {
+          Authorization: "Bearer " + adminToken,
+        } });
+        if (mounted) { setConnections(list); setConnectionError(""); }
+      } catch (error) {
+        if (mounted) setConnectionError(error instanceof Error ? error.message : "Unable to load POP3 connections");
+      }
+    };
+    void load();
+    const interval = setInterval(() => { void load(); }, 5000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, [mode, adminToken]);
   async function resolve() {
     try {
       const response = await request<{ sessionId: string }>("/admin/test/sessions", {
@@ -69,12 +90,25 @@ export function ProtocolTesting({ adminToken, mode }: Props) {
       <label>Logical session GUID<input value={sessionId} onChange={e => setSessionId(e.target.value)} /></label>
       {result && <p role="status">{result}</p>}
     </div>
-    {mode === "pop3" && <div className="detail">
-      <h3>POP3 connection</h3>
-      <p>Use USER with the inbox address followed by PASS with the test password. The plain POP3 listener defaults to port 2110.</p>
-      <p>Available: STAT, LIST, UIDL, RETR, TOP, DELE, RSET, NOOP and QUIT.</p>
-    </div>}
-    <div className="detail">
+    {mode === "pop3" && <>
+      <ProtocolConnections protocol="POP3" records={connections}
+        selectedId={selectedConnection} onSelect={setSelectedConnection}/>
+      {connectionError && <p role="alert">{connectionError}</p>}
+      {connections.filter(connection => connection.id === selectedConnection).map(connection =>
+        <div className="detail" key={connection.id}>
+          <h3>POP3 connection details</h3>
+          <p>Connection {connection.id} · {connection.authenticated ? "Authenticated" : "Anonymous"}</p>
+          <p>Logical session: {connection.testSessionId || "Not authenticated"}</p>
+          <p>Connected: {connection.connectedAt} · Last activity: {connection.lastActivityAt}</p>
+        </div>)}
+      <div className="detail">
+        <h3>POP3 connection</h3>
+        <p>Use USER with the inbox address followed by PASS with the test password. The plain POP3 listener defaults to port 2110.</p>
+        <p>Available: STAT, LIST, UIDL, RETR, TOP, DELE, RSET, NOOP and QUIT.</p>
+        <button type="button" onClick={() => onNavigate?.("simulations")}>Open Simulated errors</button>
+      </div>
+    </>}
+    {mode === "simulations" && <div className="detail">
       <h3>Simulated protocol errors</h3>
       <div className="row">
         <label>Protocol<select value={protocol} onChange={e => { const p=e.target.value as "SMTP" | "POP3"; setProtocol(p); setCommand(p==="SMTP"?"DATA":"RETR"); }}><option>SMTP</option><option>POP3</option></select></label>
@@ -90,6 +124,6 @@ export function ProtocolTesting({ adminToken, mode }: Props) {
         {rule.protocol} {rule.command}: {rule.code} ({rule.remaining} executions left)
         <button type="button" onClick={() => void removeRule(rule.id)}>Delete</button>
       </li>)}</ul>
-    </div>
+    </div>}
   </main>;
 }

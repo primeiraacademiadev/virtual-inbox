@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:net";
+import nodemailer from "nodemailer";
 import { request as httpsRequest } from "node:https";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,8 +13,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 // Exercise the actual HTTPS administration routes with TLS verification. The
 // child inherits NODE_V8_COVERAGE from c8, so server.ts is counted in Sonar.
-async function reservePorts(): Promise<[number, number]> {
-  const servers = [createServer(), createServer()];
+async function reservePorts(): Promise<[number, number, number]> {
+  const servers = [createServer(), createServer(), createServer()];
   try {
     await Promise.all(servers.map(async server => {
       server.listen(0, "127.0.0.1");
@@ -23,7 +24,7 @@ async function reservePorts(): Promise<[number, number]> {
       const address = server.address();
       if (!address || typeof address === "string") throw Error("TCP address unavailable");
       return address.port;
-    }) as [number, number];
+    }) as [number, number, number];
   } finally {
     await Promise.all(servers.map(server => new Promise<void>(done => server.close(() => done()))));
   }
@@ -32,7 +33,7 @@ async function reservePorts(): Promise<[number, number]> {
 test("real HTTPS admin API isolates sessions, verifies credentials and manages protocol simulations", { timeout: 30_000 }, async () => {
   const root = resolve(import.meta.dirname, "..");
   const temp = mkdtempSync(join(tmpdir(), "vi-admin-coverage-"));
-  const [port, httpsPort] = await reservePorts();
+  const [port, httpsPort, smtpPort] = await reservePorts();
   const token = "test-only-" + randomUUID();
   const certs = join(temp, "certificates");
   const child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
@@ -41,7 +42,7 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
       ...process.env,
       PORT: String(port),
       HTTPS_PORT: String(httpsPort),
-      SMTP_PORT: "0",
+      SMTP_PORT: String(smtpPort),
       POP3_PORT: "0",
       SMTPS_PORT: "0",
       DEMO_PORT: "0",
@@ -108,6 +109,35 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal(metrics.status, 200);
     assert.equal(metrics.data.POP3.connectionsActive, 0);
 
+    // SMTP AUTH must use a real inbox. Unlike the transport-only E2E suite,
+    // this child server inherits NODE_V8_COVERAGE so the auth branches in
+    // server.ts count towards the SonarCloud quality gate.
+    const smtpAuth = async (username: string, password: string) => {
+      const client = nodemailer.createTransport({
+        host: "127.0.0.1",
+        port: smtpPort,
+        secure: false,
+        ignoreTLS: true,
+        auth: { user: username, pass: password },
+        authMethod: "PLAIN",
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+      try {
+        await client.verify();
+      } finally {
+        client.close();
+      }
+    };
+    // An unknown user must get a permanent SMTP authentication rejection.
+    await assert.rejects(smtpAuth("unregistered@example.test", "secret"), (error: unknown) =>
+      typeof error === "object" && error !== null &&
+      "responseCode" in error && error.responseCode === 535);
+    assert.equal((await api("POST", "/admin/test/sessions", { username: "", password: "secret" })).status, 400);
+
     const credentials = { username: "admin-test@example.test", password: "a-test-secret" };
     const unknown = await api("POST", "/admin/test/sessions", credentials);
     assert.equal(unknown.status, 404, "unknown username must not allocate logical sessions");
@@ -118,6 +148,11 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     });
     assert.equal(inboxResponse.status, 201);
     const inbox = await inboxResponse.json() as { id: string };
+    await smtpAuth(credentials.username, credentials.password);
+    const smtpSessions = await api("GET", "/admin/smtp/sessions");
+    assert.equal(smtpSessions.status, 200);
+    assert.ok(smtpSessions.data.some((session: { authenticated: boolean; authUser?: string }) =>
+      session.authenticated && session.authUser === credentials.username));
     const created = await api("POST", "/admin/test/sessions", credentials);
     assert.equal(created.status, 201);
     const id = created.data.sessionId as string;
@@ -153,6 +188,10 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal((await api("GET", "/admin/test/sessions/" + id)).status, 404);
     assert.deepEqual((await api("GET", endpoint)).data, [], "delete removes session simulation rules");
     assert.equal((await api("POST", "/admin/test/sessions", credentials)).status, 404);
+    // Deleting the inbox revokes access for subsequent SMTP connections.
+    await assert.rejects(smtpAuth(credentials.username, credentials.password), (error: unknown) =>
+      typeof error === "object" && error !== null &&
+      "responseCode" in error && error.responseCode === 535);
 
     // An expired inbox must not allow a new identity even before the next cleanup tick.
     const ttlInboxResponse = await fetch("http://127.0.0.1:" + port + "/api/mailboxes", {

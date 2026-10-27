@@ -9,7 +9,9 @@ type Snapshot = {
   cleanup: { lastAt: string | null };
 };
 const mib = (n: number) => (n / (1024 * 1024)).toFixed(1) + " MiB";
-export function FootprintView({ adminToken }: { adminToken: string }) {
+export function FootprintView({ adminToken, onAdminTokenChange }: {
+  adminToken: string; onAdminTokenChange?: (value: string) => void;
+}) {
   const [value, setValue] = useState<Snapshot | null>(null);
   const [error, setError] = useState("");
   const reload = useCallback(async () => {
@@ -39,9 +41,13 @@ export function FootprintView({ adminToken }: { adminToken: string }) {
     <h2>Application Footprint</h2>
     <p className="muted">Read-only observability. Process memory is not the same as retained message payload bytes.</p>
     <p>Requires HTTPS and ADMIN_TOKEN. Refreshes every five seconds.</p>
+    <label className="adminTokenInput">Administrator token
+      <input type="password" autoComplete="off" value={adminToken}
+        onChange={event => onAdminTokenChange?.(event.target.value)} />
+    </label>
     <button type="button" disabled={!adminToken} onClick={() => void reload()}>Refresh footprint</button>
     {error && <p role="alert">{error}</p>}
-    {!value && !error && <p className="muted">Enter the administrator token in the SMTP page.</p>}
+    {!value && !error && <p className="muted">Enter the administrator token above to inspect application resources.</p>}
     {value && <>
       <p className="tiny">Run {value.runId} · Uptime {value.uptimeSeconds}s · Snapshot {value.capturedAt}</p>
       <h3>Node.js memory</h3>

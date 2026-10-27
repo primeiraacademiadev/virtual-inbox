@@ -4,8 +4,9 @@ import { ProtocolMetricsView } from "./ProtocolMetricsView";
 import { ProtocolConnections, type ConnectionRow } from "./ProtocolConnections";
 
 type Rule = { id: string; sessionId: string; protocol: "SMTP" | "POP3"; command: string; code: number; message: string; remaining: number };
-type Props = { adminToken: string; mode: "pop3" | "simulations"; onNavigate?: (page: "simulations") => void };
-export function ProtocolTesting({ adminToken, mode, onNavigate }: Props) {
+type Props = { adminToken: string; mode: "pop3" | "simulations";
+  onNavigate?: (page: "simulations") => void; onAdminTokenChange?: (token: string) => void };
+export function ProtocolTesting({ adminToken, mode, onNavigate, onAdminTokenChange }: Props) {
   const [inbox, setInbox] = useState("");
   const [password, setPassword] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -78,6 +79,10 @@ export function ProtocolTesting({ adminToken, mode, onNavigate }: Props) {
   return <main className="information">
     <h2>{mode === "pop3" ? "POP3 test identities" : "Simulation rules"}</h2>
     <p className="muted">SMTP and POP3 share inbox/password-derived sessions. This technical interface requires HTTPS and ADMIN_TOKEN.</p>
+    <label className="adminTokenInput">Administrator token
+      <input type="password" autoComplete="off" value={adminToken}
+        onChange={event => onAdminTokenChange?.(event.target.value)} />
+    </label>
     <ProtocolMetricsView adminToken={adminToken} />
     <div className="detail">
       <h3>Resolve or verify session</h3>

@@ -1005,9 +1005,9 @@ export default function App() {
           </section>}
         </main>
       )}
-      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page}
+      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} onAdminTokenChange={setAdminToken}
         onNavigate={next => openPage(next)} />}
-      {page === "footprint" && <FootprintView adminToken={adminToken} />}
+      {page === "footprint" && <FootprintView adminToken={adminToken} onAdminTokenChange={setAdminToken} />}
       {page === "connections" && (
         <main className="information">
           <h2>{t("connectionTitle")}</h2>

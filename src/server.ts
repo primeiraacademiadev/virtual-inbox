@@ -287,7 +287,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const inboxId = params.inboxId;
 
     switch (operation.id) {
-      case "pop3Connections": {
+      case "popConnections": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, pop3Connections.list());
       }

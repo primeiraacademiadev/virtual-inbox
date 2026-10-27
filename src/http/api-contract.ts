@@ -151,7 +151,7 @@ const streams = ["logs/events", "observers/events", "observers/{observerId}/even
 );
 
 export const operations: readonly ApiOperation[] = [
-  management({ id: "pop3Connections", method: "GET", path: "/admin/pop3/connections", tag: "POP3 diagnostics", status: 200,
+  management({ id: "popConnections", method: "GET", path: "/admin/pop3/connections", tag: "POP3 diagnostics", status: 200,
     response: "Pop3Connections", admin: true, summary: "List active and recently closed POP3 connections (bounded retention)." }),
   management({ id: "applicationFootprint", method: "GET", path: "/admin/footprint", tag: "Administration", status: 200,
     response: "ApplicationFootprint", admin: true, summary: "Read process memory, resource counts and retention without secrets." }),

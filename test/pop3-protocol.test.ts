@@ -81,6 +81,9 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     assert.match(await send("STAT"),/^\+OK 0 /);
     assert.match(await send("QUIT"),/^\+OK/);
     await closed;
+    // Client and server socket close events run asynchronously.
+    for (let retry = 0; retry < 20 && connections.list()[0].connected; retry++)
+      await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(connections.list()[0].connected,false);
     assert.equal(sandbox.listMessages(inbox.id).length, 0);
   } finally {

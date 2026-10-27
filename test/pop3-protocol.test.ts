@@ -7,6 +7,7 @@ import { InboxCredentialStore } from "../src/inbox-credentials.js";
 import { SimulationStore } from "../src/simulation-store.js";
 import { ProtocolCounters } from "../src/protocol-metrics.js";
 import { createPop3Server } from "../src/pop3-server.js";
+import { Pop3ConnectionStore } from "../src/pop3-connections.js";
 
 test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and session failure is scoped", { timeout: 15_000 }, async () => {
   const sandbox = new Sandbox();
@@ -15,7 +16,8 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
   const credentials = new InboxCredentialStore();
   credentials.createInbox(inbox.address);
   const rules = new SimulationStore();
-  const server = createPop3Server(sandbox,credentials,rules,new ProtocolCounters());
+  const connections = new Pop3ConnectionStore();
+  const server = createPop3Server(sandbox,credentials,rules,new ProtocolCounters(),connections);
   server.listen(0,"127.0.0.1");
   await once(server,"listening");
   const address=server.address();
@@ -59,6 +61,8 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     assert.equal(credentials.list().length, 0);
     assert.match(await send("USER "+inbox.address),/^\+OK/);
     assert.match(await send("PASS secret"),/^\+OK/);
+    assert.equal(connections.list()[0].inbox,inbox.address);
+    assert.equal(connections.list()[0].authenticated,true);
     const sessionId=await credentials.authenticate(inbox.address,"secret");
     assert.equal(await credentials.verify(inbox.address,"secret",sessionId),true);
     assert.match(await send("STAT"),/^\+OK 1 /);
@@ -77,6 +81,10 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     assert.match(await send("STAT"),/^\+OK 0 /);
     assert.match(await send("QUIT"),/^\+OK/);
     await closed;
+    // Client and server socket close events run asynchronously.
+    for (let retry = 0; retry < 20 && connections.list()[0].connected; retry++)
+      await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(connections.list()[0].connected,false);
     assert.equal(sandbox.listMessages(inbox.id).length, 0);
   } finally {
     socket.destroy();server.close();

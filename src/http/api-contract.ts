@@ -94,9 +94,19 @@ export const schemas: Record<string, Schema> = {
   }),
   SmtpClients: array(object({ id: uuid, remoteAddress: string, authUser: string, activeSessions: integer, totalSessions: integer })),
   SmtpSessions: array(object({ id: uuid, clientId: uuid, remoteAddress: string, connectedAt: string,
-    disconnectedAt: string, connected: boolean, authenticated: boolean, secure: boolean,
+    lastActivityAt: string, disconnectedAt: string, connected: boolean, authenticated: boolean, secure: boolean,
     authUser: string, authAttempts: array(object({ id: uuid, at: string, method: string, authUser: string, accepted: boolean })),
     messageIds: array(string), errors: array(object({ at: string, responseCode: integer, code: string })) })),
+  Pop3Connections: array(object({ id: uuid, remoteAddress: string, connectedAt: string,
+    lastActivityAt: string, disconnectedAt: string, connected: boolean, authenticated: boolean,
+    inbox: string, testSessionId: uuid })),
+  ApplicationFootprint: object({
+    runId: uuid, uptimeSeconds: integer, capturedAt: string,
+    memory: object({ rss: integer, heapUsed: integer, heapTotal: integer, external: integer, arrayBuffers: integer }),
+    resources: { type: "object", additionalProperties: integer },
+    protocols: { type: "object" },
+    cleanup: object({ lastAt: { type: ["string", "null"] } }),
+  }),
   TestSessionCredentials: object({ username: string, password: { type: "string", format: "password", writeOnly: true } }, ["username", "password"]),
   TestSessionId: object({ sessionId: uuid }, ["sessionId"]),
   TestSession: object({ sessionId: uuid, inbox: string }, ["sessionId", "inbox"]),
@@ -141,6 +151,10 @@ const streams = ["logs/events", "observers/events", "observers/{observerId}/even
 );
 
 export const operations: readonly ApiOperation[] = [
+  management({ id: "popConnections", method: "GET", path: "/admin/pop3/connections", tag: "POP3 diagnostics", status: 200,
+    response: "Pop3Connections", admin: true, summary: "List active and recently closed POP3 connections (bounded retention)." }),
+  management({ id: "applicationFootprint", method: "GET", path: "/admin/footprint", tag: "Administration", status: 200,
+    response: "ApplicationFootprint", admin: true, summary: "Read process memory, resource counts and retention without secrets." }),
   management({ id: "protocolMetrics", method: "GET", path: "/admin/test/metrics", tag: "Test", status: 200, admin: true, summary: "Read protocol metrics." }),
 
   management({ id: "simulationDelete", method: "DELETE", path: "/admin/test/sessions/{sessionId}/simulations/{ruleId}", tag: "Test simulations", status: 204, admin: true, summary: "Delete configured fault." }),

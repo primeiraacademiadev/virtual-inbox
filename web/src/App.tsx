@@ -8,6 +8,9 @@ import {
 } from "./components/identity/preferences";
 import { MarkdownView } from "./components/documentation/MarkdownView";
 import { ContextSidebar } from "./components/ContextSidebar";
+import { NavigationIcon } from "./components/NavigationIcon";
+import { ProtocolConnections } from "./components/protocols/ProtocolConnections";
+import { FootprintView } from "./components/FootprintView";
 import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
 import { ProtocolMetricsView } from "./components/protocols/ProtocolMetricsView";
 import { eventLabel, captureReasonLabel } from "./i18n/domain";
@@ -33,9 +36,9 @@ import {
   type Recipient,
 } from "./api";
 type View = "split" | "inbox" | "logs";
-type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api";
+type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
 type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
-type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
+type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; lastActivityAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
 async function postDemo(path: string, data: unknown) {
   const response = await fetch("/demo" + path, {
     method: "POST",
@@ -122,6 +125,7 @@ export default function App() {
   const [adminToken, setAdminToken] = useState("");
   const [smtpClients, setSmtpClients] = useState<Client[]>([]);
   const [smtpHistory, setSmtpHistory] = useState<SmtpSession[]>([]);
+  const [smtpSelectedConnection, setSmtpSelectedConnection] = useState("");
   const [smtpUser, setSmtpUser] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [testGuid, setTestGuid] = useState("");
@@ -624,7 +628,7 @@ export default function App() {
                       onClick={() => setGroups((p) => ({ ...p, [c]: !p[c] }))}
                       aria-label={t("inboxGroup") + " — " + t(c === "email" ? "email" : "sms")}
                     >
-                      {c === "email" ? "✉" : "▣"}{" "}
+                      <NavigationIcon name={c === "email" ? "email" : "sms"} />{" "}
                       {!collapsed && t("inboxGroup") + " — " + t(c === "email" ? "email" : "sms")}{" "}
                       {!collapsed && (groups[c] ? "⌄" : "›")}
                     </button>
@@ -973,8 +977,9 @@ export default function App() {
           <h3>Observed clients ({smtpClients.length})</h3>
           <table><thead><tr><th>Client / user</th><th>Remote address</th><th>Active</th><th>Sessions</th></tr></thead>
           <tbody>{smtpClients.map(client => <tr key={client.id}><td>{client.authUser || "Anonymous"}<div className="tiny">{client.id}</div></td><td>{client.remoteAddress}</td><td>{client.activeSessions}</td><td>{client.totalSessions}</td></tr>)}</tbody></table>
-          <h3>SMTP sessions ({smtpHistory.length})</h3>
-          {smtpHistory.map(session => <section className="detail" key={session.id}>
+          <ProtocolConnections protocol="SMTP" records={smtpHistory}
+            selectedId={smtpSelectedConnection} onSelect={setSmtpSelectedConnection} />
+          {smtpHistory.filter(session => session.id === smtpSelectedConnection).map(session => <section className="detail" key={session.id}>
             <strong>{session.authUser || "Anonymous"} · {session.connected ? "Connected" : "Disconnected"}</strong>
             <p className="tiny">{session.id} · {session.remoteAddress} · {formatDate(session.connectedAt)} · TLS: {session.secure ? "yes" : "no"}</p>
             <p>Authenticated: {session.authenticated ? "yes" : "no"} · Messages: {session.messageIds.length} · Errors: {session.errors.length}</p>
@@ -1000,7 +1005,9 @@ export default function App() {
           </section>}
         </main>
       )}
-      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} />}
+      {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} onAdminTokenChange={setAdminToken}
+        onNavigate={next => openPage(next)} />}
+      {page === "footprint" && <FootprintView adminToken={adminToken} onAdminTokenChange={setAdminToken} />}
       {page === "connections" && (
         <main className="information">
           <h2>{t("connectionTitle")}</h2>

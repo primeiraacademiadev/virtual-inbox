@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import { NavigationIcon } from "./NavigationIcon";
 
-type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api";
+type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
 type Props = {
   page: AreaPage;
   docPage: string;
@@ -23,11 +24,12 @@ export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: P
   const docsArea = page === "documentation" || page === "api";
   const protocolsArea = page === "smtp" || page === "pop3" || page === "simulations";
   const area = docsArea ? "Documentation" : protocolsArea ? "Protocols" : "System";
-  const entries: Array<{ key: AreaPage; label: string }> = docsArea
-    ? [{ key: "documentation", label: "Guides" }, { key: "api", label: "API reference" }]
+  const entries: Array<{ key: AreaPage; label: string; icon: React.ComponentProps<typeof NavigationIcon>["name"] }> = docsArea
+    ? [{ key: "documentation", label: "Guides", icon: "documentation" }, { key: "api", label: "API reference", icon: "api" }]
     : protocolsArea
-      ? [{ key: "smtp", label: "SMTP" }, { key: "pop3", label: "POP3" }, { key: "simulations", label: "Simulated errors" }]
-      : [{ key: "connections", label: "Connections and TLS" }];
+      ? [{ key: "smtp", label: "SMTP", icon: "smtp" }, { key: "pop3", label: "POP3", icon: "pop3" }, { key: "simulations", label: "Simulated errors", icon: "error" }]
+      : [{ key: "connections", label: "Connections and TLS", icon: "connections" },
+          { key: "footprint", label: "Footprint", icon: "footprint" }];
   const headings = docText.split("\n").filter(line => /^#{1,3}\s+/.test(line)).map((line, i) => ({
     ordinal: i + 1, label: line.replace(/^#{1,3}\s+/, "").replace(/[*_`]/g, "").trim(), level: line.match(/^#+/)?.[0].length || 2,
   }));
@@ -43,7 +45,8 @@ export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: P
         className={entry.key === page ? "active" : ""}
         aria-current={entry.key === page ? "page" : undefined}
         title={collapsed ? entry.label : undefined}
-        onClick={() => onPage(entry.key)}>{collapsed ? entry.label.slice(0, 2).toUpperCase() : entry.label}</button>)}
+        onClick={() => onPage(entry.key)}><NavigationIcon name={entry.icon} />
+        {!collapsed && <span>{entry.label}</span>}</button>)}
       {docsArea && page === "documentation" && !collapsed && <>
         <hr />
         <span className="contextSectionTitle">Pages</span>

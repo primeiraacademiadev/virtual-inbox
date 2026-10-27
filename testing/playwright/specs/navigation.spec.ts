@@ -37,3 +37,24 @@ test("floating navigation, copy and search close on outside click or Escape", as
   await page.locator(".information h2").first().click();
   await expect(page.locator(".docSearchResults")).toBeHidden();
 });
+
+test("context menu uses icons when collapsed and system exposes footprint", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".groupToggle").nth(1).locator("svg")).toBeVisible();
+  await page.locator(".appNavigation > button").click();
+  await page.locator("#primary-nav-menu button").nth(1).click();
+  const nav = page.locator(".contextSidebar");
+  await expect(nav.locator('nav button[title]')).toHaveCount(0);
+  await expect(nav.locator("nav button").first().locator("svg")).toBeVisible();
+  await page.getByRole("button", { name: "Collapse navigation" }).click();
+  await expect(nav.locator('nav button[title="SMTP"] svg')).toBeVisible();
+  await expect(nav.locator('nav button[title="POP3"] svg')).toBeVisible();
+  await nav.locator('nav button[title="POP3"]').click();
+  await expect(page.getByText("POP3 test identities")).toBeVisible();
+  await page.locator(".appNavigation > button").click();
+  await page.locator("#primary-nav-menu button").nth(3).click();
+  await expect(page.locator(".contextSidebar")).toHaveAttribute("aria-label", "System navigation");
+  await page.locator(".contextSidebar nav button").nth(1).click();
+  await expect(page.getByRole("heading", { name: "Application Footprint" })).toBeVisible();
+  await expect(page.getByLabel("Administrator token")).toBeVisible();
+});

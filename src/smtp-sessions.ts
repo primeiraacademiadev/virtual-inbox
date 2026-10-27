@@ -18,6 +18,7 @@ export type PublicSmtpSession = {
   clientId: string;
   remoteAddress: string;
   connectedAt: string;
+  lastActivityAt: string;
   disconnectedAt?: string;
   connected: boolean;
   authenticated: boolean;
@@ -105,14 +106,14 @@ export class SmtpSessionStore {
     const id = randomUUID();
     const session: SmtpSessionRecord = {
       id, clientId: this.clientId(remoteAddress), remoteAddress,
-      connectedAt: new Date().toISOString(), connected: true,
+      connectedAt: new Date().toISOString(), lastActivityAt: new Date().toISOString(), connected: true,
       authenticated: false, secure, authAttempts: [], messageIds: [], errors: [],
     };
     this.sessions.set(id, session);
     return id;
   }
   updateTls(id: string, secure: boolean) {
-    if (secure) this.session(id).secure = true;
+    if (secure) { const session = this.session(id); session.secure = true; session.lastActivityAt = new Date().toISOString(); }
   }
   async authenticate(id: string, username: string, password: string, method = "UNKNOWN") {
     if (typeof username !== "string" || typeof password !== "string")
@@ -131,6 +132,7 @@ export class SmtpSessionStore {
     session.testSessionId = testSessionId;
     session.clientId = this.clientId(session.remoteAddress, username);
     session.authenticated = true;
+    session.lastActivityAt = attempt.at;
     return { id: attempt.id, clientId: session.clientId, testSessionId };
   }
   disconnect(id: string) {
@@ -138,15 +140,18 @@ export class SmtpSessionStore {
     if (!session || !session.connected) return;
     session.connected = false;
     session.disconnectedAt = new Date().toISOString();
+    session.lastActivityAt = session.disconnectedAt;
   }
   recordMessage(id: string, messageId: string) {
     const session = this.session(id);
+    session.lastActivityAt = new Date().toISOString();
     session.messageIds.push(messageId);
     if (session.messageIds.length > MAX_MESSAGE_IDS) session.messageIds.shift();
   }
   recordError(id: string, responseCode: number, code: string) {
     const session = this.session(id);
-    session.errors.push({ at: new Date().toISOString(), responseCode, code });
+    session.lastActivityAt = new Date().toISOString();
+    session.errors.push({ at: session.lastActivityAt, responseCode, code });
     if (session.errors.length > MAX_ERRORS) session.errors.shift();
   }
   listSessions(clientId?: string): PublicSmtpSession[] {
@@ -154,7 +159,7 @@ export class SmtpSessionStore {
       .filter((s) => !clientId || s.clientId === clientId)
       .map((s) => ({
         id: s.id, clientId: s.clientId, remoteAddress: s.remoteAddress,
-        connectedAt: s.connectedAt, disconnectedAt: s.disconnectedAt,
+        connectedAt: s.connectedAt, lastActivityAt: s.lastActivityAt, disconnectedAt: s.disconnectedAt,
         connected: s.connected, authenticated: s.authenticated, secure: s.secure,
         authUser: s.authUser, testSessionId: s.testSessionId, messageIds: [...s.messageIds],
         authAttempts: s.authAttempts.map(({ id, at, method, authUser, accepted }) =>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { request } from "../api";
 
-type Snapshot = {
+export type Snapshot = {
   runId: string; uptimeSeconds: number; capturedAt: string;
   memory: Record<"rss"|"heapUsed"|"heapTotal"|"external"|"arrayBuffers", number>;
   resources: Record<string, number>;
@@ -22,21 +22,11 @@ export function FootprintView({ adminToken, onAdminTokenChange }: {
     catch (err) { setError(err instanceof Error ? err.message : "Unable to read footprint"); }
   }, [adminToken]);
   useEffect(() => {
+    if (!adminToken) setValue(null);
     void reload();
     const interval = setInterval(() => { void reload(); }, 5000);
     return () => clearInterval(interval);
   }, [reload]);
-  const pairs: Array<[string, number, number | undefined]> = value ? [
-    ["Email inboxes", value.resources.emailInboxes, value.resources.inboxLimit],
-    ["SMS inboxes", value.resources.smsInboxes, value.resources.inboxLimit],
-    ["Messages", value.resources.messages, value.resources.messageLimit],
-    ["Attachments", value.resources.attachments, undefined],
-    ["Stored payload", value.resources.storedBytes, value.resources.storedBytesLimit],
-    ["Observers", value.resources.observers, value.resources.observerLimit],
-    ["Events", value.resources.events, value.resources.eventLimit],
-    ["Logical GUID sessions", value.resources.logicalSessions, undefined],
-    ["Simulation rules", value.resources.simulationRules, undefined],
-  ] : [];
   return <main className="information">
     <h2>Application Footprint</h2>
     <p className="muted">Read-only observability. Process memory is not the same as retained message payload bytes.</p>
@@ -48,7 +38,24 @@ export function FootprintView({ adminToken, onAdminTokenChange }: {
     <button type="button" disabled={!adminToken} onClick={() => void reload()}>Refresh footprint</button>
     {error && <p role="alert">{error}</p>}
     {!value && !error && <p className="muted">Enter the administrator token above to inspect application resources.</p>}
-    {value && <>
+    {value && <FootprintSummary value={value} />}
+  </main>;
+}
+
+/** Render-only panel can be tested without an authenticated browser or live API. */
+export function FootprintSummary({ value }: { value: Snapshot }) {
+  const pairs: Array<[string, number, number | undefined]> = [
+    ["Email inboxes", value.resources.emailInboxes, value.resources.inboxLimit],
+    ["SMS inboxes", value.resources.smsInboxes, value.resources.inboxLimit],
+    ["Messages", value.resources.messages, value.resources.messageLimit],
+    ["Attachments", value.resources.attachments, undefined],
+    ["Stored payload", value.resources.storedBytes, value.resources.storedBytesLimit],
+    ["Observers", value.resources.observers, value.resources.observerLimit],
+    ["Events", value.resources.events, value.resources.eventLimit],
+    ["Logical GUID sessions", value.resources.logicalSessions, undefined],
+    ["Simulation rules", value.resources.simulationRules, undefined],
+  ];
+  return <>
       <p className="tiny">Run {value.runId} · Uptime {value.uptimeSeconds}s · Snapshot {value.capturedAt}</p>
       <h3>Node.js memory</h3>
       <div className="footprintCards">{Object.entries(value.memory).map(([key, bytes]) =>
@@ -67,6 +74,5 @@ export function FootprintView({ adminToken, onAdminTokenChange }: {
           <td>{value.protocols[protocol].retained}</td><td>{value.protocols[protocol].limit}</td>
           <td>{value.protocols[protocol].retentionSeconds / 60} min</td></tr>)}</tbody></table>
       <p className="tiny">Last cleanup: {value.cleanup.lastAt || "Not yet executed"}</p>
-    </>}
-  </main>;
+  </>;
 }

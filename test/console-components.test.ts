@@ -10,7 +10,7 @@ const { ProtocolMetricsView } = await import(modulePath("protocols/ProtocolMetri
 const { MarkdownView } = await import(modulePath("documentation/MarkdownView"));
 const { ProtocolConnections, filteredConnections } = await import(modulePath("protocols/ProtocolConnections"));
 const { NavigationIcon } = await import(modulePath("NavigationIcon"));
-const { FootprintView } = await import(modulePath("FootprintView"));
+const { FootprintView, FootprintSummary } = await import(modulePath("FootprintView"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.
@@ -102,4 +102,31 @@ test("filtered protocol history and rendered footprint controls", () => {
   assert.match(html,/Reverse sort/);
   assert.match(render(NavigationIcon,{name:"sms"}),/<svg/);
   assert.match(render(FootprintView,{adminToken:""}),/Application Footprint/);
+});
+
+test("footprint summary renders resource counts, retention and process memory", () => {
+  const mib = 1024 * 1024;
+  const snapshot = {
+    runId: "test-run", capturedAt: "2026-10-27T00:00:00Z", uptimeSeconds: 120,
+    memory: { rss: 100*mib, heapUsed: 40*mib, heapTotal: 60*mib,
+      external: 5*mib, arrayBuffers: 2*mib },
+    resources: { emailInboxes: 2, smsInboxes: 3, inboxLimit: 2000,
+      messages: 5, messageLimit: 10000, attachments: 1,
+      storedBytes: 2*mib, storedBytesLimit: 256*mib,
+      observers: 1, observerLimit: 500, events: 8, eventLimit: 2000,
+      logicalSessions: 2, simulationRules: 1 },
+    protocols: {
+      SMTP: { active: 1, retained: 7, limit: 500, retentionSeconds: 3600 },
+      POP3: { active: 2, retained: 9, limit: 500, retentionSeconds: 3600 },
+    },
+    cleanup: { lastAt: "2026-10-27T00:00:00Z" },
+  };
+  const html = render(FootprintSummary, { value: snapshot });
+  assert.match(html, /100.0 MiB/);
+  assert.match(html, /Email inboxes/);
+  assert.match(html, /Stored payload/);
+  assert.match(html, /256.0 MiB/);
+  assert.match(html, /Connection retention/);
+  assert.match(html, /Last cleanup:/);
+  assert.match(html, /POP3/);
 });

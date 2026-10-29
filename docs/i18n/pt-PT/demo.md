@@ -12,7 +12,7 @@ O identificador REST é o UUID devolvido, não o endereço de email nem o telefo
 
 Seleciona uma inbox e abre o envio. O destinatário é a própria inbox. Email percorre o listener SMTP local; SMS entra pelo endpoint HTTP de demonstração, sem operadora externa. Consulta detalhes e anexos; o download preserva os bytes originais. O estado lida/não lida pertence à consola: consultar mensagens pela API não as consome.
 
-O painel de logs pode ser minimizado, apresentado sob a inbox ou expandido. A barra lateral também colapsa. Documentação contém os procedimentos; API mostra o catálogo gerado. Se uma mensagem não aparecer, consulta os logs e a inbox de anomalias: destinos desconhecidos ou expirados são capturados aí, dentro das quotas.
+O painel de logs pode ser minimizado, apresentado sob a inbox ou expandido. A barra lateral também colapsa. Documentação contém os procedimentos; API mostra o catálogo gerado. Se uma mensagem não aparecer, consulta os logs e a inbox de sistema `anomalies@sandbox.test` (email) ou `+999000000000` (SMS). O envio para uma inbox não registada **não a cria nem é rejeitado por esse motivo**: é aceite e capturado em anomalias, dentro das quotas. Consulta `originalRecipient` e `captureReason` (`UNKNOWN_RECIPIENT` / `EXPIRED_RECIPIENT`). Para localizar a inbox de sistema e consultar as mensagens por UUID, segue [Integração](integration.md).
 
 ## Erros esperados
 

@@ -18,6 +18,6 @@ void i18next.use(initReactI18next).init({
   supportedLngs: [...locales],
   interpolation: { escapeValue: false },
   returnNull: false,
-  initImmediate: false,
+  initAsync: false,
 });
 export default i18next;

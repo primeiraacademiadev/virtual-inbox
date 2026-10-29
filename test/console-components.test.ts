@@ -10,6 +10,7 @@ const { ProtocolMetricsView } = await import(modulePath("protocols/ProtocolMetri
 const { MarkdownView } = await import(modulePath("documentation/MarkdownView"));
 const { ProtocolConnections, filteredConnections } = await import(modulePath("protocols/ProtocolConnections"));
 const { NavigationIcon } = await import(modulePath("NavigationIcon"));
+const { AttachmentIndicator } = await import(modulePath("AttachmentIndicator"));
 const { FootprintView, FootprintSummary } = await import(modulePath("FootprintView"));
 
 // Render the real React components with the console's installed React runtime.
@@ -19,6 +20,20 @@ const { createElement } = requireFromWeb("react");
 const { renderToStaticMarkup } = requireFromWeb("react-dom/server");
 const render = (component: unknown, props: Record<string, unknown>) =>
   renderToStaticMarkup(createElement(component as never, props));
+
+test("email message list attachment indicator is accessible and omits SMS/empty messages", () => {
+  const attachment = { id: "a1", filename: "report.pdf", contentType: "application/pdf", size: 100 };
+  const message = { channel: "email", attachments: [attachment, { ...attachment, id: "a2" }] };
+  const html = render(AttachmentIndicator, { message, label: "Attachments" });
+  assert.match(html, /role="img"/);
+  assert.match(html, /aria-label="Attachments: 2"/);
+  assert.match(html, /title="Attachments: 2"/);
+  assert.match(html, /<svg/);
+  assert.match(html, />2<\/span>/);
+  assert.equal(render(AttachmentIndicator, { message: { channel: "email", attachments: [] }, label: "Attachments" }), "");
+  assert.equal(render(AttachmentIndicator, { message: { channel: "email" }, label: "Attachments" }), "");
+  assert.equal(render(AttachmentIndicator, { message: { channel: "sms", attachments: [attachment] }, label: "Attachments" }), "");
+});
 
 test("context navigation renders the appropriate links and documentation headings", () => {
   const handlers = { onPage: () => {}, onDocument: () => {} };

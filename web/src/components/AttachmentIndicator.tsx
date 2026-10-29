@@ -1,3 +1,4 @@
+import React from "react";
 import type { Message } from "../api";
 
 type Props = {

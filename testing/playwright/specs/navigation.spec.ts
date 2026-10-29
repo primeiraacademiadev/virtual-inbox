@@ -58,3 +58,15 @@ test("context menu uses icons when collapsed and system exposes footprint", asyn
   await expect(page.getByRole("heading", { name: "Application Footprint" })).toBeVisible();
   await expect(page.getByLabel("Administrator token")).toBeVisible();
 });
+
+test("Markdown renderer loads only when navigating to Documentation or API", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".appNavigation > button").click();
+  await page.locator("#primary-nav-menu button").nth(2).click();
+  await expect(page.locator(".docMarkdown h1, .docMarkdown h2").first()).toBeVisible();
+  await page.locator(".contextSidebar nav button").nth(1).click();
+  await expect(page.locator(".docMarkdown h1, .docMarkdown h2").first()).toBeVisible();
+  await page.locator(".appNavigation > button").click();
+  await page.locator("#primary-nav-menu button").first().click();
+  await expect(page.locator(".workspace")).toBeVisible();
+});

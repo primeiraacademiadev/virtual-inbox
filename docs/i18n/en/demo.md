@@ -12,7 +12,7 @@ The identifier used by REST is the returned UUID, not the email/telephone addres
 
 Select an inbox and open the compose control. Send to that same inbox. Email goes through the local SMTP listener; SMS is captured through the demo HTTP route. No external carrier is used. Inspect message details and attachment metadata; downloads preserve the original bytes. Read/unread badges belong to the console view, not a consuming API queue.
 
-The log panel can be minimized, shown below the inbox or expanded. The sidebar also collapses. Open Documentation for procedures and API for the generated endpoint catalogue. If no message arrives, inspect logs and the system anomaly inbox: unknown and expired destinations are captured there, subject to quotas.
+The log panel can be minimized, shown below the inbox or expanded. The sidebar also collapses. Open Documentation for procedures and API for the generated endpoint catalogue. If no message arrives, inspect the logs and system inbox `anomalies@sandbox.test` (email) or `+999000000000` (SMS). Sending to an unregistered inbox **does not create it or fail for that reason**: it is accepted into anomalies, subject to quotas. Inspect `originalRecipient` and `captureReason` (`UNKNOWN_RECIPIENT` / `EXPIRED_RECIPIENT`). See [Integration](integration.md) for REST lookup by UUID.
 
 ## Expected errors
 

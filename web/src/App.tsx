@@ -6,7 +6,7 @@ import {
   type IdentityPrefs,
   type GenerationOptions,
 } from "./components/identity/preferences";
-import { MarkdownView } from "./components/documentation/MarkdownView";
+
 import { ContextSidebar } from "./components/ContextSidebar";
 import { NavigationIcon } from "./components/NavigationIcon";
 import { ProtocolConnections } from "./components/protocols/ProtocolConnections";
@@ -23,7 +23,7 @@ import { useDismissable } from "./hooks/useDismissable";
 import { generateDemoSample, applyDemoSample, beginDemoCompose, refreshDemoOnLocaleChange } from "./demo-samples";
 import { removeInboxAndReconcile } from "./inbox-removal";
 import { DocumentSearch, type SearchDestination } from "./search/DocumentSearch";
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   classify,
   del,
@@ -35,6 +35,10 @@ import {
   type Observer,
   type Recipient,
 } from "./api";
+// Keep the Markdown/remark rendering stack out of the initial inbox bundle.
+const MarkdownView = lazy(() => import("./components/documentation/MarkdownView")
+  .then(({ MarkdownView }) => ({ default: MarkdownView })));
+
 type View = "split" | "inbox" | "logs";
 type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
 type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
@@ -1224,7 +1228,9 @@ export default function App() {
             ))}
           </div>
           <article className="docMarkdown">
-            <MarkdownView markdown={docText} onDocument={openDocument} />
+            <Suspense fallback={<p className="muted" role="status">{t("loadingDocument")}</p>}>
+              <MarkdownView markdown={docText} onDocument={openDocument} />
+            </Suspense>
           </article>
         </main>
       )}
@@ -1234,7 +1240,9 @@ export default function App() {
           <DocumentSearch onNavigate={navigateSearch} />
           <p>{t("apiNote")}</p>
           <article className="docMarkdown">
-            <MarkdownView markdown={apiText} onDocument={openDocument} />
+            <Suspense fallback={<p className="muted" role="status">{t("loadingDocument")}</p>}>
+              <MarkdownView markdown={apiText} onDocument={openDocument} />
+            </Suspense>
           </article>
         </main>
       )}

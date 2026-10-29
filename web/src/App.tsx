@@ -9,6 +9,7 @@ import {
 
 import { ContextSidebar } from "./components/ContextSidebar";
 import { NavigationIcon } from "./components/NavigationIcon";
+import { AttachmentIndicator } from "./components/AttachmentIndicator";
 import { ProtocolConnections } from "./components/protocols/ProtocolConnections";
 import { FootprintView } from "./components/FootprintView";
 import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
@@ -852,7 +853,10 @@ export default function App() {
                           >
                             <div className="msgTitle">
                               {m.subject || m.body.slice(0, 65) || t("emptyBody")}{" "}
-                              <span className="tiny">{formatDate(m.receivedAt)}</span>
+                              <span className="msgTitleMeta">
+                                <AttachmentIndicator message={m} label={t("attachments")} />
+                                <span className="tiny">{formatDate(m.receivedAt)}</span>
+                              </span>
                             </div>
                             <div className="tiny">
                               {m.from}

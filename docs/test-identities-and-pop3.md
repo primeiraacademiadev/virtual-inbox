@@ -12,6 +12,7 @@ SMTP AUTH and POP3 USER/PASS resolve the same logical test session.
 - Separate SMTP connections still have their own transport-session identifiers.
 - Deleting or expiring an inbox removes its identity sessions and their simulation rules.
 - SMTP AUTH rejects unknown inboxes with a permanent authentication error (535); POP3 and the admin session API also reject unknown or expired inboxes.
+- This login requirement is separate from delivery: an unauthenticated SMTP submission can address an unknown recipient. SMTP `RCPT TO` accepts it and, after successful `DATA`, stores it in `anomalies@sandbox.test` with `captureReason: UNKNOWN_RECIPIENT` (or `EXPIRED_RECIPIENT` for an expired address). This does not create a user inbox. See [Integration](i18n/en/integration.md).
 
 ## Technical API
 

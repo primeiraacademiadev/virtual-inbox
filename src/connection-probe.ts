@@ -37,9 +37,19 @@ export function deliverConnectionProbe(
   if (!session) throw new Fault(404, "SMTP connection not found", "SMTP_SESSION_NOT_FOUND");
   const response = {
     protocol: "SMTP",
+    clientId: session.authenticated ? session.clientId : null,
     smtpSessionId,
     authenticated: session.authenticated,
     secure: session.secure,
+    sessions: (session.authenticated
+      ? smtpSessions.listSessions(session.clientId)
+      : [session]).map((entry) => ({
+        smtpSessionId: entry.id,
+        connectedAt: entry.connectedAt,
+        disconnectedAt: entry.disconnectedAt ?? null,
+        connected: entry.connected,
+        current: entry.id === smtpSessionId,
+      })),
   };
   const message = sandbox.deliver("email", "connection@virtual.inbox", address,
     JSON.stringify(response), undefined, undefined, undefined, [], { smtpSessionId });

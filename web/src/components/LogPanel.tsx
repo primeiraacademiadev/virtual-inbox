@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { EventEntry } from "../api.js";
 import { LOG_DEPTHS, LOG_FILTER_FIELDS, visibleLogs, gapLabel } from "../logs/log-model.js";
+import type { Locale } from "../i18n/catalog.js";
 import { eventLabel } from "../i18n/domain.js";
 
 export function LogPanel(props: {
@@ -19,7 +20,7 @@ export function LogPanel(props: {
   loadingOlder: boolean;
   unretrievableGaps: string[];
   loadingGaps: string[];
-  locale: string;
+  locale: Locale;
   formatDate: (value: string) => string;
   labels: { logs: string; minimize: string; filter: string; clear: string };
 }) {

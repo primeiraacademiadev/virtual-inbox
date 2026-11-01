@@ -291,7 +291,8 @@ export default function App() {
     const path = safeObserver(observer)
       ? "/api/observers/" + safeObserver(observer) + "/events"
       : "/api/observers/events";
-    activeSse = new EventSource(path);
+    const logQuery = serverLogFilter.trim() ? "?" + new URLSearchParams({ [logField]: serverLogFilter.trim() }).toString() : "";
+    activeSse = new EventSource(path + logQuery);
     setConnected(false);
     const handleSession = (ev: MessageEvent) => {
       const data = JSON.parse(ev.data) as Observer;
@@ -346,7 +347,7 @@ export default function App() {
       closed = true;
       activeSse?.close();
     };
-  }, [observer, refresh, syncObserver]);
+  }, [observer, refresh, syncObserver, logField, serverLogFilter]);
   useEffect(() => {
     if (!observer) return;
     const poll = setInterval(() => {

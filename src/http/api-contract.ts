@@ -109,14 +109,14 @@ export const schemas: Record<string, Schema> = {
   }),
   SmtpReplySelectors: object({ sender: string, recipient: string, clientId: uuid, smtpSessionId: uuid }),
   SmtpReplyRuleInput: object({
-    phase: { enum: ["MAIL", "RCPT", "DATA"] }, action: { const: "reply" },
+    phase: { enum: ["MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
     code: { type: "integer", minimum: 400, maximum: 599 },
-    message: string, remaining: { type: "integer", minimum: 1, maximum: 10000 },
+    message: string, durationMs: { type: "integer", minimum: 1 }, remaining: { type: "integer", minimum: 1, maximum: 10000 },
     selectors: reference("SmtpReplySelectors"),
   }, ["phase", "action", "code", "remaining", "selectors"]),
   SmtpReplyRule: object({
-    id: uuid, phase: { enum: ["MAIL", "RCPT", "DATA"] }, action: { const: "reply" },
-    code: integer, message: string, remaining: integer,
+    id: uuid, phase: { enum: ["MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
+    code: integer, message: string, durationMs: integer, remaining: integer,
     selectors: reference("SmtpReplySelectors"), createdAt: string,
   }, ["id", "phase", "action", "code", "remaining", "selectors", "createdAt"]),
   SmtpReplyRules: array(reference("SmtpReplyRule")),

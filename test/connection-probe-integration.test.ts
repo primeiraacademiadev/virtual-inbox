@@ -69,6 +69,32 @@ test("real SMTP OPEN discovery identifies the client across connections and inje
       await delay(100);
     }
     assert.ok(ready, "SMTP OPEN server not healthy: " + serverOutput);
+    const capabilitiesResponse = await fetch("http://127.0.0.1:" + port + "/api/capabilities");
+    assert.equal(capabilitiesResponse.status, 200);
+    const capabilities = await capabilitiesResponse.json() as {
+      smtpAuthPolicy: string; protocols: { pop3: boolean }; inbox: { idempotentCreate: boolean };
+    };
+    assert.equal(capabilities.smtpAuthPolicy, "OPEN");
+    assert.equal(capabilities.protocols.pop3, true);
+    assert.equal(capabilities.inbox.idempotentCreate, true);
+    const idempotencyAddress = "idempotent-" + randomUUID() + "@example.test";
+    const post = (value: object) => fetch("http://127.0.0.1:" + port + "/api/mailboxes", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value),
+    });
+    const createdInboxResponse = await post({ address: idempotencyAddress, ttlSeconds: 120 });
+    assert.equal(createdInboxResponse.status, 201);
+    const createdInbox = await createdInboxResponse.json() as { id: string; expiresAt: string };
+    const conflictResponse = await post({ address: idempotencyAddress, ttlSeconds: 120 });
+    assert.equal(conflictResponse.status, 409);
+    const conflict = await conflictResponse.json() as { errorCode: string; errorParams: { address: string } };
+    assert.equal(conflict.errorCode, "CONFLICT");
+    assert.equal(conflict.errorParams.address, idempotencyAddress);
+    const reusedResponse = await post({ address: idempotencyAddress, ttlSeconds: 999, ifExists: "return" });
+    assert.equal(reusedResponse.status, 200);
+    const reusedInbox = await reusedResponse.json() as { id: string; expiresAt: string };
+    assert.deepEqual(reusedInbox, createdInbox);
+    const noProbeBypass = await post({ address: randomUUID().replaceAll("-", "") + "@virtual.inbox", ifExists: "return" });
+    assert.equal(noProbeBypass.status, 400);
     const ca = readFileSync(join(certs, "ca.pem"));
     const admin = (method: string, path: string, value?: unknown, authorized = true) =>
       new Promise<{ status: number; data: any }>((resolveResponse, reject) => {

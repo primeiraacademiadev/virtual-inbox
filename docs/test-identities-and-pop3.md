@@ -56,3 +56,15 @@ bytes, bounded resource counts, connections and last cleanup. Process memory is
 not equivalent to stored payload. All these endpoints require HTTPS and
 `ADMIN_TOKEN`. The System → Footprint dashboard is read-only, refreshing every
 five seconds.
+
+## SMTP connection discovery using @virtual.inbox
+
+The reserved `@virtual.inbox` domain is a **protocol endpoint**, not a normal email domain. Only SMTP delivery creates these mailboxes. To discover the connection UUID, send an SMTP message on the **same connection** to a randomly generated 32-hex-character address such as `d44eaf765b72401cae559febf14f2378@virtual.inbox`. The request must have **exactly one recipient and no Subject header, body text, HTML body, or attachments**. The usual SMTP message transport headers (such as From, Date and Message-ID) may be present. Invalid requests are rejected rather than captured as anomalies.
+
+The first valid request creates the mailbox automatically with a fixed **60-second TTL**. The application generates a JSON response directly in that inbox; the request itself is not stored. The response body contains `protocol: "SMTP"`, `smtpSessionId`, `authenticated` and `secure`. Use `GET /api/mailboxes?address=<address>` to discover the inbox ID, then the existing `POST /api/mailboxes/{inboxId}/wait-for-message` endpoint to obtain its response. Reusing the address while it exists does not extend its TTL. Cleanup deletes the inbox and its responses after expiry (sweep interval approximately one second).
+
+An SMTP connection UUID is **not an access token**. Diagnostic requests and simulation changes require HTTPS plus the admin bearer token. Connection-scoped DATA failure rules are supported at `POST /api/admin/smtp/sessions/{smtpSessionId}/simulations` with `{"command":"DATA","code":451,"message":"Simulated failure","remaining":1}`, and can be listed or deleted at the corresponding endpoint. Only active connections accept new rules; rules are removed on disconnect. This is currently DATA-only; sender/recipient and earlier-phase simulation rules belong to #36. The probe request bypasses simulations so discovery can work reliably.
+
+The SMTP connection must remain open: new connections receive a different `smtpSessionId`. For concurrent test suites, never use guessable short numeric tokens or reuse an address from another suite. Mailbox reads are not individually authenticated in this version, so the random identifier is needed to reduce unintended cross-test disclosure. Do not expose this environment to untrusted networks.
+
+Set `SMTP_AUTH_POLICY=OPEN` to allow arbitrary SMTP AUTH usernames without provisioning an inbox. `INBOX` (the default for backward compatibility) retains the legacy requirement to pre-create a mailbox and returns SMTP 535 otherwise. SMTP connections without AUTH are accepted in both modes (`authOptional: true`). POP3 still authenticates against a real mailbox with its existing credentials/session logic; it is not affected by SMTP OPEN mode.

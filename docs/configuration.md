@@ -4,7 +4,7 @@ No `.env` is required for a local start. Copy `.env.example` only when overridin
 
 ## Sources and precedence
 
-Network settings use **persisted settings > process environment > defaults**. `NETWORK_SETTINGS_FILE` defaults to `data/network-settings.json`. Startup warns with the names of environment settings that are overridden. A console network update returns `202` and requires a restart; it does not immediately move listeners. To restore environment control, stop the application, back up the file, remove the relevant keys and restart. Do not remove the certificate directory.
+Network settings use **explicit process environment > persisted legacy settings > defaults**. `NETWORK_SETTINGS_FILE` defaults to `data/network-settings.json`. Startup warns with the names of persisted keys shadowed by environment variables. A console network update returns `202` and requires a restart; it does not immediately move listeners. Updates contradicting environment-owned keys return HTTP `409` (`NETWORK_SETTINGS_ENV_CONTROLLED`), while unchanged values remain accepted for compatibility. `/api/connection-info` includes `environmentControlledKeys` so the console can mark those values read-only. TLS certificate persistence remains independent.
 
 TLS SANs combine `TLS_SERVER_NAMES`, `TLS_SERVER_NAMES_FILE`, console-managed `TLS_MANAGED_NAMES_FILE`, and `PUBLIC_HOST`, with validation and deduplication. Both startup and SAN regeneration use the same resolver. `0.0.0.0` and `::` are listening addresses and are excluded from certificate names. The JSON name files use `{"dns":["localhost"],"ips":["127.0.0.1"]}`. Console updates replace only the console-managed additions; environment/file entries remain.
 

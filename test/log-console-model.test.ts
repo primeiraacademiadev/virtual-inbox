@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendLog, visibleLogs, logStreamQuery, gapRange, recoverableGapUrl, mergeRecoveredLogs, gapLabel } from "../web/src/logs/log-model.js";
+import { appendLog, visibleLogs, logStreamQuery, gapRange, recoverableGapUrl, mergeRecoveredLogs, gapLabel, logPageUrl, snapshotCursor, logSseUrl, mergeOlderPage, pageSnapshot, gapMarker, appendGap } from "../web/src/logs/log-model.js";
 import type { EventEntry } from "../web/src/api.js";
 
 const event = (n: number, type = "smtp.received"): EventEntry => ({ id: "run:" + n, log_id: n, at: "2026-11-01T00:00:00Z", type });
@@ -39,4 +39,46 @@ test("unretrievable and missing gap labels are localized", () => {
   assert.match(gapLabel("pt-PT", true, 2, 3), /irrecuperáveis/);
   assert.match(gapLabel("fr", false, 2, 3), /manquantes/);
   assert.match(gapLabel("en", true, 2, 3), /Unretrievable/);
+});
+
+test("paged log URLs use validated exact filters and exclusive cursors", () => {
+  assert.equal(logPageUrl("sender", " a+b@example.test ", 42), "/logs?limit=20&before=42&sender=a%2Bb%40example.test");
+  assert.equal(logPageUrl("unknown", "anything"), "/logs?limit=20");
+  assert.equal(logPageUrl("type", " ", undefined, 5), "/logs?limit=5");
+});
+test("snapshot cursors use the globally latest event, not the filtered page tail", () => {
+  const page = { events: [event(8), event(6)], latest: { log_id: 10, at: event(10).at }, runId: "run-A", hasMore: true };
+  assert.equal(snapshotCursor(page), "run-A:10");
+  assert.equal(snapshotCursor({ ...page, latest: null }), null);
+  assert.equal(snapshotCursor({ ...page, runId: undefined }), null);
+  assert.equal(snapshotCursor({ ...page, latest: { log_id: 0, at: "" } }), null);
+});
+test("SSE URLs resume after the REST snapshot and escape cursors", () => {
+  assert.equal(logSseUrl("/api/logs/events", "sender", "joe@example.test", "run:12"),
+    "/api/logs/events?sender=joe%40example.test&after=run%3A12");
+  assert.equal(logSseUrl("/api/logs/events", "bogus", "value", null), "/api/logs/events");
+  assert.equal(logSseUrl("/api/logs/events", "bogus", "value", "run:1"),
+    "/api/logs/events?after=run%3A1");
+});
+test("page snapshots sort oldest-to-newest and cap local retention", () => {
+  const page = { events: [event(4), event(3), event(2), event(1)], hasMore: false };
+  assert.deepEqual(pageSnapshot(page, 3).map((x) => x.log_id), [2, 3, 4]);
+  assert.deepEqual(pageSnapshot({ events: [], hasMore: false }, 3), []);
+});
+test("old history merges without duplicates and cannot evict newer live events", () => {
+  const page = { events: [event(3), event(2), event(1)], hasMore: true };
+  assert.deepEqual(mergeOlderPage([event(3), event(4), event(5)], page, 5).map((x) => x.log_id), [1, 2, 3, 4, 5]);
+  assert.deepEqual(mergeOlderPage([event(4), event(5)], page, 2).map((x) => x.log_id), [4, 5]);
+  assert.deepEqual(mergeOlderPage([], { events: [], hasMore: false }, 2), []);
+});
+test("gaps become unique system markers and reject invalid ranges", () => {
+  const marker = gapMarker(2, 4, "2026-11-01T00:00:00Z");
+  assert.equal(marker?.id, "gap:2:4");
+  assert.deepEqual(marker?.data, { missingFrom: 2, missingTo: 4 });
+  assert.equal(gapMarker(0, 2, ""), null);
+  assert.equal(gapMarker(5, 2, ""), null);
+  assert.equal(gapMarker(1.5, 2, ""), null);
+  assert.deepEqual(appendGap([event(1)], marker, 5).map((x) => x.id), ["run:1", "gap:2:4"]);
+  assert.deepEqual(appendGap([event(1)], null, 5), [event(1)]);
+  assert.equal(appendGap([marker!], marker, 5).length, 1);
 });

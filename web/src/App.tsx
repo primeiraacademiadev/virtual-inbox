@@ -187,12 +187,9 @@ export default function App() {
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
   const [logs, setLogs] = useState<EventEntry[]>([]);
-  const [logDepth, setLogDepth] = useState(() => {
-    const raw = Number(sessionStorage.getItem("virtual-inbox-log-depth") || 2000);
-    return [500, 2000, 5000, 10000].includes(raw) ? raw : 2000;
-  });
+  // Console-only preference: do not persist untrusted input into browser storage.
+  const [logDepth, setLogDepth] = useState(2000);
   useEffect(() => {
-    sessionStorage.setItem("virtual-inbox-log-depth", String(logDepth));
     setLogs((entries) => entries.slice(-logDepth));
   }, [logDepth]);
   const [logFilter, setLogFilter] = useState("");

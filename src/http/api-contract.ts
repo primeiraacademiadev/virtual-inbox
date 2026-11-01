@@ -151,8 +151,8 @@ export const schemas: Record<string, Schema> = {
   NetworkSettings: object(Object.fromEntries([
     "PUBLIC_HOST", "HOST", "SMTP_HOST", "PORT", "HTTPS_PORT", "SMTP_PORT", "SMTPS_PORT", "DEMO_PORT", "DEMO_HTTPS_PORT",
   ].map((name) => [name, string]))),
-  NetworkResult: object({ restartRequired: { const: true }, settings: reference("NetworkSettings") }, ["restartRequired", "settings"]),
-  ConnectionInfo: object({ host: string, networkSettings: reference("NetworkSettings"), http: { type: "object" }, smtp: { type: "object" }, certificate: { type: ["object", "null"] } }, ["host", "networkSettings", "http", "smtp", "certificate"]),
+  NetworkResult: object({ restartRequired: { const: true }, settings: reference("NetworkSettings"), environmentControlledKeys: array(string) }, ["restartRequired", "settings"]),
+  ConnectionInfo: object({ host: string, networkSettings: reference("NetworkSettings"), environmentControlledKeys: array(string), http: { type: "object" }, smtp: { type: "object" }, certificate: { type: ["object", "null"] } }, ["host", "networkSettings", "http", "smtp", "certificate"]),
   GenerationOptions: { type: "object", description: "Supported locales, strategies and configured generation defaults." },
   SmsInput: object({ from: string, to: string, body: string }, ["from", "to", "body"]),
   DemoEmail: object({ from: string, subject: string, body: string, attachments: array(object({ filename: string, contentType: string, contentBase64: { type: "string", contentEncoding: "base64" } }, ["filename", "contentBase64"])) }),

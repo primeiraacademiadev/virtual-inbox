@@ -414,6 +414,25 @@ export class Sandbox {
   unwatch(id: string, resourceId: string) {
     this.observer(id).inboxes.delete(resourceId);
   }
+  pageLogs(options: { limit?: number; before?: number; filters?: LogFilters } = {}) {
+    const { limit = 20, before, filters = {} } = options;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+      throw new Fault(400, "Invalid log page limit", "INVALID_LOG_LIMIT");
+    if (before !== undefined && (!Number.isSafeInteger(before) || before < 1))
+      throw new Fault(400, "Invalid log cursor", "INVALID_LOG_CURSOR");
+    const candidates = this.events.filter((event) =>
+      (before === undefined || (event.log_id ?? 0) < before) && matchesLog(event, filters));
+    const events = candidates.slice(-limit).reverse();
+    const oldestEvent = this.events[0], latestEvent = this.events.at(-1);
+    return {
+      events,
+      nextBefore: events.at(-1)?.log_id,
+      hasMore: candidates.length > events.length,
+      oldest: oldestEvent ? { log_id: oldestEvent.log_id, at: oldestEvent.at } : null,
+      latest: latestEvent ? { log_id: latestEvent.log_id, at: latestEvent.at } : null,
+      runId: this.runId,
+    };
+  }
   replay(after?: string, filters: LogFilters = {}) {
     let events = this.events;
     let gap = false;

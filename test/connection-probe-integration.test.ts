@@ -125,7 +125,35 @@ test("real SMTP OPEN discovery identifies the client across connections and inje
         sessions: Array<{ smtpSessionId: string; connectedAt: string; current: boolean; connected: boolean; disconnectedAt: string | null }>;
       };
     };
+    // The consumer can subscribe before the SMTP probe creates the reserved mailbox.
     const first = transport();
+    const waitingAddress = randomUUID().replaceAll("-", "") + "@virtual.inbox";
+    const pending = fetch("http://127.0.0.1:" + port + "/api/connection-probes/wait-for-message", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: waitingAddress, timeoutMs: 5000 }),
+    });
+    await delay(60);
+    const beforeCreation = await fetch("http://127.0.0.1:" + port +
+      "/api/mailboxes?address=" + waitingAddress);
+    assert.deepEqual(await beforeCreation.json(), [], "waiting must not provision inboxes");
+    await first.sendMail({
+      envelope: { from: sender, to: [waitingAddress] },
+      raw: "From: sender@example.test\\r\\nTo: " + waitingAddress + "\\r\\n\\r\\n",
+    });
+    const waited = await pending;
+    assert.equal(waited.status, 200);
+    const reply = await waited.json() as { body: string };
+    assert.match(JSON.parse(reply.body).smtpSessionId, /^[a-f0-9-]{36}$/i);
+    const rejectedWait = await fetch("http://127.0.0.1:" + port + "/api/connection-probes/wait-for-message", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: "unreserved@example.test", timeoutMs: 100 }),
+    });
+    assert.equal(rejectedWait.status, 400);
+    const forbiddenCreate = await fetch("http://127.0.0.1:" + port + "/api/mailboxes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: waitingAddress }),
+    });
+    assert.equal(forbiddenCreate.status, 400);
     const firstProbe = await probe(first);
     assert.match(firstProbe.clientId, /^[a-f0-9-]{36}$/i);
     assert.equal(firstProbe.sessions.length, 1);

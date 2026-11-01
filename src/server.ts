@@ -39,7 +39,7 @@ const credentialStore = new InboxCredentialStore();
 const inboxAddresses = new Map<string, string>();
 const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
 if (!["INBOX", "OPEN"].includes(smtpAuthPolicy)) throw Error("Invalid SMTP_AUTH_POLICY");
-const smtpSessions = new SmtpSessionStore(500, credentialStore, smtpAuthPolicy as "INBOX" | "OPEN");
+const smtpSessions = new SmtpSessionStore(500, credentialStore, smtpAuthPolicy as "INBOX" | "OPEN", config.smtpSessionHistoryHours);
 const simulations = new SimulationStore();
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();

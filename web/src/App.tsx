@@ -1,5 +1,5 @@
 import { initialHistory, olderHistory, recoverHistoryGap } from "./logs/log-history-service";
-import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel, logPageUrl, snapshotCursor, logSseUrl, mergeOlderPage, pageSnapshot, gapMarker, appendGap, type LogPage } from "./logs/log-model";
+import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, recoverableGapUrl, gapLabel, logSseUrl, gapMarker, appendGap } from "./logs/log-model";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
   restorePrefs,

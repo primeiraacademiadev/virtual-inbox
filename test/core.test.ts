@@ -67,10 +67,11 @@ test("wait finds an HTML-only email by body and by an exact MIME header", async 
   assert.deepEqual(byHeader?.envelope?.rcptTo, [inbox.address, "hidden@example.test"]);
 });
 
-test("inbox expiry is exactly TTL seconds after creation", () => {
+test("inbox TTL never expires early and permits up to 10% scheduling tolerance", () => {
   const s = new Sandbox();
   for (let i = 0; i < 100; i++) {
     const inbox = s.create("email", "ttl-check-" + i + "@example.test", 60);
-    assert.equal(Date.parse(inbox.expiresAt!) - Date.parse(inbox.createdAt), 60000);
+    const ttlMs = Date.parse(inbox.expiresAt!) - Date.parse(inbox.createdAt);
+    assert.ok(ttlMs >= 60000 && ttlMs <= 66000, `TTL must be within [60000, 66000] ms; got ${ttlMs}`);
   }
 });

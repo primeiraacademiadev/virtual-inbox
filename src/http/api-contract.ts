@@ -167,7 +167,7 @@ const management = (operation: Omit<ApiOperation, "audience">): ApiOperation => 
 });
 const streams = ["logs/events", "observers/events", "observers/{observerId}/events"].map(
   (path, index) => management({ id: ["logEvents", "newObserverEvents", "observerEvents"][index],
-    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after",
+    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies",
     summary: "Open an SSE stream; use Last-Event-ID or after for replay.", mediaType: "text/event-stream" }),
 );
 
@@ -211,7 +211,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "networkSettings", method: "PUT", path: "/admin/network", tag: "Administration", admin: true, status: 202, request: "NetworkSettings", response: "NetworkResult", summary: "Persist network settings. Restart is required for listeners." }),
   management({ id: "importTls", method: "PUT", path: "/admin/tls", tag: "Administration", admin: true, status: 200, request: "ImportIdentity", response: "ImportResult", summary: "Validate, persist and activate a PEM identity without restarting." }),
   management({ id: "tlsNames", method: "PUT", path: "/admin/tls/names", tag: "Administration", admin: true, status: 200, request: "TlsNames", response: "NamesResult", summary: "Replace console-managed SAN additions and regenerate in auto mode." }),
-  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,limit,before,from,to,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
+  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,limit,before,from,to,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
   ...streams,
   management({ id: "observerSnapshot", method: "GET", path: "/observers/{observerId}", tag: "Events", status: 200, response: "Observer", summary: "Read subscriptions and renew the observer session." }),
   management({ id: "watchInbox", method: "POST", path: "/observers/{observerId}/inboxes", tag: "Events", status: 200, request: "Watch", response: "WatchResult", summary: "Subscribe an observer; returns the inbox and existing messages." }),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { request, type EventEntry, type Observer } from "../api.js";
 import { initialHistory, olderHistory, recoverHistoryGap } from "./log-history-service.js";
-import { appendLog, recoverableGapUrl, logSseUrl, gapMarker, appendGap } from "./log-model.js";
+import { appendLog, recoverableGapUrl, logSseUrl, gapMarker, appendGap, mergeOlderPage } from "./log-model.js";
 
 const validObserver = (value: string) =>
   /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value) ? value : "";
@@ -68,12 +68,16 @@ export function useLogHistory(
     const path = observerId ? "/api/observers/" + observerId + "/events" : "/api/observers/events";
     const boot = async () => {
       let cursor: string | null = null;
+      let snapshotCursor: number | undefined;
+      let snapshotHasMore = false;
       try {
         const snapshot = await initialHistory(request, logField, serverLogFilter, logDepth, includeAnomalies);
         if (closed) return;
         setLogs(snapshot.entries);
         setOlderCursor(snapshot.nextBefore);
         setHasOlder(snapshot.hasMore);
+        snapshotCursor = snapshot.nextBefore;
+        snapshotHasMore = snapshot.hasMore;
         cursor = snapshot.cursor;
       } catch { /* Stream still works if the history endpoint is unavailable. */ }
       if (closed) return;
@@ -102,6 +106,24 @@ export function useLogHistory(
         setLogs([]);
         latestCallbacks.current.onGap();
       });
+      // Prefetch two additional pages without delaying the live SSE connection.
+      if (snapshotCursor && snapshotHasMore) {
+        void (async () => {
+          let before: number | undefined = snapshotCursor;
+          for (let page = 0; page < 2 && before !== undefined && !closed; page++) {
+            try {
+              const history = await olderHistory(request, logField, serverLogFilter, before,
+                [], logDepth, includeAnomalies);
+              if (closed) return;
+              setLogs(current => mergeOlderPage(current, { events: history.entries, hasMore: history.hasMore }, logDepth));
+              before = history.nextBefore;
+              setOlderCursor(before);
+              setHasOlder(history.hasMore);
+              if (!history.hasMore) break;
+            } catch { break; }
+          }
+        })();
+      }
       stream.onopen = () => setConnected(true);
       stream.onerror = () => {
         setConnected(false);

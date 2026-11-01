@@ -1,3 +1,4 @@
+import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel } from "./logs/log-model";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
   restorePrefs,
@@ -198,31 +199,18 @@ export default function App() {
   const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
   const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
   const recoverGap = async (gap: EventEntry) => {
-    const from = Number(gap.data?.missingFrom), to = Number(gap.data?.missingTo);
-    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from > to || to - from > 10000) return;
+    const url = recoverableGapUrl(gap, logField, serverLogFilter);
+    if (!url) return;
     setLoadingGaps((old) => [...old, gap.id]);
     try {
-      const params = new URLSearchParams({ from: String(from), to: String(to) });
-      if (serverLogFilter.trim()) params.set(logField, serverLogFilter.trim());
-      const result = await request<{ events: EventEntry[]; oldest?: string; runId: string }>("/logs?" + params);
-      const recovered = result.events;
-      const missing = recovered.length === 0;
-      if (missing) setUnretrievableGaps((old) => [...old, gap.id]);
-      else setLogs((old) => [...old.filter((entry) => entry.id !== gap.id), ...recovered]
-        .filter((entry, i, all) => all.findIndex((other) => other.id === entry.id) === i)
-        .sort((a, b) => (a.log_id ?? 0) - (b.log_id ?? 0)).slice(-logDepth));
+      const result = await request<{ events: EventEntry[]; runId: string }>(url);
+      if (!result.events.length) setUnretrievableGaps((old) => [...old, gap.id]);
+      else setLogs((old) => mergeRecoveredLogs(old, gap.id, result.events, logDepth));
     } catch {
       setUnretrievableGaps((old) => [...old, gap.id]);
     } finally {
       setLoadingGaps((old) => old.filter((id) => id !== gap.id));
     }
-  };
-  const gapText = (missing: boolean, from: unknown, to: unknown) => {
-    const terms = locale === "pt-PT"
-      ? ["Entradas irrecuperáveis", "Entradas em falta"]
-      : locale === "fr" ? ["Entrées irrécupérables", "Entrées manquantes"]
-        : ["Unretrievable entries", "Missing entries"];
-    return `${terms[missing ? 0 : 1]} (#${from}–#${to})`;
   };
   const [connected, setConnected] = useState(false);
   useEffect(() => {
@@ -317,7 +305,7 @@ export default function App() {
     const path = safeObserver(observer)
       ? "/api/observers/" + safeObserver(observer) + "/events"
       : "/api/observers/events";
-    const logQuery = serverLogFilter.trim() ? "?" + new URLSearchParams({ [logField]: serverLogFilter.trim() }).toString() : "";
+    const logQuery = logStreamQuery(logField, serverLogFilter);
     activeSse = new EventSource(path + logQuery);
     setConnected(false);
     const handleSession = (ev: MessageEvent) => {
@@ -330,7 +318,7 @@ export default function App() {
     };
     const handleLog = (ev: MessageEvent) => {
       const entry = JSON.parse(ev.data) as EventEntry;
-      setLogs((p) => (p.some((x) => x.id === entry.id) ? p : [...p.slice(-(logDepth - 1)), entry]));
+      setLogs((p) => appendLog(p, entry, logDepth));
       if (entry.resourceId && entry.type.startsWith("message.")) {
         const r = inboxesRef.current.find((x) => x.id === entry.resourceId);
         if (r) void refresh(r.id, r.channel);
@@ -620,7 +608,7 @@ export default function App() {
     finally { setSmtpPassword(""); }
   }
   const filteredLogs = useMemo(
-    () => logs.filter((x) => x.type === "log.gap" || JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),
+    () => visibleLogs(logs, logFilter),
     [logs, logFilter],
   );
   return (
@@ -1000,10 +988,10 @@ export default function App() {
                     onChange={(e) => setLogFilter(e.target.value)}
                   />
                   <label>History <select aria-label="Log history depth" value={logDepth} onChange={(e) => setLogDepth(Number(e.target.value))}>
-                    {[500, 2000, 5000, 10000].map((n) => <option key={n} value={n}>{n}</option>)}
+                    {LOG_DEPTHS.map((n) => <option key={n} value={n}>{n}</option>)}
                   </select></label>
                   <label>Server filter <select aria-label="Log filter field" value={logField} onChange={(e) => setLogField(e.target.value)}>
-                    {["type","inboxId","messageId","smtpSessionId","attemptId","sender","recipient","ruleId"].map((key) => <option key={key}>{key}</option>)}
+                    {LOG_FILTER_FIELDS.map((key) => <option key={key}>{key}</option>)}
                   </select></label>
                   <input aria-label="Server log filter value" placeholder="Exact match" value={serverLogFilter} onChange={(e) => setServerLogFilter(e.target.value)} />
                   <button onClick={() => setLogs([])}>{t("clearView")}</button>
@@ -1018,7 +1006,7 @@ export default function App() {
                         {e.type === "log.gap" ? (
                           <button type="button" disabled={unretrievableGaps.includes(e.id) || loadingGaps.includes(e.id)}
                             onClick={() => void recoverGap(e)}>
-                            {gapText(unretrievableGaps.includes(e.id), e.data?.missingFrom, e.data?.missingTo)}
+                            {gapLabel(locale, unretrievableGaps.includes(e.id), e.data?.missingFrom, e.data?.missingTo)}
                             {loadingGaps.includes(e.id) ? "…" : ""}
                           </button>
                         ) : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>

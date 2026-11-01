@@ -525,6 +525,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "logs": {
         const filters = parseLogFilters(url.searchParams);
+        const limitParam = url.searchParams.get("limit"), beforeParam = url.searchParams.get("before");
+        if (limitParam !== null || beforeParam !== null) {
+          if (url.searchParams.has("after") || url.searchParams.has("from") || url.searchParams.has("to"))
+            throw new Fault(400, "Conflicting log cursors", "INVALID_LOG_CURSOR");
+          const limit = limitParam === null ? 20 : Number(limitParam);
+          const before = beforeParam === null ? undefined : Number(beforeParam);
+          return json(res, 200, sandbox.pageLogs({ limit, before, filters }));
+        }
         const from = url.searchParams.get("from");
         const to = url.searchParams.get("to");
         if (from !== null || to !== null) {

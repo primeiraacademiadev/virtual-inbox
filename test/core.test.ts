@@ -109,3 +109,23 @@ test("log filters use exact matching, AND, and retain global gap metadata", () =
   assert.equal(filtered.missingFrom, 1);
   assert.equal(first.log_id, 1);
 });
+
+test("cursor log pages return newest first without overlap and expose global bounds", () => {
+  const s = new Sandbox();
+  for (let i = 1; i <= 7; i++) s.log(i % 2 ? "odd" : "even");
+  const first = s.pageLogs({ limit: 3 });
+  assert.deepEqual(first.events.map((event) => event.log_id), [7, 6, 5]);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.oldest?.log_id, 1);
+  assert.equal(first.latest?.log_id, 7);
+  const second = s.pageLogs({ limit: 3, before: first.nextBefore });
+  assert.deepEqual(second.events.map((event) => event.log_id), [4, 3, 2]);
+  const third = s.pageLogs({ limit: 3, before: second.nextBefore });
+  assert.deepEqual(third.events.map((event) => event.log_id), [1]);
+  assert.equal(third.hasMore, false);
+  const filtered = s.pageLogs({ limit: 2, filters: { type: "even" } });
+  assert.deepEqual(filtered.events.map((event) => event.log_id), [6, 4]);
+  assert.equal(filtered.latest?.log_id, 7);
+  assert.throws(() => s.pageLogs({ limit: 101 }), Fault);
+  assert.throws(() => s.pageLogs({ before: 0 }), Fault);
+});

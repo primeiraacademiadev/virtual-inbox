@@ -139,8 +139,8 @@ export const schemas: Record<string, Schema> = {
   WatchResult: object({ recipient: reference("Inbox"), messages: reference("Messages") }, [
     "recipient", "messages",
   ]),
-  Event: object({ id: string, type: string, at: string, resourceId: uuid, messageId: uuid, data: { type: "object" } }, ["id", "type", "at"]),
-  Replay: object({ events: array(reference("Event")), gap: boolean, reset: boolean, runId: uuid, oldest: string, latest: string }, ["events", "gap", "reset", "runId"]),
+  Event: object({ id: string, log_id: integer, type: string, at: string, resourceId: uuid, inboxId: uuid, messageId: uuid, smtpSessionId: string, attemptId: string, data: { type: "object" } }, ["id", "log_id", "type", "at"]),
+  Replay: object({ events: array(reference("Event")), gap: boolean, reset: boolean, runId: uuid, oldest: string, latest: string, missingFrom: integer, missingTo: integer }, ["events", "gap", "reset", "runId"]),
   Identity: object({ source: { enum: ["automatic", "external", "uploaded"] }, subject: string,
     issuer: string, validTo: string, fingerprint256: string, subjectAltName: string }, [
     "source", "subject", "issuer", "validTo", "fingerprint256", "subjectAltName",

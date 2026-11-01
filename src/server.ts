@@ -403,6 +403,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "health":
         return json(res, 200, { status: "ok", runId: sandbox.runId });
+      case "ready":
+        return json(res, listenersReady ? 200 : 503, { ready: listenersReady, runId: sandbox.runId, listeners: startedListeners });
       case "capabilities":
         return json(res, 200, {
           version: "0.2.0", schemaVersion: 1, protocols: { smtp: true, starttls: !!tlsIdentity,
@@ -957,18 +959,65 @@ const clean = setInterval(() => {
   lastCleanupAt = new Date().toISOString();
 }, 1000);
 clean.unref();
-http.listen(port, apiHost, () => console.log("REST listening on " + port));
 const https = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res); }) : null;
 const demoHttps = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res, true); }) : null;
 if (https) https.maxConnections = config.maxConnections;
 if (demoHttps) demoHttps.maxConnections = config.maxConnections;
-https?.listen(httpsPort, apiHost, () => console.log("HTTPS and web console listening on " + httpsPort));
-demoHttps?.listen(demoHttpsPort, apiHost, () => console.log("HTTPS demo API listening on " + demoHttpsPort));
-demo.listen(demoPort, apiHost, () => console.log("Demo API listening on " + demoPort));
-smtp.listen(smtpPort, smtpHost, () => console.log("SMTP listening on " + smtpPort));
-pop3.listen(pop3Port, smtpHost, () => console.log("POP3 listening on " + pop3Port));
-smtps?.listen(smtpsPort, smtpHost, () => console.log("SMTPS listening on " + smtpsPort));
+type ListenerSpec = { name: string; port: number; host: string; server: {
+  listen(port: number, host: string, callback: () => void): unknown;
+  close(callback?: () => void): unknown;
+  once(event: string, listener: (...args: any[]) => void): unknown;
+  removeListener(event: string, listener: (...args: any[]) => void): unknown;
+} };
+let listenersReady = false;
+const startedListeners: Array<{ name: string; port: number; host: string }> = [];
+const listenerSpecs: ListenerSpec[] = [
+  { name: "HTTP", server: http, port, host: apiHost },
+  ...(https ? [{ name: "HTTPS", server: https, port: httpsPort, host: apiHost }] : []),
+  { name: "DEMO_HTTP", server: demo, port: demoPort, host: apiHost },
+  ...(demoHttps ? [{ name: "DEMO_HTTPS", server: demoHttps, port: demoHttpsPort, host: apiHost }] : []),
+  { name: "SMTP", server: smtp, port: smtpPort, host: smtpHost },
+  { name: "POP3", server: pop3, port: pop3Port, host: smtpHost },
+  ...(smtps ? [{ name: "SMTPS", server: smtps, port: smtpsPort, host: smtpHost }] : []),
+];
+async function listenOne(spec: ListenerSpec): Promise<void> {
+  if (!Number.isInteger(spec.port) || spec.port < 0 || spec.port > 65535)
+    throw new Error("Invalid port for " + spec.name + ": " + spec.port);
+  await new Promise<void>((resolveListener, rejectListener) => {
+    const onError = (error: Error) => {
+      spec.server.removeListener("error", onError);
+      rejectListener(new Error(spec.name + " port " + spec.port + ": " + error.message, { cause: error }));
+    };
+    spec.server.once("error", onError);
+    try {
+      spec.server.listen(spec.port, spec.host, () => {
+        spec.server.removeListener("error", onError);
+        startedListeners.push({ name: spec.name, port: spec.port, host: spec.host });
+        console.log(spec.name + " listening on " + spec.port);
+        resolveListener();
+      });
+    } catch (error) { spec.server.removeListener("error", onError); rejectListener(error); }
+  });
+}
+async function startListeners() {
+  try {
+    for (const spec of listenerSpecs) await listenOne(spec);
+    listenersReady = true;
+    console.log(JSON.stringify({ event: "ready", runId: sandbox.runId, listeners: startedListeners }));
+  } catch (error) {
+    listenersReady = false;
+    console.error("Virtual Inbox startup failed:", error);
+    await Promise.allSettled(listenerSpecs.filter(spec =>
+      startedListeners.some(active => active.name === spec.name)).map(spec =>
+      new Promise<void>(resolveClose => { try { spec.server.close(() => resolveClose()); } catch { resolveClose(); } })));
+    process.exitCode = 1;
+    // A failed bind cannot leave a partially exposed Virtual Inbox running.
+    process.exit(1);
+  }
+}
+void startListeners();
 function stop() {
+  listenersReady = false;
   http.close(); https?.close(); demoHttps?.close(); demo.close(); smtp.close(); smtps?.close();
   process.exit(0);
 }

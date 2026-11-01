@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Sandbox, Fault, classify } from "../src/core.js";
+import { Sandbox, Fault, classify, parseLogFilters } from "../src/core.js";
 test("classifies identifiers", () => {
   assert.equal(classify("a@example.test"), "email");
   assert.equal(classify("+351900000001"), "sms");

@@ -93,3 +93,7 @@ Após SMTP AUTH, o servidor associa um GUID `clientId` a um HMAC-SHA-256 interno
 O domínio `@virtual.inbox` é reservado: a API normal de criação de inboxes não permite endereços desse domínio. Só um pedido SMTP válido com nonce hexadecimal aleatório de 32 caracteres cria a inbox temporária (TTL 60 segundos). O reenvio não renova a validade.
 
 Para iniciar a escuta **antes de a inbox existir**, utilizar `POST /api/connection-probes/wait-for-message` com `{"address":"<32-hex>@virtual.inbox","timeoutMs":60000}`. O campo `after` (sequência de mensagem) é opcional. O servidor espera no máximo 60 segundos desde o pedido e, se a inbox já existir, nunca além da expiração dela. HTTP 200 devolve a mensagem; 204 indica timeout, expiração ou cancelamento; 400 indica endereço ou parâmetros inválidos. A espera não cria inbox nem prolonga o TTL. O endpoint convencional por `inboxId` continua a exigir uma inbox existente. O número de esperas simultâneas é limitado por `MAX_OBSERVER_COUNT`.
+
+### Visibilidade de anomalias nos logs
+
+Ao filtrar por inbox, remetente ou outro contexto, eventos `message.captured` continuam visíveis por omissão, mesmo quando não correspondem ao filtro. Defina `includeAnomalies=false` nas consultas REST `/api/logs` e streams SSE `/api/logs/events` (incluindo streams de observadores) para entrar em modo focado. A consola apresenta a opção «Include anomalies» ligada por omissão. A filtragem não é autorização nem altera a captura; os dados devem ser sintéticos.

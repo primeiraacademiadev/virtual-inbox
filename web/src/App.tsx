@@ -196,6 +196,8 @@ export default function App() {
     setLogs((entries) => entries.slice(-logDepth));
   }, [logDepth]);
   const [logFilter, setLogFilter] = useState("");
+  const [logField, setLogField] = useState("type");
+  const [serverLogFilter, setServerLogFilter] = useState("");
   const [connected, setConnected] = useState(false);
   useEffect(() => {
     void request<any>("/connection-info")
@@ -591,7 +593,7 @@ export default function App() {
     finally { setSmtpPassword(""); }
   }
   const filteredLogs = useMemo(
-    () => logs.filter((x) => JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),
+    () => logs.filter((x) => x.type === "log.gap" || JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),
     [logs, logFilter],
   );
   return (
@@ -973,6 +975,10 @@ export default function App() {
                   <label>History <select aria-label="Log history depth" value={logDepth} onChange={(e) => setLogDepth(Number(e.target.value))}>
                     {[500, 2000, 5000, 10000].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select></label>
+                  <label>Server filter <select aria-label="Log filter field" value={logField} onChange={(e) => setLogField(e.target.value)}>
+                    {["type","inboxId","messageId","smtpSessionId","attemptId","sender","recipient","ruleId"].map((key) => <option key={key}>{key}</option>)}
+                  </select></label>
+                  <input aria-label="Server log filter value" placeholder="Exact match" value={serverLogFilter} onChange={(e) => setServerLogFilter(e.target.value)} />
                   <button onClick={() => setLogs([])}>{t("clearView")}</button>
                 </div>
                 <div className="panelBody">

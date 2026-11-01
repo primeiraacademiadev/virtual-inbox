@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMemo, useState } from "react";
 import type { Message } from "../api.js";
 import { anomalyGroups, filteredAnomalies } from "../anomalies/anomaly-model.js";

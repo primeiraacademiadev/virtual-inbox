@@ -35,6 +35,7 @@ export const schemas: Record<string, Schema> = {
     "error", "errorCode", "errorParams",
   ]),
   Health: object({ status: { const: "ok" }, runId: uuid }, ["status", "runId"]),
+  Capabilities: object({ version: string, schemaVersion: integer, protocols: { type: "object" }, smtpAuthPolicy: { enum: ["INBOX", "OPEN"] }, inbox: { type: "object" }, simulation: { type: "object" } }, ["version", "schemaVersion", "protocols", "smtpAuthPolicy", "inbox", "simulation"]),
   Inbox: object({
     id: uuid, channel: { enum: ["email", "sms"] }, address: string,
     createdAt: { type: "string", format: "date-time" },
@@ -72,11 +73,11 @@ export const schemas: Record<string, Schema> = {
   }),
   CreateMailbox: object({
     address: string, ttlSeconds: { type: "integer", minimum: 1 }, observerId: uuid,
-    generation: reference("Generation"),
+    generation: reference("Generation"), ifExists: { enum: ["error", "return"] },
   }),
   CreatePhone: object({
     phoneNumber: string, ttlSeconds: { type: "integer", minimum: 1 }, observerId: uuid,
-    generation: reference("Generation"),
+    generation: reference("Generation"), ifExists: { enum: ["error", "return"] },
   }),
   ConnectionProbeWait: object({
     address: { type: "string", pattern: "^[a-fA-F0-9]{32}@virtual[.]inbox$", description: "Reserved nonce address. Request does not create an inbox." },
@@ -196,6 +197,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "smtpClients", method: "GET", path: "/admin/smtp/clients", tag: "SMTP diagnostics", status: 200, response: "SmtpClients", admin: true, summary: "List observed SMTP clients." }),
   management({ id: "smtpSessions", method: "GET", path: "/admin/smtp/sessions", tag: "SMTP diagnostics", status: 200, response: "SmtpSessions", admin: true, query: "clientId", summary: "List SMTP sessions." }),
   management({ id: "smtpVerify", method: "POST", path: "/admin/smtp/sessions/{sessionId}/verify", tag: "SMTP diagnostics", status: 200, response: "VerifySmtpResult", request: "VerifySmtp", admin: true, summary: "Revalidate recorded SMTP credentials." }),
+  management({ id: "capabilities", method: "GET", path: "/capabilities", tag: "Service", status: 200, response: "Capabilities", summary: "Read version, protocols, SMTP AUTH policy and simulation support." }),
   management({ id: "health", method: "GET", path: "/health", tag: "Service", status: 200, response: "Health", summary: "Read service health and run identifier." }),
   management({ id: "openapi", method: "GET", path: "/openapi.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the current management API contract." }),
   management({ id: "demoOpenapi", method: "GET", path: "/openapi-demo.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the separate demo sender contract." }),

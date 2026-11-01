@@ -184,8 +184,9 @@ export class Sandbox {
     ttlSeconds = config.defaultTtl,
     observerId?: string,
     generation?: Generation,
+    ifExists: "error" | "return" = "error",
   ) {
-    return this.createInternal(channel, address, ttlSeconds, observerId, generation, false);
+    return this.createInternal(channel, address, ttlSeconds, observerId, generation, false, ifExists);
   }
   /** Reserved discovery mailboxes may only originate from the SMTP probe handler. */
   createConnectionProbe(address: string) {
@@ -200,11 +201,14 @@ export class Sandbox {
     observerId: string | undefined,
     generation: Generation | undefined,
     allowProbe: boolean,
+    ifExists: "error" | "return" = "error",
   ) {
     if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > config.maxTtl)
       throw new Fault(400, "Invalid TTL", "INVALID_TTL");
-    if (this.resources.size >= config.maxInboxes + 2)
-      throw new Fault(507, "Inbox capacity reached", "CAPACITY_EXCEEDED");
+    if (ifExists !== "error" && ifExists !== "return")
+      throw new Fault(400, "Invalid ifExists mode", "INVALID_IF_EXISTS");
+    if (ifExists === "return" && !address?.trim())
+      throw new Fault(400, "Explicit identifier required for ifExists=return", "INVALID_IF_EXISTS");
     const observer = observerId ? this.observer(observerId) : null;
     const manual = !!address?.trim();
     const locale = generation?.locale ?? generationDefaults.locale;
@@ -216,12 +220,26 @@ export class Sandbox {
         throw new Fault(400, "Domain @virtual.inbox is reserved for SMTP connection probes", "RESERVED_INBOX_DOMAIN");
       if (classify(generatedAddress) !== channel) throw new Fault(400, "Invalid identifier", "INVALID_REQUEST");
       aliases = this.aliases(channel, generatedAddress, locale);
-      if (aliases.every((key) => !this.addressIds.has(key))) break;
-      if (manual) throw new Fault(409, "Identifier already exists", "CONFLICT");
+      const collision = aliases.find((key) => this.addressIds.has(key));
+      if (!collision) break;
+      if (manual) {
+        const existingId = this.addressIds.get(collision)!;
+        const existing = this.resources.get(existingId);
+        if (existing && (!existing.expiresAt || Date.parse(existing.expiresAt) > Date.now())) {
+          if (ifExists === "return" && !existing.system) return existing;
+          throw new Fault(409, "Identifier already exists", "CONFLICT", { address: generatedAddress });
+        }
+        // Clean up expired entries before recycling the identifier.
+        if (existing && existing.expiresAt) this.deleteExpired(existingId);
+        if (aliases.every((key) => !this.addressIds.has(key))) break;
+        throw new Fault(409, "Identifier already exists", "CONFLICT", { address: generatedAddress });
+      }
       aliases = [];
     }
     if (!aliases.length)
       throw new Fault(409, "Generation attempts exhausted", "IDENTITY_GENERATION_EXHAUSTED");
+    if (this.resources.size >= config.maxInboxes + 2)
+      throw new Fault(507, "Inbox capacity reached", "CAPACITY_EXCEEDED");
     const createdAt = Date.now();
     const recipient: Recipient = {
       id: randomUUID(), channel, address: generatedAddress,
@@ -234,6 +252,18 @@ export class Sandbox {
     observer?.inboxes.add(recipient.id);
     this.log("recipient.created", recipient.id, undefined, { channel, address: generatedAddress });
     return recipient;
+  }
+  private deleteExpired(id: string) {
+    const recipient = this.resources.get(id);
+    if (!recipient || !recipient.expiresAt || Date.parse(recipient.expiresAt) > Date.now()) return;
+    this.resources.delete(id);
+    for (const alias of this.resourceAliases.get(id) || [this.key(recipient.channel, recipient.address)])
+      this.addressIds.delete(alias);
+    this.resourceAliases.delete(id);
+    for (const message of this.messages.values()) if (message.destinationId === id) this.messages.delete(message.id);
+    for (const observer of this.observers.values()) observer.inboxes.delete(id);
+    this.emitter.emit("resource.removed", id);
+    this.log("recipient.expired", id);
   }
   deleteResource(id: string) {
     const recipient = this.resource(id);

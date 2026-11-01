@@ -4,6 +4,7 @@ export class Fault extends Error {
     public status: number,
     message: string,
     public code?: string,
+    public params: Record<string, unknown> = {},
   ) {
     super(message);
   }

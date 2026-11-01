@@ -98,3 +98,20 @@ The existing admin route `/api/admin/smtp/reply-rules` also supports `phase: AFT
 `reply` requires a 4xx/5xx `code` and returns that failure; at AFTER_DATA it returns the error **after storage**. `delay` requires `durationMs` (and may specify an optional 4xx/5xx `code`); without a code it waits then continues normally, with a code it replies with an error after waiting. `drop` immediately closes the underlying SMTP transport and never sends a final reply. `hang` requires `durationMs`, does not reply during the interval, then forcibly closes the transport so the wait is always bounded. `drop` and `hang` must not specify a reply code. Timed actions may not exceed `SMTP_SIMULATION_MAX_DURATION_MS` (default 10000 ms); unsupported combinations yield typed HTTP 400. In-flight waits are cancelled on disconnect. A client that times out before a delayed response may disconnect, in which case no later reply is sent.
 
 A matched action emits `smtp.simulation.applied` with `ruleId`, phase, action, duration, connection/client IDs, sender, recipient(s), `persisted` and outcome. `@virtual.inbox` probes are not subject to these DATA/AFTER_DATA rules. Pre-envelope CONNECT/EHLO/AUTH injection remains outside this increment; those phases cannot select sender or recipient. This is a sandbox fault-injection mechanism, not a reliable production SMTP queue.
+
+## Reserved probe mailbox and pre-creation wait
+
+The entire `@virtual.inbox` domain is reserved: callers **cannot manually create any mailbox** in this domain through the mailboxes API or ordinary Sandbox creation, including malformed/non-probe local parts. Only a valid empty SMTP connection probe to a 32-hex-character nonce address may create one, with a fixed 60-second TTL. A second probe does not renew the TTL.
+
+A consumer may start **before** the SMTP message arrives:
+
+```http
+POST /api/connection-probes/wait-for-message
+Content-Type: application/json
+
+{"address":"d44eaf765b72401cae559febf14f2378@virtual.inbox","timeoutMs":60000}
+```
+
+This long-poll is **exclusive to reserved probe addresses** and accepts an optional nonnegative `after` message sequence. A matching message yields HTTP 200 with the existing Message JSON. HTTP 204 means timeout, inbox expiry/removal, or request cancellation. Invalid addresses/timeout/cursors yield HTTP 400. Requests may wait before the inbox exists, but never create it, extend its TTL, or extend the waiting period. Wait time is capped at 60 seconds from the API request; for an already existing inbox, it also ends no later than that inbox's expiry. Pending waits are limited by `MAX_OBSERVER_COUNT`. The conventional `POST /api/mailboxes/{inboxId}/wait-for-message` is unchanged and still requires an existing inbox ID.
+
+A 128-bit random local part should be generated per test. This endpoint is a sandbox feature on a trusted network; the unpredictable address reduces cross-test disclosure but is not an authentication credential.

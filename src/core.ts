@@ -189,7 +189,7 @@ export class Sandbox {
   }
   /** Reserved discovery mailboxes may only originate from the SMTP probe handler. */
   createConnectionProbe(address: string) {
-    if (!/^[a-f0-9]{32}@virtual\\.inbox$/i.test(address))
+    if (!/^[a-f0-9]{32}@virtual[.]inbox$/i.test(address))
       throw new Fault(400, "Invalid connection probe address", "INVALID_CONNECTION_PROBE");
     return this.createInternal("email", address, 60, undefined, undefined, true);
   }

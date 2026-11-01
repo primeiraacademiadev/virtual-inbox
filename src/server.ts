@@ -523,8 +523,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const input = await body(req);
         return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
       }
-      case "logs":
-        return json(res, 200, sandbox.replay(url.searchParams.get("after") || undefined, parseLogFilters(url.searchParams)));
+      case "logs": {
+        const filters = parseLogFilters(url.searchParams);
+        const from = url.searchParams.get("from");
+        const to = url.searchParams.get("to");
+        if (from !== null || to !== null) {
+          const lower = Number(from), upper = Number(to);
+          if (from === null || to === null || !Number.isSafeInteger(lower) || !Number.isSafeInteger(upper)
+            || lower < 1 || upper < lower || upper - lower > 10000)
+            throw new Fault(400, "Invalid log range", "INVALID_LOG_RANGE");
+          const current = sandbox.replay(undefined, filters);
+          return json(res, 200, {
+            ...current,
+            events: current.events.filter((event) => event.log_id !== undefined
+              && event.log_id >= lower && event.log_id <= upper),
+            requestedFrom: lower, requestedTo: upper,
+          });
+        }
+        return json(res, 200, sandbox.replay(url.searchParams.get("after") || undefined, filters));
+      }
       case "logEvents":
       case "newObserverEvents":
         return observe(req, res);

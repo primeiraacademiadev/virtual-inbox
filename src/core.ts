@@ -177,7 +177,7 @@ export class Sandbox {
     if (bytes <= this.logByteCapacity) {
       this.events.push(event);
       this.retainedLogBytes += bytes;
-      while (this.retainedLogBytes > this.logByteCapacity) {
+      while (this.retainedLogBytes > this.logByteCapacity || (this.capacity !== config.logs && this.events.length > this.capacity)) {
         const removed = this.events.shift()!;
         this.retainedLogBytes -= Buffer.byteLength(JSON.stringify(removed), "utf8");
       }

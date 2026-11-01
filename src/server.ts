@@ -678,7 +678,7 @@ const smtpOptions: SMTPServerOptions = {
       if (isProbe) {
         // Probe requests are never captured as anomalies or passed to simulation rules.
         const parsed = await new PostalMime().parse(Buffer.concat(chunks));
-        validateConnectionProbeMessage(recipients, parsed.subject, parsed.text, parsed.html, parsed.attachments || []);
+        validateConnectionProbeMessage(recipients, parsed.headers.some((header) => header.key === "subject") ? "present" : undefined, parsed.text, parsed.html, parsed.attachments || []);
         validateConnectionProbeAddress(recipients[0]);
         const sessionId = smtpSessionIds.get(session);
         if (!sessionId) throw new Fault(404, "SMTP connection not found", "SMTP_SESSION_NOT_FOUND");

@@ -12,6 +12,8 @@ export function LogPanel(props: {
   field: string;
   onField: (value: string) => void;
   serverFilter: string;
+  includeAnomalies: boolean;
+  onIncludeAnomalies: (value: boolean) => void;
   onServerFilter: (value: string) => void;
   onClear: () => void;
   onMinimize: () => void;
@@ -26,7 +28,7 @@ export function LogPanel(props: {
   labels: { logs: string; minimize: string; filter: string; clear: string };
 }) {
   const [filter, setFilter] = useState("");
-  const entries = useMemo(() => visibleLogs(props.logs, filter).slice().reverse(), [props.logs, filter]);
+  const entries = useMemo(() => visibleLogs(props.logs, filter, props.includeAnomalies).slice().reverse(), [props.logs, filter, props.includeAnomalies]);
   return <section className="panel">
     <div className="panelHead">
       <strong>{props.labels.logs}</strong>
@@ -46,6 +48,8 @@ export function LogPanel(props: {
       </select></label>
       <input aria-label="Server log filter value" placeholder="Exact match" value={props.serverFilter}
         onChange={event => props.onServerFilter(event.target.value)} />
+      <label><input type="checkbox" aria-label="Include anomalies" checked={props.includeAnomalies}
+        onChange={event => props.onIncludeAnomalies(event.target.checked)} />Include anomalies</label>
       <button onClick={props.onClear}>{props.labels.clear}</button>
     </div>
     <div className="panelBody" onScroll={event => {

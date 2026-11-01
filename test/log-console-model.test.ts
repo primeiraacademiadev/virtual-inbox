@@ -82,3 +82,14 @@ test("gaps become unique system markers and reject invalid ranges", () => {
   assert.deepEqual(appendGap([event(1)], null, 5), [event(1)]);
   assert.equal(appendGap([marker!], marker, 5).length, 1);
 });
+
+test("anomaly visibility propagates to REST, SSE and local filters", () => {
+  const anomaly = event(7, "message.captured");
+  const regular = event(8, "other");
+  assert.deepEqual(visibleLogs([anomaly, regular], "other").map(x => x.id), [anomaly.id, regular.id]);
+  assert.deepEqual(visibleLogs([anomaly, regular], "other", false).map(x => x.id), [regular.id]);
+  assert.equal(logStreamQuery("inboxId", "alpha", false), "?inboxId=alpha&includeAnomalies=false");
+  assert.equal(logPageUrl("inboxId", "alpha", undefined, 20, false), "/logs?limit=20&inboxId=alpha&includeAnomalies=false");
+  assert.equal(logSseUrl("/api/logs/events", "inboxId", "alpha", "run:4", false),
+    "/api/logs/events?inboxId=alpha&includeAnomalies=false&after=run%3A4");
+});

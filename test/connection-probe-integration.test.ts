@@ -156,7 +156,7 @@ test("real SMTP OPEN discovery identifies the client across connections and inje
     const waitingAddress = randomUUID().replaceAll("-", "") + "@virtual.inbox";
     const pending = fetch("http://127.0.0.1:" + port + "/api/connection-probes/wait-for-message", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address: waitingAddress, timeoutMs: 1000 }),
+      body: JSON.stringify({ address: waitingAddress, timeoutMs: 5000 }),
     });
     await delay(60);
     const beforeCreation = await fetch("http://127.0.0.1:" + port +

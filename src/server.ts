@@ -42,7 +42,7 @@ const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
 if (!["INBOX", "OPEN"].includes(smtpAuthPolicy)) throw Error("Invalid SMTP_AUTH_POLICY");
 const smtpSessions = new SmtpSessionStore(500, credentialStore, smtpAuthPolicy as "INBOX" | "OPEN", config.smtpSessionHistoryHours);
 const simulations = new SimulationStore();
-const smtpReplyRules = new SmtpReplyRuleStore();
+const smtpReplyRules = new SmtpReplyRuleStore(1000, config.smtpSimulationMaxDurationMs);
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();
 let lastCleanupAt: string | null = null;
@@ -611,24 +611,94 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
   const failure = error instanceof Error ? error : new Error(String(error));
   // Permanent message-size rejection must not trigger transport retries.
   const status = error instanceof Fault ? error.status : 500;
-  const responseCode = error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE" ? status : status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
+  const injected = error as { simulated?: boolean; responseCode?: number } | null;
+  const responseCode = injected?.simulated && injected.responseCode ? injected.responseCode
+    : error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE" ? status
+    : status === 413 ? 552 : status === 507 ? 452 : status === 400 ? 554 : 451;
   return Object.assign(failure, { responseCode });
 }
-function applySmtpReply(phase: SmtpReplyPhase, session: any, sender?: string, recipients?: string[]) {
+// smtp-server exposes its active connections, but not a public disconnect-by-session API.
+// Keep this version-specific adapter isolated and verify it with an actual SMTP test.
+type TransportConnection = {
+  session?: { id?: string };
+  _socket?: { destroyed?: boolean; destroy(): void };
+  close(): void;
+};
+function dropSmtpTransport(session: { id?: string }): void {
+  for (const service of [smtp, smtps]) {
+    const connections = (service as unknown as { connections?: Set<TransportConnection> } | null)?.connections;
+    for (const connection of connections || []) {
+      if (connection.session === session || connection.session?.id === session.id) {
+        if (connection._socket && !connection._socket.destroyed) connection._socket.destroy();
+        else connection.close();
+        return;
+      }
+    }
+  }
+  throw new Fault(503, "SMTP transport is unavailable for fault simulation", "SMTP_TRANSPORT_UNAVAILABLE");
+}
+
+const pendingFaultWaits = new Map<string, Set<() => void>>();
+function cancelFaultWaits(sessionId: string) {
+  for (const cancel of pendingFaultWaits.get(sessionId) || []) cancel();
+  pendingFaultWaits.delete(sessionId);
+}
+function waitForFault(sessionId: string, durationMs: number): Promise<boolean> {
+  return new Promise((resolveWait) => {
+    let finished = false;
+    let callbacks = pendingFaultWaits.get(sessionId);
+    if (!callbacks) { callbacks = new Set(); pendingFaultWaits.set(sessionId, callbacks); }
+    const finish = (elapsed: boolean) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      callbacks!.delete(cancel);
+      if (!callbacks!.size) pendingFaultWaits.delete(sessionId);
+      resolveWait(elapsed);
+    };
+    const cancel = () => finish(false);
+    const timer = setTimeout(() => finish(true), durationMs);
+    callbacks.add(cancel);
+  });
+}
+async function applySmtpFault(
+  phase: SmtpReplyPhase, session: any, sender?: string, recipients?: string[], persisted = false,
+): Promise<boolean> {
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;
-  const rule = smtpReplyRules.consume(phase, {
-    sender, recipients, smtpSessionId, clientId: current?.authenticated ? current.clientId : undefined,
-  });
-  if (!rule) return undefined;
+  const clientId = current?.authenticated ? current.clientId : undefined;
+  const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId });
+  if (!rule) return false;
+  const responseCode = rule.code;
+  const outcome = rule.action === "reply" ? "rejected"
+    : rule.action === "delay" ? (responseCode ? "delayed-rejection" : "delayed-response")
+    : rule.action === "drop" ? "disconnected" : "timeout-then-disconnect";
   sandbox.log("smtp.simulation.applied", undefined, undefined, {
-    ruleId: rule.id, phase, action: rule.action, responseCode: rule.code,
-    smtpSessionId, clientId: current?.authenticated ? current.clientId : undefined,
-    sender, recipients, persisted: false, outcome: "rejected",
+    ruleId: rule.id, phase, action: rule.action, responseCode, durationMs: rule.durationMs,
+    smtpSessionId, clientId, sender, recipients, persisted, outcome,
   });
-  if (smtpSessionId) smtpSessions.recordError(smtpSessionId, rule.code, "SIMULATED_SMTP_FAILURE");
-  protocolCounters.error("SMTP", true);
-  return Object.assign(new Error(rule.message), { responseCode: rule.code });
+  if (rule.action !== "delay" || responseCode !== undefined) {
+    protocolCounters.error("SMTP", true);
+    if (smtpSessionId) smtpSessions.recordError(smtpSessionId, responseCode ?? 0,
+      "SIMULATED_SMTP_" + rule.action.toUpperCase());
+  }
+  if (rule.action === "drop") {
+    dropSmtpTransport(session);
+    return true; // Deliberately suppress the SMTP callback and any final acknowledgement.
+  }
+  if (rule.action === "hang" || rule.action === "delay") {
+    if (!smtpSessionId) throw new Fault(404, "SMTP session unavailable", "SMTP_SESSION_NOT_FOUND");
+    const elapsed = await waitForFault(smtpSessionId, rule.durationMs!);
+    if (!elapsed) return true; // Client already disconnected; never reply later.
+    if (rule.action === "hang") {
+      dropSmtpTransport(session);
+      return true;
+    }
+  }
+  if (responseCode !== undefined) {
+    throw Object.assign(new Error(rule.message), { responseCode, simulated: true });
+  }
+  return false;
 }
 const smtpOptions: SMTPServerOptions = {
   authOptional: true,
@@ -646,6 +716,7 @@ const smtpOptions: SMTPServerOptions = {
   onClose(session) {
     const id = smtpSessionIds.get(session);
     if (id) {
+      cancelFaultWaits(id);
       for (const rule of simulations.listConnection(id)) simulations.delete(rule.id);
       smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP");
       sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id });
@@ -686,12 +757,17 @@ const smtpOptions: SMTPServerOptions = {
     });
   },
   onMailFrom(address, session, callback) {
-    callback(applySmtpReply("MAIL", session, address.address) || null);
+    void applySmtpFault("MAIL", session, address.address)
+      .then((stopped) => { if (!stopped) callback(); })
+      .catch((error) => callback(smtpFailure(error)));
   },
   onRcptTo(address, session, callback) {
+    if (isConnectionProbeAddress(address.address)) return callback();
     const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
       ? session.envelope.mailFrom.address : undefined;
-    callback(applySmtpReply("RCPT", session, sender, [address.address]) || null);
+    void applySmtpFault("RCPT", session, sender, [address.address])
+      .then((stopped) => { if (!stopped) callback(); })
+      .catch((error) => callback(smtpFailure(error)));
   },
   onData(stream: any, session: any, callback: any) {
     (async () => {
@@ -725,8 +801,7 @@ const smtpOptions: SMTPServerOptions = {
         callback(null, "Accepted");
         return;
       }
-      const dataFailure = applySmtpReply("DATA", session, sender, recipients);
-      if (dataFailure) return callback(dataFailure);
+      if (await applySmtpFault("DATA", session, sender, recipients)) return;
       const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
       const rule = simulations.matchConnection(smtpSessionIds.get(session), "DATA")
         || simulations.match(identity?.testSessionId, "SMTP", "DATA");
@@ -753,13 +828,19 @@ const smtpOptions: SMTPServerOptions = {
         if (metadata.smtpSessionId) smtpSessions.recordMessage(metadata.smtpSessionId, message.id);
         protocolCounters.message("SMTP");
       }
+      if (await applySmtpFault("AFTER_DATA", session, sender, recipients, true)) return;
       callback(null, "Accepted");
     })().catch((error) => {
       const failure = smtpFailure(error);
       const id = smtpSessionIds.get(session);
-      protocolCounters.error("SMTP", error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE");
-      if (id) { smtpSessions.recordError(id, failure.responseCode, error instanceof Fault ? error.code || "SMTP_FAILURE" : "SMTP_FAILURE");
-        sandbox.log("smtp.session.error", undefined, undefined, { sessionId: id, responseCode: failure.responseCode }); }
+      const wasSimulated = (error as { simulated?: boolean } | null)?.simulated === true;
+      if (!wasSimulated) protocolCounters.error("SMTP", error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE");
+      if (id) {
+        if (!wasSimulated) smtpSessions.recordError(id, failure.responseCode,
+          error instanceof Fault ? error.code || "SMTP_FAILURE" : "SMTP_FAILURE");
+        sandbox.log("smtp.session.error", undefined, undefined,
+          { sessionId: id, responseCode: failure.responseCode });
+      }
       callback(failure);
     });
   },

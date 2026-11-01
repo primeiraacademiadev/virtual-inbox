@@ -47,3 +47,7 @@ Le paquet ESM `@virtual-inbox/client` version 0.2.0 peut être créé avec `npm 
 ## Assertions negatives et suivi SMTP (#39)
 
 `messages(inbox, after)` utilise un curseur de sequence exclusif. `expectNoMessage(inbox, {after, forMs, match?})` attend pendant la fenetre: un message correspondant provoque une erreur `UNEXPECTED_MESSAGE`; aucune observation termine normalement, **sans prouver un rejet SMTP**. Avec `adminUrl` HTTPS et `adminToken`, `smtpAttempts({smtpSessionId, sender, recipient, messageId, ruleId})` retrouve les tentatives filtrees; au moins un filtre est obligatoire. Les etats `in_progress`, `rejected`, `stored_and_acknowledged` et `stored_without_ack` documentent les phases et la persistance sans exposer les contenus ni les mots de passe. Le stockage est limite a 2000 tentatives, et chaque recherche a 200 lignes. Les evenements SSE filtres seront traites dans le #44.
+
+## Idempotence explicite et capacites (#41)
+
+Par defaut, un doublon explicite renvoie toujours `409`. Avec `ifExists: "return"` dans `POST /api/mailboxes` ou `POST /api/phone-numbers`, le serveur retourne la boite existante (`200`) sans modifier son ID ni son TTL. Une adresse expiree est recreee (`201`) avec un nouvel ID. Le domaine reserve `@virtual.inbox` reste protege. Le SDK prend en charge `create(channel, address, ttlSeconds, "return")`. `GET /api/capabilities` fournit la version, les protocoles, la politique SMTP AUTH et les actions de simulation prises en charge; le SDK expose `client.capabilities()`.

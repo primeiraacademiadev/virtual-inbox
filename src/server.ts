@@ -18,6 +18,7 @@ import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
 import { resolveNetworkSetting, shadowedNetworkKeys, environmentControlledKeys, assertWritableNetworkSettings } from "./network-settings.js";
 import { SmtpAttemptStore } from "./smtp-attempts.js";
+import { startFixedListeners, type ListenerSpec } from "./listener-readiness.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
@@ -403,6 +404,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "health":
         return json(res, 200, { status: "ok", runId: sandbox.runId });
+      case "ready":
+        return json(res, listenersReady ? 200 : 503, { ready: listenersReady, runId: sandbox.runId, listeners: startedListeners });
       case "capabilities":
         return json(res, 200, {
           version: "0.2.0", schemaVersion: 1, protocols: { smtp: true, starttls: !!tlsIdentity,
@@ -957,18 +960,38 @@ const clean = setInterval(() => {
   lastCleanupAt = new Date().toISOString();
 }, 1000);
 clean.unref();
-http.listen(port, apiHost, () => console.log("REST listening on " + port));
 const https = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res); }) : null;
 const demoHttps = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res, true); }) : null;
 if (https) https.maxConnections = config.maxConnections;
 if (demoHttps) demoHttps.maxConnections = config.maxConnections;
-https?.listen(httpsPort, apiHost, () => console.log("HTTPS and web console listening on " + httpsPort));
-demoHttps?.listen(demoHttpsPort, apiHost, () => console.log("HTTPS demo API listening on " + demoHttpsPort));
-demo.listen(demoPort, apiHost, () => console.log("Demo API listening on " + demoPort));
-smtp.listen(smtpPort, smtpHost, () => console.log("SMTP listening on " + smtpPort));
-pop3.listen(pop3Port, smtpHost, () => console.log("POP3 listening on " + pop3Port));
-smtps?.listen(smtpsPort, smtpHost, () => console.log("SMTPS listening on " + smtpsPort));
+let listenersReady = false;
+const startedListeners: Array<{ name: string; port: number; host: string }> = [];
+const listenerSpecs: ListenerSpec[] = [
+  { name: "HTTP", server: http, port, host: apiHost },
+  ...(https ? [{ name: "HTTPS", server: https, port: httpsPort, host: apiHost }] : []),
+  { name: "DEMO_HTTP", server: demo, port: demoPort, host: apiHost },
+  ...(demoHttps ? [{ name: "DEMO_HTTPS", server: demoHttps, port: demoHttpsPort, host: apiHost }] : []),
+  { name: "SMTP", server: smtp, port: smtpPort, host: smtpHost },
+  { name: "POP3", server: pop3, port: pop3Port, host: smtpHost },
+  ...(smtps ? [{ name: "SMTPS", server: smtps, port: smtpsPort, host: smtpHost }] : []),
+];
+async function startListeners() {
+  try {
+    await startFixedListeners(listenerSpecs, (endpoint) => {
+      startedListeners.push(endpoint);
+      console.log(endpoint.name + " listening on " + endpoint.port);
+    });
+    listenersReady = true;
+    console.log(JSON.stringify({ event: "ready", runId: sandbox.runId, listeners: startedListeners }));
+  } catch (error) {
+    listenersReady = false;
+    console.error("Virtual Inbox startup failed:", error);
+    process.exit(1);
+  }
+}
+void startListeners();
 function stop() {
+  listenersReady = false;
   http.close(); https?.close(); demoHttps?.close(); demo.close(); smtp.close(); smtps?.close();
   process.exit(0);
 }

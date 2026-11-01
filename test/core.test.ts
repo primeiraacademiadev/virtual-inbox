@@ -129,3 +129,23 @@ test("cursor log pages return newest first without overlap and expose global bou
   assert.throws(() => s.pageLogs({ limit: 101 }), Fault);
   assert.throws(() => s.pageLogs({ before: 0 }), Fault);
 });
+
+test("anomaly events bypass contextual filters unless explicitly disabled", () => {
+  const sandbox = new Sandbox();
+  sandbox.log("message.received", "inbox-a");
+  sandbox.log("message.captured", "anomaly-inbox", undefined, { reason: "UNKNOWN_RECIPIENT" });
+  sandbox.log("message.received", "inbox-b");
+  const filters = { inboxId: "inbox-a" };
+  assert.deepEqual(sandbox.pageLogs({ filters }).events.map(event => event.type),
+    ["message.captured", "message.received"]);
+  assert.deepEqual(sandbox.replay(undefined, filters).events.map(event => event.type),
+    ["message.received", "message.captured"]);
+  assert.deepEqual(sandbox.pageLogs({ filters: { ...filters, includeAnomalies: false } }).events.map(event => event.type),
+    ["message.received"]);
+});
+test("anomaly filter parser rejects invalid overrides", () => {
+  assert.equal(parseLogFilters(new URLSearchParams("includeAnomalies=false")).includeAnomalies, false);
+  assert.equal(parseLogFilters(new URLSearchParams("includeAnomalies=true")).includeAnomalies, true);
+  assert.throws(() => parseLogFilters(new URLSearchParams("includeAnomalies=maybe")), Fault);
+  assert.throws(() => parseLogFilters(new URLSearchParams("includeAnomalies=true&includeAnomalies=false")), Fault);
+});

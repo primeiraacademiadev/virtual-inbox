@@ -18,6 +18,7 @@ import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
 import { resolveNetworkSetting, shadowedNetworkKeys, environmentControlledKeys, assertWritableNetworkSettings } from "./network-settings.js";
 import { SmtpAttemptStore } from "./smtp-attempts.js";
+import { startFixedListeners, type ListenerSpec } from "./listener-readiness.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
@@ -963,12 +964,6 @@ const https = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void 
 const demoHttps = tlsIdentity ? createHttpsServer(tlsIdentity, (req, res) => { void handleRequest(req, res, true); }) : null;
 if (https) https.maxConnections = config.maxConnections;
 if (demoHttps) demoHttps.maxConnections = config.maxConnections;
-type ListenerSpec = { name: string; port: number; host: string; server: {
-  listen(port: number, host: string, callback: () => void): unknown;
-  close(callback?: () => void): unknown;
-  once(event: string, listener: (...args: any[]) => void): unknown;
-  removeListener(event: string, listener: (...args: any[]) => void): unknown;
-} };
 let listenersReady = false;
 const startedListeners: Array<{ name: string; port: number; host: string }> = [];
 const listenerSpecs: ListenerSpec[] = [
@@ -980,38 +975,17 @@ const listenerSpecs: ListenerSpec[] = [
   { name: "POP3", server: pop3, port: pop3Port, host: smtpHost },
   ...(smtps ? [{ name: "SMTPS", server: smtps, port: smtpsPort, host: smtpHost }] : []),
 ];
-async function listenOne(spec: ListenerSpec): Promise<void> {
-  if (!Number.isInteger(spec.port) || spec.port < 0 || spec.port > 65535)
-    throw new Error("Invalid port for " + spec.name + ": " + spec.port);
-  await new Promise<void>((resolveListener, rejectListener) => {
-    const onError = (error: Error) => {
-      spec.server.removeListener("error", onError);
-      rejectListener(new Error(spec.name + " port " + spec.port + ": " + error.message, { cause: error }));
-    };
-    spec.server.once("error", onError);
-    try {
-      spec.server.listen(spec.port, spec.host, () => {
-        spec.server.removeListener("error", onError);
-        startedListeners.push({ name: spec.name, port: spec.port, host: spec.host });
-        console.log(spec.name + " listening on " + spec.port);
-        resolveListener();
-      });
-    } catch (error) { spec.server.removeListener("error", onError); rejectListener(error); }
-  });
-}
 async function startListeners() {
   try {
-    for (const spec of listenerSpecs) await listenOne(spec);
+    await startFixedListeners(listenerSpecs, (endpoint) => {
+      startedListeners.push(endpoint);
+      console.log(endpoint.name + " listening on " + endpoint.port);
+    });
     listenersReady = true;
     console.log(JSON.stringify({ event: "ready", runId: sandbox.runId, listeners: startedListeners }));
   } catch (error) {
     listenersReady = false;
     console.error("Virtual Inbox startup failed:", error);
-    await Promise.allSettled(listenerSpecs.filter(spec =>
-      startedListeners.some(active => active.name === spec.name)).map(spec =>
-      new Promise<void>(resolveClose => { try { spec.server.close(() => resolveClose()); } catch { resolveClose(); } })));
-    process.exitCode = 1;
-    // A failed bind cannot leave a partially exposed Virtual Inbox running.
     process.exit(1);
   }
 }

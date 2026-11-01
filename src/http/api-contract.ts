@@ -211,7 +211,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "networkSettings", method: "PUT", path: "/admin/network", tag: "Administration", admin: true, status: 202, request: "NetworkSettings", response: "NetworkResult", summary: "Persist network settings. Restart is required for listeners." }),
   management({ id: "importTls", method: "PUT", path: "/admin/tls", tag: "Administration", admin: true, status: 200, request: "ImportIdentity", response: "ImportResult", summary: "Validate, persist and activate a PEM identity without restarting." }),
   management({ id: "tlsNames", method: "PUT", path: "/admin/tls/names", tag: "Administration", admin: true, status: 200, request: "TlsNames", response: "NamesResult", summary: "Replace console-managed SAN additions and regenerate in auto mode." }),
-  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
+  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
   ...streams,
   management({ id: "observerSnapshot", method: "GET", path: "/observers/{observerId}", tag: "Events", status: 200, response: "Observer", summary: "Read subscriptions and renew the observer session." }),
   management({ id: "watchInbox", method: "POST", path: "/observers/{observerId}/inboxes", tag: "Events", status: 200, request: "Watch", response: "WatchResult", summary: "Subscribe an observer; returns the inbox and existing messages." }),

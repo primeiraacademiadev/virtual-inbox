@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useMemo, useState } from "react";
 import type { EventEntry } from "../api.js";
 import { LOG_DEPTHS, LOG_FILTER_FIELDS, visibleLogs, gapLabel } from "../logs/log-model.js";

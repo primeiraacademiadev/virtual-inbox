@@ -412,7 +412,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "networkSettings": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const values = await body(req);
-        const allowed = networkKeys;
+        const allowed: readonly string[] = networkKeys;
         if (!values || typeof values !== "object" || Array.isArray(values) ||
           Object.keys(values).some((key) => !allowed.includes(key))) {
           throw new Fault(400, "Unsupported setting");

@@ -102,6 +102,26 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
         req.end(payload === undefined ? undefined : JSON.stringify(payload));
       });
 
+    // Exercise REST log filters and bounded range recovery through the real HTTP listener.
+    const logBase = "http://127.0.0.1:" + port + "/api/logs";
+    const initialLogsResponse = await fetch(logBase);
+    assert.equal(initialLogsResponse.status, 200);
+    const initialLogs = await initialLogsResponse.json() as { events: Array<{ id: string; log_id: number; type: string }> };
+    assert.ok(initialLogs.events.every((event) => event.log_id > 0));
+    const filteredLogsResponse = await fetch(logBase + "?type=does-not-exist");
+    assert.equal(filteredLogsResponse.status, 200);
+    const filteredLogs = await filteredLogsResponse.json() as { events: unknown[] };
+    assert.deepEqual(filteredLogs.events, []);
+    const rangedLogs = await fetch(logBase + "?from=1&to=10000");
+    assert.equal(rangedLogs.status, 200);
+    const ranged = await rangedLogs.json() as { events: Array<{ log_id: number }>; requestedFrom: number; requestedTo: number };
+    assert.equal(ranged.requestedFrom, 1);
+    assert.equal(ranged.requestedTo, 10000);
+    assert.ok(ranged.events.every((event) => event.log_id >= 1 && event.log_id <= 10000));
+    for (const query of ["?from=0&to=1", "?from=20&to=10", "?from=1", "?from=1&to=10002"]) {
+      assert.equal((await fetch(logBase + query)).status, 400);
+    }
+    assert.equal((await fetch(logBase + "?type=a&type=b")).status, 400);
     const forbidden = await fetch("http://127.0.0.1:" + port + "/api/admin/test/metrics");
     assert.equal(forbidden.status, 403, "admin routes must require authenticated HTTPS");
     assert.equal((await api("GET", "/admin/test/metrics", undefined, false)).status, 403);

@@ -636,7 +636,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
     const fault = error instanceof Fault
       ? error : new Fault(500, error instanceof Error ? error.message : "Server error");
     if (!res.headersSent) json(res, fault.status, {
-      error: fault.message, errorCode: fault.code || errorCode(fault.status, fault.message), errorParams: {},
+      error: fault.message, errorCode: fault.code || errorCode(fault.status, fault.message), errorParams: fault.params,
     });
   }
 }

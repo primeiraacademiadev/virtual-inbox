@@ -149,3 +149,16 @@ test("anomaly filter parser rejects invalid overrides", () => {
   assert.throws(() => parseLogFilters(new URLSearchParams("includeAnomalies=maybe")), Fault);
   assert.throws(() => parseLogFilters(new URLSearchParams("includeAnomalies=true&includeAnomalies=false")), Fault);
 });
+
+test("captured anomalies support independent original recipient, sender, reason and cursor filters", () => {
+  const s = new Sandbox();
+  const a = s.deliver("email", "sender-a@example.test", "missing-a@example.test", "A");
+  const b = s.deliver("email", "sender-b@example.test", "missing-b@example.test", "B");
+  const system = s.defaults.email;
+  assert.equal(s.listMessages(system, { originalRecipient: "missing-a@example.test" })[0]?.id, a.id);
+  assert.equal(s.listMessages(system, { from: "sender-b@example.test" })[0]?.id, b.id);
+  assert.equal(s.listMessages(system, { captureReason: "UNKNOWN_RECIPIENT" }).length, 2);
+  assert.equal(s.listMessages(system, { captureReason: "EXPIRED_RECIPIENT" }).length, 0);
+  assert.deepEqual(s.listMessages(system, { after: a.sequence }).map(m => m.id), [b.id]);
+  assert.equal(s.listMessages(system, { originalRecipient: "missing-a@example.test", from: "sender-b@example.test" }).length, 0);
+});

@@ -1,4 +1,4 @@
-/** Native-fetch SDK for disposable email and SMS integration tests (Node.js 24+). */
+/** Node.js 24+ client for the Virtual Inbox test sandbox. No runtime dependencies. */
 export type Channel = "email" | "sms";
 export type Inbox = {
   id: string;
@@ -8,12 +8,7 @@ export type Inbox = {
   expiresAt: string | null;
   system?: boolean;
 };
-export type AttachmentInfo = {
-  id: string;
-  filename: string;
-  contentType: string;
-  size: number;
-};
+export type AttachmentInfo = { id: string; filename: string; contentType: string; size: number };
 export type MailHeader = { key: string; originalKey: string; value: string };
 export type MailEnvelope = { mailFrom: string; rcptTo: string[] };
 export type DecodedMailbox = { name: string; address: string };
@@ -27,9 +22,7 @@ export type InboxMessage = {
   subject?: string;
   body: string;
   html?: string;
-  /** Unfolded but otherwise raw MIME values, including encoded display names. */
   headers?: MailHeader[];
-  /** RFC 2047-decoded MIME From; does not replace the original header. */
   decodedFrom?: DecodedMailbox;
   envelope?: MailEnvelope;
   authUser?: string;
@@ -45,22 +38,162 @@ export type MessageMatch = {
   htmlContains?: string;
   header?: { name: string; valueContains: string };
 };
+export type WaitDiagnostic = {
+  inboxId: string;
+  channel: Channel;
+  address: string;
+  after: number;
+  timeoutMs: number;
+  match: MessageMatch;
+  observation: "not_observed_within_window";
+  /** Only the requested inbox; never unrelated anomaly inboxes or global logs. */
+  recent: Array<{ id: string; sequence: number; from: string; subject?: string; receivedAt?: string }>;
+  messageCount?: number;
+  diagnosticErrorCode?: string;
+};
+export type ClientOptions = {
+  /** Administrative requests only: HTTPS base URL, never plaintext HTTP. */
+  adminUrl?: string;
+  /** Required for every administrative operation. Never included in error diagnostics. */
+  adminToken?: string;
+};
+export type SmtpSession = {
+  id: string;
+  clientId: string;
+  connected: boolean;
+  authenticated: boolean;
+  connectedAt: string;
+  disconnectedAt?: string;
+  remoteAddress?: string;
+  authUser?: string;
+  testSessionId?: string;
+  messageIds?: string[];
+};
+export type SmtpReplySelectors = {
+  sender?: string;
+  recipient?: string;
+  clientId?: string;
+  smtpSessionId?: string;
+};
+export type SmtpRuleInput = {
+  phase: "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
+  action: "reply" | "delay" | "drop" | "hang";
+  remaining: number;
+  selectors: SmtpReplySelectors;
+  code?: number;
+  durationMs?: number;
+  message?: string;
+};
+export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string };
+export type LegacySimulationInput = {
+  protocol: "SMTP" | "POP3";
+  command: string;
+  code: number;
+  remaining: number;
+  message?: string;
+};
+export type ConnectionDataSimulationInput = {
+  command: "DATA";
+  code: number;
+  remaining: number;
+  message?: string;
+};
+export type TestSession = { sessionId: string; inbox: string };
+export type SmtpClient = { id: string; remoteAddress?: string; authUser?: string; activeSessions: number; totalSessions: number };
+export type ConnectionInfo = Record<string, unknown>;
 
+/** HTTP failures retain the structured server error and the original cause. */
+export class VirtualInboxError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode: string,
+    readonly errorParams: Record<string, unknown> = {},
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "VirtualInboxError";
+  }
+}
+
+/** An absent message is not proof of SMTP rejection or non-delivery. */
+export class VirtualInboxNoMessageError extends VirtualInboxError {
+  constructor(readonly diagnostic: WaitDiagnostic) {
+    super("No matching message observed during the wait window", 204, "NO_MESSAGE_OBSERVED");
+    this.name = "VirtualInboxNoMessageError";
+  }
+}
+
+function structuredError(body: string): { error?: string; errorCode?: string; errorParams?: Record<string, unknown> } {
+  try {
+    const value: unknown = JSON.parse(body);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const data = value as Record<string, unknown>;
+    return {
+      error: typeof data.error === "string" ? data.error : undefined,
+      errorCode: typeof data.errorCode === "string" ? data.errorCode : undefined,
+      errorParams: data.errorParams && typeof data.errorParams === "object" && !Array.isArray(data.errorParams)
+        ? data.errorParams as Record<string, unknown> : undefined,
+    };
+  } catch { return {}; }
+}
+
+/** API operations do not require a checkout or compilation of the server repository. */
 export class VirtualInboxClient {
-  constructor(readonly baseUrl = "http://127.0.0.1:3000") {}
+  constructor(
+    readonly baseUrl = "http://127.0.0.1:3000",
+    readonly options: ClientOptions = {},
+  ) {}
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(new URL(path, this.baseUrl), {
-      ...init,
-      headers: { "content-type": "application/json", ...init?.headers },
-    });
-    if (res.status === 204) return null as T;
-    if (!res.ok) throw Error("Virtual Inbox HTTP " + res.status + ": " + await res.text());
-    return await res.json() as T;
+  private administrativeUrl(): string {
+    const url = this.options.adminUrl ?? (new URL(this.baseUrl).protocol === "https:" ? this.baseUrl : undefined);
+    if (!url || new URL(url).protocol !== "https:" || !this.options.adminToken)
+      throw new VirtualInboxError(
+        "Administrative operations require an explicit HTTPS URL and admin token",
+        0, "ADMIN_CONFIGURATION_REQUIRED",
+      );
+    return url;
+  }
+
+  private async responseError(res: Response): Promise<never> {
+    const body = await res.text();
+    const parsed = structuredError(body);
+    throw new VirtualInboxError(
+      parsed.error ?? "Virtual Inbox HTTP " + res.status,
+      res.status,
+      parsed.errorCode ?? "HTTP_ERROR",
+      parsed.errorParams ?? {},
+    );
+  }
+
+  private async fetchResponse(path: string, init?: RequestInit, admin = false): Promise<Response> {
+    const root = admin ? this.administrativeUrl() : this.baseUrl;
+    const headers = new Headers(init?.headers);
+    if (init?.body !== undefined) headers.set("Content-Type", "application/json");
+    headers.set("Accept", "application/json");
+    if (admin) headers.set("Authorization", "Bearer " + this.options.adminToken);
+    try {
+      return await fetch(new URL(path, root), { ...init, headers });
+    } catch (cause) {
+      throw new VirtualInboxError("Virtual Inbox is unreachable", 0, "NETWORK_ERROR", {}, { cause });
+    }
+  }
+
+  private async request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
+    const response = await this.fetchResponse(path, init, admin);
+    if (response.status === 204) return null as T;
+    if (!response.ok) await this.responseError(response);
+    try {
+      return await response.json() as T;
+    } catch (cause) {
+      throw new VirtualInboxError("Invalid Virtual Inbox JSON response", response.status,
+        "INVALID_RESPONSE", {}, { cause });
+    }
   }
 
   private path(inbox: Inbox): string {
-    return (inbox.channel === "email" ? "/mailboxes/" : "/phone-numbers/") + encodeURIComponent(inbox.id);
+    return (inbox.channel === "email" ? "/mailboxes/" : "/phone-numbers/") +
+      encodeURIComponent(inbox.id);
   }
 
   create(channel: Channel, address?: string, ttlSeconds = 1800): Promise<Inbox> {
@@ -73,14 +206,21 @@ export class VirtualInboxClient {
     });
   }
 
+  async findInbox(channel: Channel, address: string): Promise<Inbox | null> {
+    const collection = channel === "email" ? "/mailboxes" : "/phone-numbers";
+    const found = await this.request<Inbox[]>(collection + "?address=" + encodeURIComponent(address));
+    return found[0] ?? null;
+  }
+
   messages(inbox: Inbox): Promise<InboxMessage[]> {
     return this.request(this.path(inbox) + "/messages");
   }
 
-  /**
-   * Wait for an existing or new message. after is an exclusive message sequence cursor,
-   * not an SSE event ID. Returns null on HTTP 204 (timeout/inbox removal).
-   */
+  clearMessages(inbox: Inbox): Promise<void> {
+    return this.request(this.path(inbox) + "/messages", { method: "DELETE" });
+  }
+
+  /** HTTP 204 (timeout or removal) maps to null, never an invented rejection. */
   wait(inbox: Inbox, match: MessageMatch, timeoutMs = 10000, after = 0): Promise<InboxMessage | null> {
     return this.request(this.path(inbox) + "/wait-for-message", {
       method: "POST",
@@ -88,11 +228,43 @@ export class VirtualInboxClient {
     });
   }
 
+  async waitOrThrow(inbox: Inbox, match: MessageMatch, timeoutMs = 10000, after = 0): Promise<InboxMessage> {
+    const message = await this.wait(inbox, match, timeoutMs, after);
+    if (message) return message;
+    const diagnostic: WaitDiagnostic = {
+      inboxId: inbox.id, channel: inbox.channel, address: inbox.address,
+      match, after, timeoutMs, observation: "not_observed_within_window", recent: [],
+    };
+    try {
+      const messages = await this.messages(inbox);
+      diagnostic.messageCount = messages.length;
+      diagnostic.recent = messages.slice(-5).map((item) => ({
+        id: item.id, sequence: item.sequence, from: item.from,
+        subject: item.subject, receivedAt: item.receivedAt,
+      }));
+    } catch (error) {
+      diagnostic.diagnosticErrorCode = error instanceof VirtualInboxError ? error.errorCode : "DIAGNOSTIC_UNAVAILABLE";
+    }
+    throw new VirtualInboxNoMessageError(diagnostic);
+  }
+
+  /** Wait for the SMTP discovery reply without provisioning a reserved mailbox. */
+  waitForConnectionProbe(address: string, timeoutMs = 60000, after = 0): Promise<InboxMessage | null> {
+    return this.request("/connection-probes/wait-for-message", {
+      method: "POST",
+      body: JSON.stringify({ address, timeoutMs, after }),
+    });
+  }
+
+  connectionInfo(): Promise<ConnectionInfo> {
+    return this.request("/connection-info");
+  }
+
   async download(inbox: Inbox, messageId: string, attachmentId: string): Promise<Uint8Array> {
-    const url = this.path(inbox) + "/messages/" + encodeURIComponent(messageId)
-      + "/attachments/" + encodeURIComponent(attachmentId);
-    const response = await fetch(new URL(url, this.baseUrl));
-    if (!response.ok) throw Error("Download failed: " + response.status);
+    const path = this.path(inbox) + "/messages/" + encodeURIComponent(messageId) +
+      "/attachments/" + encodeURIComponent(attachmentId);
+    const response = await this.fetchResponse(path);
+    if (!response.ok) await this.responseError(response);
     return new Uint8Array(await response.arrayBuffer());
   }
 
@@ -100,12 +272,58 @@ export class VirtualInboxClient {
     return this.request(this.path(inbox), { method: "DELETE" });
   }
 
-  async withInbox<T>(channel: Channel, fn: (inbox: Inbox) => Promise<T>, address?: string, ttlSeconds = 1800): Promise<T> {
+  smtpSessions(clientId?: string): Promise<SmtpSession[]> {
+    return this.request("/admin/smtp/sessions" +
+      (clientId ? "?clientId=" + encodeURIComponent(clientId) : ""), undefined, true);
+  }
+
+  smtpClients(): Promise<SmtpClient[]> {
+    return this.request("/admin/smtp/clients", undefined, true);
+  }
+
+  createSmtpRule(input: SmtpRuleInput): Promise<SmtpRule> {
+    return this.request("/admin/smtp/reply-rules",
+      { method: "POST", body: JSON.stringify(input) }, true);
+  }
+
+  smtpRules(): Promise<SmtpRule[]> {
+    return this.request("/admin/smtp/reply-rules", undefined, true);
+  }
+
+  deleteSmtpRule(ruleId: string): Promise<void> {
+    return this.request("/admin/smtp/reply-rules/" + encodeURIComponent(ruleId),
+      { method: "DELETE" }, true);
+  }
+
+  createTestSession(username: string, password: string): Promise<{ sessionId: string }> {
+    return this.request("/admin/test/sessions",
+      { method: "POST", body: JSON.stringify({ username, password }) }, true);
+  }
+
+  testSession(sessionId: string): Promise<TestSession> {
+    return this.request("/admin/test/sessions/" + encodeURIComponent(sessionId), undefined, true);
+  }
+
+  verifyTestSession(sessionId: string, username: string, password: string): Promise<{ matches: boolean }> {
+    return this.request("/admin/test/sessions/" + encodeURIComponent(sessionId) + "/verify",
+      { method: "POST", body: JSON.stringify({ username, password }) }, true);
+  }
+
+  createTestSessionSimulation(sessionId: string, input: LegacySimulationInput): Promise<{ id: string }> {
+    return this.request("/admin/test/sessions/" + encodeURIComponent(sessionId) + "/simulations",
+      { method: "POST", body: JSON.stringify(input) }, true);
+  }
+
+  createConnectionSimulation(smtpSessionId: string, input: ConnectionDataSimulationInput): Promise<{ id: string }> {
+    return this.request("/admin/smtp/sessions/" + encodeURIComponent(smtpSessionId) + "/simulations",
+      { method: "POST", body: JSON.stringify(input) }, true);
+  }
+
+  async withInbox<T>(
+    channel: Channel, fn: (inbox: Inbox) => Promise<T>, address?: string, ttlSeconds = 1800,
+  ): Promise<T> {
     const inbox = await this.create(channel, address, ttlSeconds);
-    try {
-      return await fn(inbox);
-    } finally {
-      await this.delete(inbox);
-    }
+    try { return await fn(inbox); }
+    finally { await this.delete(inbox); }
   }
 }

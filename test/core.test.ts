@@ -97,3 +97,15 @@ test("replay reports precisely the missing range after bounded legacy retention"
   assert.equal(result.events.at(-1)?.id, third.id);
   assert.equal(s.replay(first.id).gap, false);
 });
+
+test("log filters use exact matching, AND, and retain global gap metadata", () => {
+  const s = new Sandbox(2);
+  const first = s.log("smtp.accepted", "inbox-a", undefined, { sender: "one@test.invalid", recipient: "a@test.invalid" });
+  s.log("smtp.rejected", "inbox-b", undefined, { sender: "two@test.invalid" });
+  s.log("smtp.accepted", "inbox-a", undefined, { sender: "one@test.invalid", recipients: ["a@test.invalid", "b@test.invalid"] });
+  const filtered = s.replay(s.runId + ":0", { type: "smtp.accepted", sender: "one@test.invalid", recipient: "b@test.invalid" });
+  assert.equal(filtered.events.length, 1);
+  assert.equal(filtered.gap, true);
+  assert.equal(filtered.missingFrom, 1);
+  assert.equal(first.log_id, 1);
+});

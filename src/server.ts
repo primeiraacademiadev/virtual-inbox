@@ -30,6 +30,7 @@ import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachmen
 import { Sandbox, Fault, type Channel, type Event, type Attachment } from "./core.js";
 import { config } from "./config.js";
 import { isAllowedHost, isAllowedOrigin, applyCors } from "./http/security.js";
+import { isObserverEventVisible, eventMatchesFilter, parseEventFilter } from "./http/event-filters.js";
 import { createOpenApiDocument, matchApiOperation } from "./http/api-contract.js";
 import { generationOptions } from "./identity-generation/generator.js";
 import { ensureLocalTls } from "./tls/local-certificates.js";
@@ -227,9 +228,10 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   const url = new URL(req.url || "/", "https://localhost");
   const after = String(req.headers["last-event-id"] || url.searchParams.get("after") || "");
   const active = () => !observerId || (sandbox.observers.get(observerId)?.expiresAt ?? 0) > Date.now();
-  const relevant = (event: Event) => !observerId || !!(
-    event.resourceId && sandbox.observers.get(observerId)?.inboxes.has(event.resourceId)
-  );
+  const filter = parseEventFilter(url.searchParams);
+  const relevant = (event: Event) => !observerId || isObserverEventVisible(
+    event, sandbox.observers.get(observerId)?.inboxes ?? new Set<string>());
+  const visible = (event: Event) => relevant(event) && eventMatchesFilter(event, filter);
   res.writeHead(200, {
     "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive", "X-Accel-Buffering": "no",
@@ -246,9 +248,9 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   const buffered: Event[] = [];
   let replaying = true;
   const emit = (event: Event) => {
-    if (closed) return;
+    if (closed || !visible(event)) return;
     sse(res, "log", event, event.id);
-    if (observerId && event.type.startsWith("message.") && relevant(event)) {
+    if (observerId && event.type.startsWith("message.")) {
       sse(res, "inbox.notification", event);
     }
   };
@@ -522,8 +524,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const input = await body(req);
         return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
       }
-      case "logs":
-        return json(res, 200, sandbox.replay(url.searchParams.get("after") || undefined));
+      case "logs": {
+        const filter = parseEventFilter(url.searchParams);
+        const replay = sandbox.replay(url.searchParams.get("after") || undefined);
+        return json(res, 200, { ...replay, events: replay.events.filter(event => eventMatchesFilter(event, filter)) });
+      }
       case "logEvents":
       case "newObserverEvents":
         return observe(req, res);

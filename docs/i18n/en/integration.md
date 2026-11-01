@@ -89,3 +89,7 @@ On startup, the server generates an ephemeral secret salt. Successful SMTP AUTH 
 ### Reserved probe domain and long-poll before mailbox creation
 
 The entire `@virtual.inbox` domain is reserved: ordinary mailbox creation cannot provision addresses there. Only a valid SMTP probe containing a random 32-hex-character nonce creates a temporary mailbox (60-second TTL); repeated probes do not renew it. To listen **before the mailbox exists**, call `POST /api/connection-probes/wait-for-message` with `{"address":"<32-hex>@virtual.inbox","timeoutMs":60000}` and optional `after` sequence. The wait cannot create an inbox or extend its lifetime; it lasts at most 60 seconds from the request, and no longer than the remaining lifespan of an existing mailbox. HTTP 200 returns a Message, 204 indicates timeout/expiry/cancellation, and 400 invalid inputs. `MAX_OBSERVER_COUNT` limits pending waits. The regular inbox-ID wait API remains unchanged and requires a provisioned inbox.
+
+### Anomaly visibility in logs
+
+When filtering by inbox, sender, or another context, `message.captured` events remain visible by default even if they do not match the filter. Set `includeAnomalies=false` on REST `/api/logs` or SSE streams (including observer streams) to focus strictly on matching events. The console exposes an enabled-by-default “Include anomalies” option. Filtering is not authorization; use synthetic test data only.

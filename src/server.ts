@@ -303,6 +303,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, protocolCounters.snapshot());
       }
+      case "smtpConnectionSimulationCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const connection = smtpSessions.getSession(params.sessionId);
+        if (!connection?.connected) throw new Fault(404, "Active SMTP connection not found", "SMTP_SESSION_NOT_FOUND");
+        const input = await body(req);
+        if (input.command !== "DATA") throw new Fault(400, "Connection simulations currently support DATA only", "INVALID_SIMULATION");
+        return json(res, 201, simulations.create({ smtpSessionId: params.sessionId,
+          protocol: "SMTP", command: input.command, code: input.code,
+          message: input.message || "Simulated failure", remaining: input.remaining || 1 }));
+      }
+      case "smtpConnectionSimulationList": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, simulations.listConnection(params.sessionId));
+      }
+      case "smtpConnectionSimulationDelete": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const rule = simulations.listConnection(params.sessionId).find(value => value.id === params.ruleId);
+        if (!rule) throw new Fault(404, "SMTP connection simulation not found");
+        simulations.delete(rule.id);
+        return json(res, 204, {});
+      }
       case "simulationCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const input = await body(req);
@@ -593,7 +614,11 @@ const smtpOptions: SMTPServerOptions = {
   },
   onClose(session) {
     const id = smtpSessionIds.get(session);
-    if (id) { smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP"); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
+    if (id) {
+      for (const rule of simulations.listConnection(id)) simulations.delete(rule.id);
+      smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP");
+      sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id });
+    }
   },
   // Called after the TLS handshake (STARTTLS or implicit SMTPS).
   // Implicit SMTPS can invoke this before onConnect, which records session.secure.
@@ -663,7 +688,8 @@ const smtpOptions: SMTPServerOptions = {
         return;
       }
       const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
-      const rule = simulations.match(identity?.testSessionId, "SMTP", "DATA");
+      const rule = simulations.matchConnection(smtpSessionIds.get(session), "DATA")
+        || simulations.match(identity?.testSessionId, "SMTP", "DATA");
       if (rule) throw new Fault(rule.code, rule.message, "SIMULATED_SMTP_FAILURE");
       const raw = Buffer.concat(chunks);
       const parsed = await new PostalMime().parse(raw);

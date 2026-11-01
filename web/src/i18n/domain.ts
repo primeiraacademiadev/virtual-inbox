@@ -1,4 +1,4 @@
-import type { Locale } from "./catalog";
+import type { Locale } from "./catalog.js";
 const events: Record<Locale, Record<string, string>> = {
   "pt-PT": {
     "recipient.created": "Destinatário criado",

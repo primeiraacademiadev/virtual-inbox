@@ -49,3 +49,7 @@ Os IDs SSE usam `runId:sequence`; `log.gap` exige reconciliação, e `log.reset`
 ## Retenção dos logs (incremento #44)
 
 `MAX_LOG_BUFFER_BYTES=10485760` define a capacidade por bytes do buffer circular do servidor. O `log_id` aumenta sequencialmente por execução. O identificador SSE original `runId:sequence` continua válido para `after` / `Last-Event-ID`. O sinal `log.gap` inclui `missingFrom`/`missingTo` quando os eventos anteriores foram descartados; `log.reset` assinala reinício. A consola permite limitar o histórico local a 500, 2000, 5000 ou 10000 entradas (armazenado na sessão do browser). O número de eventos retidos no servidor depende da dimensão serializada. Filtros REST/SSE: `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient`, `ruleId`; correspondência exata e conjunção. Eventos excluídos por filtro não constituem lacunas.
+
+### Recuperação de intervalos
+
+`GET /api/logs?from=1201&to=1249` devolve os eventos ainda retidos nesse intervalo inclusivo (máximo 10001 IDs por pedido), com os mesmos filtros opcionais do REST/SSE. A consola permite clicar numa linha `log.gap` para recuperar as entradas; caso não existam, apresenta a indicação localizada de entradas irrecuperáveis. Saltos causados apenas pelos filtros não devem ser tratados como perda de retenção. A recuperação parcial e a reconciliação da sequência continuam sujeitas a testes E2E.

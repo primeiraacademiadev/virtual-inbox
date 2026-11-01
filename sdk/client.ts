@@ -212,8 +212,37 @@ export class VirtualInboxClient {
     return found[0] ?? null;
   }
 
-  messages(inbox: Inbox): Promise<InboxMessage[]> {
-    return this.request(this.path(inbox) + "/messages");
+  messages(inbox: Inbox, after = 0): Promise<InboxMessage[]> {
+    if (!Number.isSafeInteger(after) || after < 0)
+      throw new VirtualInboxError("Invalid message cursor", 0, "INVALID_CURSOR");
+    return this.request(this.path(inbox) + "/messages" + (after ? "?after=" + after : ""));
+  }
+
+  /** Asserts absence of a matching message in the exclusive sequence window. */
+  async expectNoMessage(inbox: Inbox, options: { after: number; forMs: number; match?: MessageMatch }): Promise<void> {
+    if (!Number.isSafeInteger(options.after) || options.after < 0 ||
+        !Number.isSafeInteger(options.forMs) || options.forMs < 1)
+      throw new VirtualInboxError("Invalid negative assertion window", 0, "INVALID_WAIT_WINDOW");
+    const found = await this.wait(inbox, options.match ?? {}, options.forMs, options.after);
+    if (found) throw new VirtualInboxError(
+      "Unexpected matching message was observed",
+      0, "UNEXPECTED_MESSAGE",
+      { messageId: found.id, sequence: found.sequence, inboxId: inbox.id },
+    );
+  }
+
+  /** Filtered, administrative correlation data. No unscoped global history. */
+  smtpAttempts(filter: { smtpSessionId?: string; sender?: string; recipient?: string; messageId?: string; ruleId?: string }, limit = 100): Promise<Array<{
+    id: string; smtpSessionId: string; sender?: string; recipients: string[];
+    messageIds: string[]; ruleIds: string[]; outcome: string; phase: string; persisted: boolean;
+    responseCode?: number;
+  }>> {
+    if (!Object.values(filter).some(Boolean))
+      throw new VirtualInboxError("SMTP attempt filter required", 0, "ATTEMPT_FILTER_REQUIRED");
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filter)) if (value) params.set(key, value);
+    params.set("limit", String(limit));
+    return this.request("/admin/smtp/attempts?" + params, undefined, true);
   }
 
   clearMessages(inbox: Inbox): Promise<void> {

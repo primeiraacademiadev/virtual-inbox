@@ -35,9 +35,30 @@ export function recoverableGapUrl(event: EventEntry, field: string, value: strin
   return "/logs?" + params.toString();
 }
 export function mergeRecoveredLogs(entries: EventEntry[], gapId: string, recovered: EventEntry[], depth: number): EventEntry[] {
-  const merged = [...entries.filter((entry) => entry.id !== gapId), ...recovered];
-  return merged.filter((entry, i) => merged.findIndex((other) => other.id === entry.id) === i)
-    .sort((a, b) => (a.log_id ?? 0) - (b.log_id ?? 0)).slice(-depth);
+  const gap = entries.find(entry => entry.id === gapId);
+  const range = gap && gapRange(gap);
+  const valid = recovered.filter(entry => Number.isSafeInteger(entry.log_id) &&
+    (!range || ((entry.log_id ?? 0) >= range.from && (entry.log_id ?? 0) <= range.to)));
+  const missing: EventEntry[] = [];
+  if (range && gap) {
+    const found = [...new Set(valid.map(entry => entry.log_id!))].sort((a, b) => a - b);
+    let start = range.from;
+    for (const id of found) {
+      if (id > start) {
+        const marker = gapMarker(start, id - 1, gap.at);
+        if (marker) missing.push(marker);
+      }
+      start = id + 1;
+    }
+    if (start <= range.to) {
+      const marker = gapMarker(start, range.to, gap.at);
+      if (marker) missing.push(marker);
+    }
+  }
+  const merged = [...entries.filter(entry => entry.id !== gapId), ...valid, ...missing];
+  return merged.filter((entry, i) => merged.findIndex(other => other.id === entry.id) === i)
+    .sort((a, b) => (a.log_id ?? Number(a.data?.missingFrom) ?? 0) -
+      (b.log_id ?? Number(b.data?.missingFrom) ?? 0)).slice(-depth);
 }
 export function gapLabel(locale: string, missing: boolean, from: unknown, to: unknown): string {
   const terms = locale === "pt-PT" ? ["Entradas irrecuperáveis", "Entradas em falta"] :

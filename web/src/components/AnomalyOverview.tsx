@@ -21,7 +21,7 @@ export function AnomalyOverview(props: { messages: readonly Message[]; locale: L
         reason: "Motif", all: "Tous les motifs", entries: "messages", group: "Par destinataire et motif" }
       : { heading: "Anomalies", recipient: "Original recipient", sender: "Sender",
         reason: "Reason", all: "All reasons", entries: "messages", group: "By recipient and reason" };
-  const reasons = [...new Set(props.messages.map(message => message.captureReason).filter((value): value is string => !!value))].sort();
+  const reasons = [...new Set(props.messages.map(message => message.captureReason).filter((value): value is string => !!value))].sort((a, b) => a.localeCompare(b));
   return <div className="logFilters" aria-label={labels.heading}>
     <strong>{labels.heading}: {filtered.length} {labels.entries}</strong>
     <input aria-label={labels.recipient} placeholder={labels.recipient} value={recipient}

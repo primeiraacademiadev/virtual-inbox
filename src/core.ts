@@ -63,9 +63,13 @@ export type Message = {
 };
 export type Event = {
   id: string;
+  log_id?: number;
   type: string;
   at: string;
   resourceId?: string;
+  inboxId?: string;
+  smtpSessionId?: string;
+  attemptId?: string;
   messageId?: string;
   data?: Record<string, unknown>;
 };
@@ -104,6 +108,9 @@ export class Sandbox {
   readonly observers = new Map<string, { id: string; expiresAt: number; inboxes: Set<string> }>();
   readonly events: Event[] = [];
   private seq = 0;
+  private retainedLogBytes = 0;
+  /** Byte budget is independent of the legacy entry count. */
+  readonly logByteCapacity = config.logBytes;
   private expired = new Map<string, number>();
   private msgSeq = 0;
   private addressIds = new Map<string, string>();
@@ -155,10 +162,26 @@ export class Sandbox {
     return id;
   }
   log(type: string, resourceId?: string, messageId?: string, data?: Record<string, unknown>) {
-    const id = this.runId + ":" + ++this.seq;
-    const event: Event = { id, type, at: new Date().toISOString(), resourceId, messageId, data };
-    this.events.push(event);
-    if (this.events.length > this.capacity) this.events.shift();
+    const log_id = ++this.seq;
+    const id = this.runId + ":" + log_id;
+    const event: Event = {
+      id, log_id, type, at: new Date().toISOString(), resourceId,
+      ...(resourceId ? { inboxId: resourceId } : {}),
+      messageId,
+      ...(typeof data?.smtpSessionId === "string" ? { smtpSessionId: data.smtpSessionId } : {}),
+      ...(typeof data?.attemptId === "string" ? { attemptId: data.attemptId } : {}),
+      data,
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(event), "utf8");
+    // Oversize events cannot be retained; still publish to live consumers.
+    if (bytes <= this.logByteCapacity) {
+      this.events.push(event);
+      this.retainedLogBytes += bytes;
+      while (this.retainedLogBytes > this.logByteCapacity || this.events.length > this.capacity) {
+        const removed = this.events.shift()!;
+        this.retainedLogBytes -= Buffer.byteLength(JSON.stringify(removed), "utf8");
+      }
+    }
     this.emitter.emit("event", event);
     return event;
   }
@@ -370,11 +393,13 @@ export class Sandbox {
       if (run !== this.runId) reset = true;
       else {
         const sequence = Number(number);
-        gap = !!events.length && sequence < Number(events[0].id.split(":")[1]) - 1;
+        gap = Number.isSafeInteger(sequence) && sequence < (events[0]?.log_id ?? this.seq + 1) - 1;
         events = events.filter((event) => Number(event.id.split(":")[1]) > sequence);
       }
     }
-    return { events, gap, reset, runId: this.runId, oldest: this.events[0]?.id, latest: this.events.at(-1)?.id };
+    return { events, gap, reset, runId: this.runId, oldest: this.events[0]?.id, latest: this.events.at(-1)?.id,
+      missingFrom: gap && after ? Number(after.split(":")[1]) + 1 : undefined,
+      missingTo: gap ? (this.events[0]?.log_id ?? this.seq + 1) - 1 : undefined };
   }
   wait(
     id: string,

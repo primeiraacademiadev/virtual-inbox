@@ -16,6 +16,7 @@ import { createPop3Server } from "./pop3-server.js";
 import { Pop3ConnectionStore } from "./pop3-connections.js";
 import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
+import { resolveNetworkSetting, shadowedNetworkKeys, environmentControlledKeys, assertWritableNetworkSettings } from "./network-settings.js";
 import { SmtpAttemptStore } from "./smtp-attempts.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
@@ -66,13 +67,13 @@ const savedSettings: Record<string, string> = existsSync(networkSettingsFile)
   ? JSON.parse(readFileSync(networkSettingsFile, "utf8"))
   : {};
 function setting(key: string, fallback: string) {
-  return savedSettings[key] ?? process.env[key] ?? fallback;
+  return resolveNetworkSetting(process.env, savedSettings, key, fallback);
 }
-const overriddenKeys = Object.keys(savedSettings).filter(
-  (key) => process.env[key] !== undefined && savedSettings[key] !== process.env[key],
-);
+const networkKeys = ["PUBLIC_HOST", "HOST", "SMTP_HOST", "PORT", "HTTPS_PORT",
+  "SMTP_PORT", "SMTPS_PORT", "POP3_PORT", "DEMO_PORT", "DEMO_HTTPS_PORT"] as const;
+const overriddenKeys = shadowedNetworkKeys(process.env, savedSettings);
 if (overriddenKeys.length) {
-  console.warn("Persisted network settings override environment variables:", overriddenKeys.join(", "));
+  console.warn("Environment variables override persisted network settings:", overriddenKeys.join(", "));
 }
 function adminAllowed(req: IncomingMessage) {
   const token = process.env.ADMIN_TOKEN;
@@ -411,8 +412,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "networkSettings": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const values = await body(req);
-        const allowed = ["PUBLIC_HOST", "HOST", "SMTP_HOST", "PORT", "HTTPS_PORT",
-          "SMTP_PORT", "SMTPS_PORT", "DEMO_PORT", "DEMO_HTTPS_PORT"];
+        const allowed = networkKeys;
         if (!values || typeof values !== "object" || Array.isArray(values) ||
           Object.keys(values).some((key) => !allowed.includes(key))) {
           throw new Fault(400, "Unsupported setting");
@@ -424,13 +424,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
             if (!Number.isInteger(number) || number < 1 || number > 65535) throw new Fault(400, "Invalid port");
           } else if (!/^[a-zA-Z0-9.:-]+$/.test(value)) throw new Fault(400, "Invalid host");
         }
+        assertWritableNetworkSettings(values, process.env);
         const data = { ...savedSettings, ...values };
         mkdirSync(dirname(networkSettingsFile), { recursive: true, mode: 0o700 });
         const temporary = networkSettingsFile + "." + randomUUID() + ".tmp";
         writeFileSync(temporary, JSON.stringify(data, null, 2), { mode: 0o600, flag: "wx" });
         renameSync(temporary, networkSettingsFile);
+        Object.assign(savedSettings, data);
         sandbox.log("network.settings.updated", undefined, undefined, { keys: Object.keys(values) });
-        return json(res, 202, { restartRequired: true, settings: data });
+        return json(res, 202, { restartRequired: true, settings: data,
+          environmentControlledKeys: environmentControlledKeys(process.env, networkKeys) });
       }
       case "importTls": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
@@ -483,7 +486,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
           host: addressHost,
           networkSettings: { PUBLIC_HOST: addressHost, HOST: apiHost, SMTP_HOST: smtpHost,
             PORT: String(port), HTTPS_PORT: String(httpsPort), SMTP_PORT: String(smtpPort),
-            SMTPS_PORT: String(smtpsPort), DEMO_PORT: String(demoPort), DEMO_HTTPS_PORT: String(demoHttpsPort) },
+            SMTPS_PORT: String(smtpsPort), POP3_PORT: String(pop3Port),
+            DEMO_PORT: String(demoPort), DEMO_HTTPS_PORT: String(demoHttpsPort) },
+          environmentControlledKeys: environmentControlledKeys(process.env, networkKeys),
           http: { port, httpsPort: tlsIdentity ? httpsPort : null, demoPort,
             demoHttpsPort: tlsIdentity ? demoHttpsPort : null },
           smtp: { plainPort: smtpPort, starttls: !!tlsIdentity,

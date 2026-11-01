@@ -1082,7 +1082,7 @@ export default function App() {
             )}
           </div>
           <h3>{t("addresses")}</h3>
-          <p className="tlsHelp">{t("tlsHelpNetwork")}</p>
+          <p className="tlsHelp">{t("tlsHelpNetwork")} Environment variables take precedence over saved network settings; locked fields are managed by deployment configuration.</p>
           <div className="tlsImport">
             {Object.entries(networkFields).map(([name, value]) => (
               <label key={name}>
@@ -1090,6 +1090,8 @@ export default function App() {
                 <div className="copyField">
                   <input
                     value={value}
+                    disabled={(connection?.environmentControlledKeys || []).includes(name)}
+                    title={(connection?.environmentControlledKeys || []).includes(name) ? "Controlled by environment variable" : undefined}
                     onChange={(e) => setNetworkFields((p) => ({ ...p, [name]: e.target.value }))}
                   />
                   <CopyButton value={value} label={t("copyValue") + " " + name} />

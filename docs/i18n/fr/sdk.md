@@ -51,3 +51,7 @@ Le paquet ESM `@virtual-inbox/client` version 0.2.0 peut être créé avec `npm 
 ## Idempotence explicite et capacites (#41)
 
 Par defaut, un doublon explicite renvoie toujours `409`. Avec `ifExists: "return"` dans `POST /api/mailboxes` ou `POST /api/phone-numbers`, le serveur retourne la boite existante (`200`) sans modifier son ID ni son TTL. Une adresse expiree est recreee (`201`) avec un nouvel ID. Le domaine reserve `@virtual.inbox` reste protege. Le SDK prend en charge `create(channel, address, ttlSeconds, "return")`. `GET /api/capabilities` fournit la version, les protocoles, la politique SMTP AUTH et les actions de simulation prises en charge; le SDK expose `client.capabilities()`.
+
+## Rétention et séquence des journaux (incrément #44)
+
+`MAX_LOG_BUFFER_BYTES` fixe à 10485760 octets (10 Mio) par défaut la taille du tampon circulaire; entier positif obligatoire. Les événements trop volumineux ne sont pas conservés, mais sont diffusés en direct. `log_id` est croissant par exécution, tandis que `id=runId:sequence` reste compatible avec SSE. `log.gap` indique `missingFrom` et `missingTo`; `log.reset` signale un redémarrage. La console permet 500, 2000, 5000 ou 10000 entrées par session du navigateur. Le nombre d'événements conservés dépend de leur taille sérialisée. Données synthétiques uniquement. Les filtres REST/SSE structurés restent à réaliser dans cette PR.

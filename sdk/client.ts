@@ -201,7 +201,7 @@ export class VirtualInboxClient {
       method: "POST",
       body: JSON.stringify({
         [channel === "email" ? "address" : "phoneNumber"]: address,
-        ttlSeconds, ifExists,
+        ttlSeconds, ...(ifExists === "return" ? { ifExists } : {}),
       }),
     });
   }

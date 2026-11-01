@@ -9,7 +9,7 @@ const noop = () => {};
 const props = {
   logs: [{ id: "r:1", log_id: 1, at: "2026-11-01T12:00:00Z", type: "message.received", resourceId: "abcdef012345" }],
   depth: 2000, onDepth: noop, field: "type", onField: noop,
-  serverFilter: "", onServerFilter: noop, onClear: noop, onMinimize: noop,
+  serverFilter: "", onServerFilter: noop, includeAnomalies: true, onIncludeAnomalies: noop, onClear: noop, onMinimize: noop,
   onOlder: noop, onRecover: noop, hasOlder: true, loadingOlder: false,
   unretrievableGaps: [], loadingGaps: [], locale: "en", formatDate: (date: string) => date,
   labels: { logs: "Logs", minimize: "Minimize", filter: "Search logs", clear: "Clear" },
@@ -34,4 +34,11 @@ test("log panel renders loading and localized gaps without message disclosure", 
   assert.match(html, /disabled/);
   assert.match(render({ logs: [gap], unretrievableGaps: [gap.id] }), /Unretrievable/);
   assert.doesNotMatch(render({ logs: [], hasOlder: false }), /Load older events/);
+});
+
+test("anomalies remain visible by default and focused mode can remove them", () => {
+  const anomaly = { id: "anomaly:1", at: "2026-11-01T12:00:00Z", type: "message.captured", resourceId: "elsewhere" };
+  assert.match(render({ logs: [anomaly] }), /Include anomalies/);
+  assert.match(render({ logs: [anomaly] }), /checked/);
+  assert.doesNotMatch(render({ logs: [anomaly], includeAnomalies: false }), /checked/);
 });

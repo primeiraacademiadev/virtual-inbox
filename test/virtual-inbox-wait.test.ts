@@ -34,8 +34,8 @@ test("waiting before SMTP delivery does not create an inbox", async () => {
 
 test("probe wait is restricted, bounded and cancellable", async () => {
   const sandbox = new Sandbox();
-  await assert.rejects(waitForConnectionProbeMessage(sandbox, "other@example.test", {}), Fault);
-  await assert.rejects(waitForConnectionProbeMessage(sandbox, addr(), { timeoutMs: 60001 }), Fault);
+  assert.throws(() => waitForConnectionProbeMessage(sandbox, "other@example.test", {}), Fault);
+  assert.throws(() => waitForConnectionProbeMessage(sandbox, addr(), { timeoutMs: 60001 }), Fault);
   const to = addr();
   assert.equal(await waitForConnectionProbeMessage(sandbox, to, { timeoutMs: 15 }), null);
   assert.equal(sandbox.find("email", to), undefined);

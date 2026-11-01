@@ -89,3 +89,7 @@ Après SMTP AUTH, le serveur associe un GUID public `clientId` au condensat HMAC
 ### Domaine reserve et attente avant la creation
 
 Le domaine `@virtual.inbox` est reserve : la creation manuelle des boites y est interdite. Seule une requete SMTP valide avec identifiant hexadecimal aleatoire de 32 caracteres cree une boite ephemere (TTL de 60 secondes), sans renouvellement. Pour attendre **avant que la boite existe**, utiliser `POST /api/connection-probes/wait-for-message` avec `{"address":"<32-hex>@virtual.inbox","timeoutMs":60000}` et `after` facultatif. L'attente ne cree pas de boite et ne prolonge pas sa validite : maximum 60 secondes depuis la requete et jamais au-dela de l'expiration d'une boite existante. HTTP 200 retourne le message; HTTP 204 signifie delai expire, suppression ou annulation; HTTP 400 signifie parametres invalides. `MAX_OBSERVER_COUNT` limite les attentes simultanees. L'ancien endpoint par `inboxId` exige toujours une boite existante.
+
+### Visibilité des anomalies dans les journaux
+
+Lorsqu'un filtre cible une boîte ou un expéditeur, les événements `message.captured` restent visibles par défaut, même hors filtre. Définissez `includeAnomalies=false` sur `/api/logs` ou les flux SSE pour un mode strictement ciblé. La console propose l'option «Include anomalies», activée par défaut. Les filtres ne constituent pas une autorisation ; seules des données synthétiques doivent être utilisées.

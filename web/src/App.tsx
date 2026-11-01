@@ -189,7 +189,7 @@ export default function App() {
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
   const { logs, setLogs, logDepth, setLogDepth, logField, setLogField,
-    serverLogFilter, setServerLogFilter, hasOlder, loadingOlder, loadOlder, recoverGap,
+    serverLogFilter, setServerLogFilter, includeAnomalies, setIncludeAnomalies, hasOlder, loadingOlder, loadOlder, recoverGap,
     unretrievableGaps, loadingGaps, connected } = useLogHistory(observer, {
       onSession: (session) => {
         setObserver(session.observerId);
@@ -905,6 +905,7 @@ export default function App() {
               logs={logs} depth={logDepth} onDepth={setLogDepth}
               field={logField} onField={setLogField}
               serverFilter={serverLogFilter} onServerFilter={setServerLogFilter}
+              includeAnomalies={includeAnomalies} onIncludeAnomalies={setIncludeAnomalies}
               hasOlder={hasOlder} loadingOlder={loadingOlder} onOlder={() => void loadOlder()}
               unretrievableGaps={unretrievableGaps} loadingGaps={loadingGaps}
               onRecover={gap => void recoverGap(gap)}

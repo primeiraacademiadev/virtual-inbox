@@ -188,6 +188,33 @@ export default function App() {
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
   const [logs, setLogs] = useState<EventEntry[]>([]);
+  const [olderCursor, setOlderCursor] = useState<number | undefined>();
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const oldestLoading = useRef(false);
+  const logPagePath = useCallback((before?: number) => {
+    const params = new URLSearchParams({ limit: "20" });
+    if (before !== undefined) params.set("before", String(before));
+    if (serverLogFilter.trim()) params.set(logField, serverLogFilter.trim());
+    return "/logs?" + params.toString();
+  }, [logField, serverLogFilter]);
+  const loadOlder = async () => {
+    if (!hasOlder || oldestLoading.current || olderCursor === undefined) return;
+    oldestLoading.current = true;
+    setLoadingOlder(true);
+    try {
+      const page = await request<{ events: EventEntry[]; nextBefore?: number; hasMore: boolean }>(logPagePath(olderCursor));
+      setLogs((old) => {
+        const known = new Set(old.map((event) => event.id));
+        return [...page.events.filter((event) => !known.has(event.id)).reverse(), ...old].slice(-logDepth);
+      });
+      setOlderCursor(page.nextBefore);
+      setHasOlder(page.hasMore);
+    } finally {
+      oldestLoading.current = false;
+      setLoadingOlder(false);
+    }
+  };
   // Console-only preference: do not persist untrusted input into browser storage.
   const [logDepth, setLogDepth] = useState(2000);
   useEffect(() => {
@@ -306,8 +333,20 @@ export default function App() {
       ? "/api/observers/" + safeObserver(observer) + "/events"
       : "/api/observers/events";
     const logQuery = logStreamQuery(logField, serverLogFilter);
-    activeSse = new EventSource(path + logQuery);
-    setConnected(false);
+    const boot = async () => {
+      let cursor = "";
+      try {
+        const page = await request<{ events: EventEntry[]; nextBefore?: number; hasMore: boolean; latest: {log_id: number}|null; runId: string }>(logPagePath());
+        if (closed) return;
+        setLogs(page.events.slice().reverse());
+        setOlderCursor(page.nextBefore);
+        setHasOlder(page.hasMore);
+        if (page.latest) cursor = page.runId + ":" + page.latest.log_id;
+      } catch { /* Live stream remains available when history is not. */ }
+      if (closed) return;
+      const separator = logQuery ? "&" : "?";
+      activeSse = new EventSource(path + logQuery + (cursor ? separator + "after=" + encodeURIComponent(cursor) : ""));
+      setConnected(false);
     const handleSession = (ev: MessageEvent) => {
       const data = JSON.parse(ev.data) as Observer;
       if (closed) return;
@@ -357,11 +396,13 @@ export default function App() {
         });
       }
     };
+    };
+    void boot();
     return () => {
       closed = true;
       activeSse?.close();
     };
-  }, [observer, refresh, syncObserver, logField, serverLogFilter]);
+  }, [observer, refresh, syncObserver, logField, serverLogFilter, logPagePath]);
   useEffect(() => {
     if (!observer) return;
     const poll = setInterval(() => {
@@ -996,7 +1037,13 @@ export default function App() {
                   <input aria-label="Server log filter value" placeholder="Exact match" value={serverLogFilter} onChange={(e) => setServerLogFilter(e.target.value)} />
                   <button onClick={() => setLogs([])}>{t("clearView")}</button>
                 </div>
-                <div className="panelBody">
+                <div className="panelBody" onScroll={(event) => {
+                  const el = event.currentTarget;
+                  if (el.scrollTop < 120) void loadOlder();
+                }}>
+                  {hasOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()}>
+                    {loadingOlder ? "Loading…" : "Load older events"}
+                  </button>}
                   {filteredLogs
                     .slice()
                     .reverse()

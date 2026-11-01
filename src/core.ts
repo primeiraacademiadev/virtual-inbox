@@ -185,6 +185,22 @@ export class Sandbox {
     observerId?: string,
     generation?: Generation,
   ) {
+    return this.createInternal(channel, address, ttlSeconds, observerId, generation, false);
+  }
+  /** Reserved discovery mailboxes may only originate from the SMTP probe handler. */
+  createConnectionProbe(address: string) {
+    if (!/^[a-f0-9]{32}@virtual[.]inbox$/i.test(address))
+      throw new Fault(400, "Invalid connection probe address", "INVALID_CONNECTION_PROBE");
+    return this.createInternal("email", address, 60, undefined, undefined, true);
+  }
+  private createInternal(
+    channel: Channel,
+    address: string | undefined,
+    ttlSeconds: number,
+    observerId: string | undefined,
+    generation: Generation | undefined,
+    allowProbe: boolean,
+  ) {
     if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > config.maxTtl)
       throw new Fault(400, "Invalid TTL", "INVALID_TTL");
     if (this.resources.size >= config.maxInboxes + 2)
@@ -196,6 +212,8 @@ export class Sandbox {
     let aliases: string[] = [];
     for (let attempt = 0; attempt < (manual ? 1 : generationDefaults.maxAttempts); attempt++) {
       generatedAddress = manual ? address!.trim() : this.generateIdentity(channel, generation);
+      if (channel === "email" && generatedAddress.toLowerCase().endsWith("@virtual.inbox") && !allowProbe)
+        throw new Fault(400, "Domain @virtual.inbox is reserved for SMTP connection probes", "RESERVED_INBOX_DOMAIN");
       if (classify(generatedAddress) !== channel) throw new Fault(400, "Invalid identifier", "INVALID_REQUEST");
       aliases = this.aliases(channel, generatedAddress, locale);
       if (aliases.every((key) => !this.addressIds.has(key))) break;

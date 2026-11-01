@@ -78,6 +78,11 @@ export const schemas: Record<string, Schema> = {
     phoneNumber: string, ttlSeconds: { type: "integer", minimum: 1 }, observerId: uuid,
     generation: reference("Generation"),
   }),
+  ConnectionProbeWait: object({
+    address: { type: "string", pattern: "^[a-fA-F0-9]{32}@virtual[.]inbox$", description: "Reserved nonce address. Request does not create an inbox." },
+    after: { type: "integer", minimum: 0 },
+    timeoutMs: { type: "integer", minimum: 1, maximum: 60000 },
+  }, ["address"]),
   Wait: object({
     after: { type: "integer", minimum: 0, description: "Exclusive message sequence cursor." },
     timeoutMs: { type: "integer", minimum: 1, description: "Must not exceed MAX_WAIT_TIMEOUT_MS." },
@@ -170,6 +175,10 @@ export const operations: readonly ApiOperation[] = [
     response: "ApplicationFootprint", admin: true, summary: "Read process memory, resource counts and retention without secrets." }),
   management({ id: "protocolMetrics", method: "GET", path: "/admin/test/metrics", tag: "Test", status: 200, admin: true, summary: "Read protocol metrics." }),
 
+  management({ id: "connectionProbeWait", method: "POST",
+    path: "/connection-probes/wait-for-message", tag: "SMTP diagnostics", status: 200,
+    request: "ConnectionProbeWait", response: "Message", noContent: true,
+    summary: "Wait up to 60 seconds for an SMTP probe reply, even before its reserved inbox is created; never creates or renews a mailbox." }),
   management({ id: "smtpReplyRuleCreate", method: "POST", path: "/admin/smtp/reply-rules", tag: "SMTP simulations", status: 201, admin: true, request: "SmtpReplyRuleInput", response: "SmtpReplyRule", summary: "Create an SMTP reply rule scoped by sender, recipient, client or connection." }),
   management({ id: "smtpReplyRuleList", method: "GET", path: "/admin/smtp/reply-rules", tag: "SMTP simulations", status: 200, admin: true, response: "SmtpReplyRules", summary: "List SMTP reply rules." }),
   management({ id: "smtpReplyRuleDelete", method: "DELETE", path: "/admin/smtp/reply-rules/{ruleId}", tag: "SMTP simulations", status: 204, admin: true, summary: "Remove an SMTP reply rule." }),

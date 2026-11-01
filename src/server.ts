@@ -17,7 +17,7 @@ import { Pop3ConnectionStore } from "./pop3-connections.js";
 import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
-import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe } from "./connection-probe.js";
+import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
@@ -525,6 +525,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         await client.sendMail({ from: input.from || "demo@sandbox.test", to: recipient.address,
           subject: input.subject || "Demo", text: input.body || "", attachments });
         return json(res, 202, { accepted: true });
+      }
+      case "connectionProbeWait": {
+        const input = await body(req);
+        const controller = new AbortController();
+        res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+        const message = await waitForConnectionProbeMessage(sandbox, input.address, input, controller.signal);
+        return json(res, message ? 200 : 204, message ? publicMessage(message) : {});
       }
       case "emailList":
       case "smsList": {

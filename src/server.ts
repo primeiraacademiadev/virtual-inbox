@@ -16,6 +16,7 @@ import { createPop3Server } from "./pop3-server.js";
 import { Pop3ConnectionStore } from "./pop3-connections.js";
 import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
+import { SmtpAttemptStore } from "./smtp-attempts.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
@@ -42,6 +43,8 @@ const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
 if (!["INBOX", "OPEN"].includes(smtpAuthPolicy)) throw Error("Invalid SMTP_AUTH_POLICY");
 const smtpSessions = new SmtpSessionStore(500, credentialStore, smtpAuthPolicy as "INBOX" | "OPEN", config.smtpSessionHistoryHours);
 const simulations = new SimulationStore();
+const smtpAttempts = new SmtpAttemptStore();
+const activeAttempts = new WeakMap<object,string>();
 const smtpReplyRules = new SmtpReplyRuleStore(1000, config.smtpSimulationMaxDurationMs);
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();
@@ -376,6 +379,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const input = await body(req);
         return json(res, 200, { matches: await credentialStore.verify(input.username, input.password, params.sessionId) });
       }
+      case "smtpAttempts": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, smtpAttempts.list({
+          smtpSessionId:url.searchParams.get("smtpSessionId")||undefined,
+          sender:url.searchParams.get("sender")||undefined,
+          recipient:url.searchParams.get("recipient")||undefined,
+          messageId:url.searchParams.get("messageId")||undefined,
+          ruleId:url.searchParams.get("ruleId")||undefined,
+        }, Number(url.searchParams.get("limit")||100)));
+      }
       case "smtpClients":
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpSessions.listClients());
@@ -565,7 +578,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
-        return json(res, 200, sandbox.listMessages(inboxId).map(publicMessage));
+        return json(res, 200, sandbox.listMessages(inboxId).filter(m => m.sequence > Number(url.searchParams.get("after") || 0)).map(publicMessage));
       case "emailClear":
       case "smsClear":
         sandbox.clearMessages(inboxId);
@@ -677,6 +690,8 @@ async function applySmtpFault(
   const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId });
   if (!rule) return false;
   const responseCode = rule.code;
+  const attemptId=activeAttempts.get(session);
+  if(attemptId)smtpAttempts.update(attemptId,{phase,ruleId:rule.id});
   const outcome = rule.action === "reply" ? "rejected"
     : rule.action === "delay" ? (responseCode ? "delayed-rejection" : "delayed-response")
     : rule.action === "drop" ? "disconnected" : "timeout-then-disconnect";
@@ -724,6 +739,7 @@ const smtpOptions: SMTPServerOptions = {
     const id = smtpSessionIds.get(session);
     if (id) {
       cancelFaultWaits(id);
+      smtpAttempts.disconnect(id);
       for (const rule of simulations.listConnection(id)) simulations.delete(rule.id);
       smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP");
       sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id });
@@ -764,17 +780,31 @@ const smtpOptions: SMTPServerOptions = {
     });
   },
   onMailFrom(address, session, callback) {
+    const sessionId = smtpSessionIds.get(session);
+    if (sessionId) activeAttempts.set(session, smtpAttempts.begin(sessionId,address.address).id);
     void applySmtpFault("MAIL", session, address.address)
       .then((stopped) => { if (!stopped) callback(); })
-      .catch((error) => callback(smtpFailure(error)));
+      .catch((error) => {
+        const id=activeAttempts.get(session);
+        if(id)smtpAttempts.update(id,{phase:"MAIL",outcome:"rejected",responseCode:smtpFailure(error).responseCode});
+        callback(smtpFailure(error));
+      });
   },
   onRcptTo(address, session, callback) {
     if (isConnectionProbeAddress(address.address)) return callback();
     const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
       ? session.envelope.mailFrom.address : undefined;
     void applySmtpFault("RCPT", session, sender, [address.address])
-      .then((stopped) => { if (!stopped) callback(); })
-      .catch((error) => callback(smtpFailure(error)));
+      .then((stopped) => {
+        const id=activeAttempts.get(session);
+        if(id && !stopped)smtpAttempts.update(id,{phase:"RCPT",recipient:address.address});
+        if(!stopped)callback();
+      })
+      .catch((error) => {
+        const id=activeAttempts.get(session);
+        if(id)smtpAttempts.update(id,{phase:"RCPT",responseCode:smtpFailure(error).responseCode});
+        callback(smtpFailure(error));
+      });
   },
   onData(stream: any, session: any, callback: any) {
     (async () => {
@@ -808,6 +838,8 @@ const smtpOptions: SMTPServerOptions = {
         callback(null, "Accepted");
         return;
       }
+      const attemptId=activeAttempts.get(session);
+      if(attemptId)smtpAttempts.update(attemptId,{phase:"DATA"});
       if (await applySmtpFault("DATA", session, sender, recipients)) return;
       const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
       const rule = simulations.matchConnection(smtpSessionIds.get(session), "DATA")
@@ -833,12 +865,20 @@ const smtpOptions: SMTPServerOptions = {
         const message = sandbox.deliver("email", sender, recipient.address, parsed.text || "", parsed.subject,
           parsed.html || undefined, raw.toString("base64"), attachments, metadata);
         if (metadata.smtpSessionId) smtpSessions.recordMessage(metadata.smtpSessionId, message.id);
+        if(attemptId)smtpAttempts.update(attemptId,{messageId:message.id,persisted:true});
         protocolCounters.message("SMTP");
       }
+      if(attemptId)smtpAttempts.update(attemptId,{phase:"AFTER_DATA"});
       if (await applySmtpFault("AFTER_DATA", session, sender, recipients, true)) return;
+      if(attemptId)smtpAttempts.update(attemptId,{outcome:"stored_and_acknowledged",responseCode:250});
       callback(null, "Accepted");
     })().catch((error) => {
       const failure = smtpFailure(error);
+      const attemptId=activeAttempts.get(session);
+      if(attemptId){
+        const attempt=smtpAttempts.get(attemptId);
+        smtpAttempts.update(attemptId,{outcome:attempt?.persisted?"stored_without_ack":"rejected",responseCode:failure.responseCode});
+      }
       const id = smtpSessionIds.get(session);
       const wasSimulated = (error as { simulated?: boolean } | null)?.simulated === true;
       if (!wasSimulated) protocolCounters.error("SMTP", error instanceof Fault && error.code === "SIMULATED_SMTP_FAILURE");

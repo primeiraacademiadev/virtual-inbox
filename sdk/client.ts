@@ -196,14 +196,18 @@ export class VirtualInboxClient {
       encodeURIComponent(inbox.id);
   }
 
-  create(channel: Channel, address?: string, ttlSeconds = 1800): Promise<Inbox> {
+  create(channel: Channel, address?: string, ttlSeconds = 1800, ifExists: "error" | "return" = "error"): Promise<Inbox> {
     return this.request(channel === "email" ? "/mailboxes" : "/phone-numbers", {
       method: "POST",
       body: JSON.stringify({
         [channel === "email" ? "address" : "phoneNumber"]: address,
-        ttlSeconds,
+        ttlSeconds, ifExists,
       }),
     });
+  }
+
+  capabilities(): Promise<{ version: string; schemaVersion: number; protocols: Record<string, boolean>; smtpAuthPolicy: "INBOX" | "OPEN"; inbox: {idempotentCreate:boolean; ifExists:string[]; reservedDomain:string}; simulation: {phases:string[]; actions:string[]} }> {
+    return this.request("/capabilities");
   }
 
   async findInbox(channel: Channel, address: string): Promise<Inbox | null> {

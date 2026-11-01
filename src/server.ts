@@ -403,6 +403,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "health":
         return json(res, 200, { status: "ok", runId: sandbox.runId });
+      case "capabilities":
+        return json(res, 200, {
+          version: "0.2.0", schemaVersion: 1, protocols: { smtp: true, starttls: !!tlsIdentity,
+            smtps: !!tlsIdentity, pop3: true, sms: true },
+          smtpAuthPolicy, inbox: { idempotentCreate: true, ifExists: ["error", "return"],
+            reservedDomain: "virtual.inbox" },
+          simulation: { phases: ["MAIL", "RCPT", "DATA", "AFTER_DATA"],
+            actions: ["reply", "delay", "drop", "hang"] },
+        });
       case "openapi":
         return json(res, 200, createOpenApiDocument());
       case "demoOpenapi":
@@ -565,14 +574,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         if (channel === "email" && typeof input.address === "string" &&
           isConnectionProbeAddress(input.address))
           throw new Fault(400, "Connection probe inboxes are created by SMTP only", "INVALID_CONNECTION_PROBE");
-        const created = sandbox.create(channel,
-          channel === "email" ? input.address : input.phoneNumber,
-          input.ttlSeconds, input.observerId, input.generation);
+        if (input.ifExists !== undefined && !["return", "error"].includes(input.ifExists))
+          throw new Fault(400, "Invalid ifExists mode", "INVALID_IF_EXISTS");
+        const requestedAddress = channel === "email" ? input.address : input.phoneNumber;
+        const existing = typeof requestedAddress === "string" && requestedAddress.trim()
+          ? (() => { try { return sandbox.find(channel, requestedAddress); } catch { return undefined; } })() : undefined;
+        const created = sandbox.create(channel, requestedAddress,
+          input.ttlSeconds, input.observerId, input.generation, input.ifExists ?? "error");
         if (created.channel === "email") {
           credentialStore.createInbox(created.address);
           inboxAddresses.set(created.id, created.address);
         }
-        return json(res, 201, created);
+        return json(res, existing && existing.id === created.id ? 200 : 201, created);
       }
       case "emailGet":
       case "smsGet":

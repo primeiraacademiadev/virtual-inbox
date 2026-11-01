@@ -104,7 +104,7 @@ test("SMTP history is bounded; active connections cannot be evicted", () => {
   assert.ok(store.listSessions().some((session) => session.id === second));
 
   store.disconnect(second);
-  store.cleanup(Date.now() + 3600001);
+  store.cleanup(Date.now() + 24 * 3600000 + 1);
   assert.equal(store.listSessions().some((session) => session.id === second), false);
   assert.equal(store.listSessions().some((session) => session.id === third), true);
   assert.equal(store.listClients().length, 1);

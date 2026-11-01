@@ -5,7 +5,7 @@ import { captureReasonLabel } from "../i18n/domain.js";
 import type { Locale } from "../i18n/catalog.js";
 
 export function AnomalyOverview(props: { messages: readonly Message[]; locale: Locale;
-  onChange: (messages: Message[]) => void }) {
+  onSelect: (message: Message) => void }) {
   const [recipient, setRecipient] = useState("");
   const [sender, setSender] = useState("");
   const [reason, setReason] = useState("");
@@ -34,6 +34,11 @@ export function AnomalyOverview(props: { messages: readonly Message[]; locale: L
     <span>{labels.group}: {groups.map(group =>
       group.recipient + " · " + captureReasonLabel(props.locale, group.reason) + " (" + group.count + ")"
     ).join(" | ")}</span>
-    <button type="button" onClick={() => props.onChange(filtered)}>{labels.heading}: {filtered.length}</button>
+    <div className="messages">{filtered.slice().reverse().map(message =>
+      <button className="msg" key={message.id} onClick={() => props.onSelect(message)}>
+        <span>{message.originalRecipient} · {message.from} · {captureReasonLabel(props.locale, message.captureReason ?? "")}</span>
+        <span className="tiny">{message.receivedAt}</span>
+      </button>
+    )}</div>
   </div>;
 }

@@ -204,10 +204,11 @@ export class Sandbox {
     }
     if (!aliases.length)
       throw new Fault(409, "Generation attempts exhausted", "IDENTITY_GENERATION_EXHAUSTED");
+    const createdAt = Date.now();
     const recipient: Recipient = {
       id: randomUUID(), channel, address: generatedAddress,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+      createdAt: new Date(createdAt).toISOString(),
+      expiresAt: new Date(createdAt + ttlSeconds * 1000).toISOString(),
     };
     this.resources.set(recipient.id, recipient);
     for (const alias of aliases) this.addressIds.set(alias, recipient.id);

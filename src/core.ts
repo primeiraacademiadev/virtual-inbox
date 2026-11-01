@@ -73,6 +73,36 @@ export type Event = {
   messageId?: string;
   data?: Record<string, unknown>;
 };
+export const logFilterKeys = ["type", "inboxId", "messageId", "smtpSessionId", "attemptId", "sender", "recipient", "ruleId"] as const;
+export type LogFilters = Partial<Record<(typeof logFilterKeys)[number], string>>;
+export function matchesLog(event: Event, filters: LogFilters = {}): boolean {
+  const data = event.data ?? {};
+  const fields: Record<(typeof logFilterKeys)[number], unknown> = {
+    type: event.type, inboxId: event.inboxId ?? event.resourceId, messageId: event.messageId,
+    smtpSessionId: event.smtpSessionId ?? data.smtpSessionId ?? data.sessionId,
+    attemptId: event.attemptId ?? data.attemptId,
+    sender: data.sender ?? data.mailFrom,
+    recipient: data.recipient ?? data.recipients ?? data.rcptTo,
+    ruleId: data.ruleId,
+  };
+  return logFilterKeys.every((key) => {
+    const value = filters[key];
+    if (!value) return true;
+    const actual = fields[key];
+    return Array.isArray(actual) ? actual.includes(value) : actual === value;
+  });
+}
+export function parseLogFilters(params: URLSearchParams): LogFilters {
+  const filters: LogFilters = {};
+  for (const key of logFilterKeys) {
+    const values = params.getAll(key);
+    if (values.length > 1 || values.some((value) => !value || value.length > 320))
+      throw new Fault(400, "Invalid log filter", "INVALID_LOG_FILTER");
+    if (values.length) filters[key] = values[0];
+  }
+  return filters;
+}
+
 export function classifyAddress(s: string): "email" | "sms" | null {
   if (s.length === 0 || s.length > 320) return null;
   const at = s.indexOf("@");
@@ -384,7 +414,7 @@ export class Sandbox {
   unwatch(id: string, resourceId: string) {
     this.observer(id).inboxes.delete(resourceId);
   }
-  replay(after?: string) {
+  replay(after?: string, filters: LogFilters = {}) {
     let events = this.events;
     let gap = false;
     let reset = false;
@@ -397,6 +427,7 @@ export class Sandbox {
         events = events.filter((event) => Number(event.id.split(":")[1]) > sequence);
       }
     }
+    events = events.filter((event) => matchesLog(event, filters));
     return { events, gap, reset, runId: this.runId, oldest: this.events[0]?.id, latest: this.events.at(-1)?.id,
       missingFrom: gap && after ? Number(after.split(":")[1]) + 1 : undefined,
       missingTo: gap ? (this.events[0]?.log_id ?? this.seq + 1) - 1 : undefined };

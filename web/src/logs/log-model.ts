@@ -1,4 +1,4 @@
-import type { EventEntry } from "../api";
+import type { EventEntry } from "../api.js";
 
 export const LOG_DEPTHS = [500, 2000, 5000, 10000] as const;
 export const LOG_FILTER_FIELDS = ["type","inboxId","messageId","smtpSessionId","attemptId","sender","recipient","ruleId"] as const;

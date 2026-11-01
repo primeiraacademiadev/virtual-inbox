@@ -192,6 +192,14 @@ export default function App() {
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const oldestLoading = useRef(false);
+  // Console-only preference: do not persist untrusted input into browser storage.
+  const [logDepth, setLogDepth] = useState(2000);
+  useEffect(() => {
+    setLogs((entries) => entries.slice(-logDepth));
+  }, [logDepth]);
+  const [logFilter, setLogFilter] = useState("");
+  const [logField, setLogField] = useState("type");
+  const [serverLogFilter, setServerLogFilter] = useState("");
   const logPagePath = useCallback((before?: number) => {
     const params = new URLSearchParams({ limit: "20" });
     if (before !== undefined) params.set("before", String(before));
@@ -215,14 +223,6 @@ export default function App() {
       setLoadingOlder(false);
     }
   };
-  // Console-only preference: do not persist untrusted input into browser storage.
-  const [logDepth, setLogDepth] = useState(2000);
-  useEffect(() => {
-    setLogs((entries) => entries.slice(-logDepth));
-  }, [logDepth]);
-  const [logFilter, setLogFilter] = useState("");
-  const [logField, setLogField] = useState("type");
-  const [serverLogFilter, setServerLogFilter] = useState("");
   const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
   const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
   const recoverGap = async (gap: EventEntry) => {

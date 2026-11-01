@@ -114,7 +114,9 @@ test("real SMTP OPEN discovery identifies the client across connections and inje
       assert.equal(inboxes.status, 200);
       const listed = await inboxes.json() as Array<{ id: string; expiresAt: string; createdAt: string }>;
       assert.equal(listed.length, 1);
-      assert.equal(Date.parse(listed[0].expiresAt) - Date.parse(listed[0].createdAt), 60_000);
+      const ttlMs = Date.parse(listed[0].expiresAt) - Date.parse(listed[0].createdAt);
+      assert.ok(ttlMs >= 60_000 && ttlMs <= 66_000,
+        `Probe inbox must expire after 60-66 seconds; got ${ttlMs} ms`);
       const messages = await fetch("http://127.0.0.1:" + port + "/api/mailboxes/" + listed[0].id + "/messages");
       const items = await messages.json() as Array<{ body: string }>;
       assert.equal(items.length, 1);

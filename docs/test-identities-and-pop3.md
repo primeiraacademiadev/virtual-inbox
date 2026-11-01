@@ -74,3 +74,19 @@ Set `SMTP_AUTH_POLICY=OPEN` to allow arbitrary SMTP AUTH usernames without provi
 On startup the server generates a fresh secret salt (256 bits). Successful SMTP AUTH maps a keyed SHA-256 digest of the exact username, password and observed remote IP to a random `clientId` GUID. The digest is private. Connections with an identical triple during this process run share a client GUID; changing credentials or IP, or restarting, changes the grouping. This is a correlation identity, not authentication proof or API authorization. Anonymous SMTP connections are not grouped by IP.
 
 The `@virtual.inbox` response includes `clientId` (`null` for anonymous) and `sessions`: all retained connections of this authenticated client or only the sending connection when anonymous. Entries expose `smtpSessionId`, `connectedAt`, `disconnectedAt`, `connected`, and `current`. Times are UTC ISO 8601. `SMTP_SESSION_HISTORY_HOURS=24` configures retention of closed SMTP connections, subject to bounded store capacity. The 60-second probe mailbox TTL is independent. In OPEN policy the SMTP diagnostic `testSessionId` equals the process-local client GUID; the inbox-based admin test session API remains unchanged.
+
+## SMTP reply simulation — first increment of #36
+
+Authenticated administrators may create targeted SMTP reply rules at `POST /api/admin/smtp/reply-rules`, list them at `GET /api/admin/smtp/reply-rules`, and remove individual rules at `DELETE /api/admin/smtp/reply-rules/{ruleId}`. These endpoints require HTTPS plus `ADMIN_TOKEN`. This is a separate rule collection; older inbox-backed and connection-specific DATA rules remain supported.
+
+Example:
+
+```json
+{"phase":"RCPT","action":"reply","code":451,"message":"Temporary recipient failure","remaining":2,"selectors":{"sender":"billing@example.test","recipient":"student@example.test"}}
+```
+
+Only phases `MAIL`, `RCPT`, `DATA` and action `reply` are supported in this increment. A valid SMTP reply code is an integer from 400 to 599. `remaining` is an integer between 1 and 10000 and is consumed exactly once per matching phase evaluation. Unsupported phases, actions, unrecognized fields, invalid selectors and unavailable selectors return HTTP 400 with `INVALID_SMTP_SIMULATION`; they never create inert rules. The response exposes the rule ID and its remaining budget.
+
+Selectors may include `sender` (SMTP envelope `MAIL FROM`, **not** MIME From), `recipient` (envelope `RCPT TO`), `clientId` (authenticated credential/IP client GUID), and `smtpSessionId` (individual connection GUID). Multiple selectors are combined with AND. MAIL cannot select a recipient because `RCPT TO` has not happened yet. RCPT evaluates one address at a time; a rejected recipient does not reject the other recipients. DATA evaluates the full accepted recipient list: if any recipient matches, the response rejects the **entire transaction before message persistence**, not just that one recipient. A rule with the same sender and recipient therefore has different scope in RCPT versus DATA. Selectors compare addresses case-insensitively and GUIDs exactly. At equal phase, the rule with more selectors takes precedence, followed by connection, client, sender, and recipient; equal priorities use insertion order. Exhausted rules remain listable until deleted.
+
+Applied rules produce a `smtp.simulation.applied` log event containing `ruleId`, phase, response code, connection, client, sender, relevant recipients, `persisted:false`, and `outcome:rejected`; message content and credentials are not logged. An authenticated client may have several connections; an anonymous connection has a session GUID but no authenticated client GUID. The reserved `@virtual.inbox` discovery request bypasses DATA reply simulations so it can still discover a connection. `CONNECT`, `EHLO`, `AUTH`, `AFTER_DATA` and actions `delay`, `drop`, `hang` are deliberately **not** implemented in this increment and will be addressed separately.

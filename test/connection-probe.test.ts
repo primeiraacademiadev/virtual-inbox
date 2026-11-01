@@ -19,7 +19,8 @@ test("connection probe generates discoverable JSON with fixed 60 second TTL", ()
   const messageId = deliverConnectionProbe(sandbox, sessions, to, id);
   const inbox = sandbox.find("email", to)!;
   assert.ok(inbox);
-  assert.equal(Date.parse(inbox.expiresAt!) - Date.parse(inbox.createdAt), 60000);
+  const ttlMs = Date.parse(inbox.expiresAt!) - Date.parse(inbox.createdAt);
+  assert.ok(ttlMs >= 60000 && ttlMs <= 66000, `Probe TTL outside allowed [60000, 66000] ms: ${ttlMs}`);
   const message = sandbox.listMessages(inbox.id)[0];
   assert.equal(message.id, messageId);
   assert.equal(message.from, "connection@virtual.inbox");

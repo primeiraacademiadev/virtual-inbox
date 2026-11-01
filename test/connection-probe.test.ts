@@ -24,7 +24,9 @@ test("connection probe generates discoverable JSON with fixed 60 second TTL", ()
   assert.equal(message.id, messageId);
   assert.equal(message.from, "connection@virtual.inbox");
   assert.deepEqual(JSON.parse(message.body), {
-    protocol: "SMTP", smtpSessionId: id, authenticated: false, secure: false,
+    protocol: "SMTP", clientId: null, smtpSessionId: id, authenticated: false, secure: false,
+    sessions: [{ smtpSessionId: id, connectedAt: sessions.getSession(id)!.connectedAt,
+      disconnectedAt: null, connected: true, current: true }],
   });
   const expiresAt = inbox.expiresAt;
   deliverConnectionProbe(sandbox, sessions, to, id);
@@ -59,4 +61,42 @@ test("SMTP connection-scoped DATA rules apply once to anonymous connections", ()
   assert.equal(rules.matchConnection("connection-2", "DATA"), undefined);
   assert.equal(rules.matchConnection("connection-1", "DATA")?.id, rule.id);
   assert.equal(rules.matchConnection("connection-1", "DATA"), undefined);
+});
+
+test("credential/IP identity groups historical SMTP connections in probe response", async () => {
+  const sandbox = new Sandbox();
+  const sessions = new SmtpSessionStore(10, undefined, "OPEN", 24);
+  const first = sessions.connect("10.0.0.10");
+  await sessions.authenticate(first, "integration", "secret");
+  const clientId = sessions.getSession(first)!.clientId;
+  sessions.disconnect(first);
+  const second = sessions.connect("10.0.0.10");
+  await sessions.authenticate(second, "integration", "secret");
+  assert.equal(sessions.getSession(second)!.clientId, clientId);
+  const to = address();
+  deliverConnectionProbe(sandbox, sessions, to, second);
+  const inbox = sandbox.find("email", to)!;
+  const response = JSON.parse(sandbox.listMessages(inbox.id)[0].body);
+  assert.equal(response.clientId, clientId);
+  assert.equal(response.smtpSessionId, second);
+  assert.equal(response.sessions.length, 2);
+  assert.equal(response.sessions.find((entry: any) => entry.smtpSessionId === second).current, true);
+  assert.ok(response.sessions.find((entry: any) => entry.smtpSessionId === first).disconnectedAt);
+
+  const third = sessions.connect("10.0.0.11");
+  await sessions.authenticate(third, "integration", "secret");
+  assert.notEqual(sessions.getSession(third)!.clientId, clientId);
+  const fourth = sessions.connect("10.0.0.10");
+  await sessions.authenticate(fourth, "integration", "other-secret");
+  assert.notEqual(sessions.getSession(fourth)!.clientId, clientId);
+});
+
+test("ended SMTP connections respect configurable retention", () => {
+  const store = new SmtpSessionStore(5, undefined, "OPEN", 24);
+  const id = store.connect("10.0.0.1");
+  store.disconnect(id);
+  store.cleanup(Date.now() + 23 * 3600000);
+  assert.ok(store.getSession(id));
+  store.cleanup(Date.now() + 25 * 3600000);
+  assert.equal(store.getSession(id), undefined);
 });

@@ -63,18 +63,18 @@ test("SMTP client aggregation distinguishes anonymous and authenticated sessions
   store.updateTls(first, true);
   store.updateTls(first, false);
 
-  assert.equal(firstLogin.clientId, secondLogin.clientId);
+  assert.notEqual(firstLogin.clientId, secondLogin.clientId, "different passwords must identify distinct clients");
   assert.notEqual(firstLogin.clientId, store.listSessions().find((s) => s.id === remote)?.clientId);
   const clients = store.listClients();
-  assert.equal(clients.length, 3);
+  assert.equal(clients.length, 4);
   const authenticatedClient = clients.find((client) => client.id === firstLogin.clientId)!;
-  assert.equal(authenticatedClient.activeSessions, 2);
-  assert.equal(authenticatedClient.authenticatedSessions, 2);
-  assert.equal(authenticatedClient.totalSessions, 2);
+  assert.equal(authenticatedClient.activeSessions, 1);
+  assert.equal(authenticatedClient.authenticatedSessions, 1);
+  assert.equal(authenticatedClient.totalSessions, 1);
   assert.equal(authenticatedClient.authUser, "integration");
   assert.equal(authenticatedClient.remoteAddress, "10.0.0.10");
   assert.ok(Date.parse(authenticatedClient.firstSeenAt) <= Date.parse(authenticatedClient.lastSeenAt));
-  assert.equal(store.listSessions(firstLogin.clientId).length, 2);
+  assert.equal(store.listSessions(firstLogin.clientId).length, 1);
   assert.equal(store.listSessions("not-a-client").length, 0);
   assert.equal(store.listSessions().find((s) => s.id === first)?.secure, true);
   assert.equal(clients.find((client) => !client.authUser && client.remoteAddress === "10.0.0.10")?.activeSessions, 1);
@@ -84,7 +84,7 @@ test("SMTP client aggregation distinguishes anonymous and authenticated sessions
   const closed = store.listSessions().find((session) => session.id === first)!;
   assert.equal(closed.connected, false);
   assert.ok(closed.disconnectedAt);
-  assert.equal(store.listClients().find((client) => client.id === firstLogin.clientId)?.activeSessions, 1);
+  assert.equal(store.listClients().find((client) => client.id === firstLogin.clientId)?.activeSessions, 0);
 });
 
 test("SMTP history is bounded; active connections cannot be evicted", () => {
@@ -104,7 +104,7 @@ test("SMTP history is bounded; active connections cannot be evicted", () => {
   assert.ok(store.listSessions().some((session) => session.id === second));
 
   store.disconnect(second);
-  store.cleanup(Date.now() + 3600001);
+  store.cleanup(Date.now() + 24 * 3600000 + 1);
   assert.equal(store.listSessions().some((session) => session.id === second), false);
   assert.equal(store.listSessions().some((session) => session.id === third), true);
   assert.equal(store.listClients().length, 1);

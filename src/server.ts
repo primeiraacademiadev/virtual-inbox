@@ -16,6 +16,7 @@ import { createPop3Server } from "./pop3-server.js";
 import { Pop3ConnectionStore } from "./pop3-connections.js";
 import { applicationFootprint } from "./footprint.js";
 import { SimulationStore } from "./simulation-store.js";
+import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
 import { decodedSender } from "./mime/decoded-sender.js";
@@ -36,7 +37,9 @@ import {
 export const sandbox = new Sandbox(config.logs);
 const credentialStore = new InboxCredentialStore();
 const inboxAddresses = new Map<string, string>();
-const smtpSessions = new SmtpSessionStore(500, credentialStore);
+const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
+if (!["INBOX", "OPEN"].includes(smtpAuthPolicy)) throw Error("Invalid SMTP_AUTH_POLICY");
+const smtpSessions = new SmtpSessionStore(500, credentialStore, smtpAuthPolicy as "INBOX" | "OPEN", config.smtpSessionHistoryHours);
 const simulations = new SimulationStore();
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();
@@ -300,6 +303,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, protocolCounters.snapshot());
       }
+      case "smtpConnectionSimulationCreate": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const connection = smtpSessions.getSession(params.sessionId);
+        if (!connection?.connected) throw new Fault(404, "Active SMTP connection not found", "SMTP_SESSION_NOT_FOUND");
+        const input = await body(req);
+        if (input.command !== "DATA") throw new Fault(400, "Connection simulations currently support DATA only", "INVALID_SIMULATION");
+        return json(res, 201, simulations.create({ smtpSessionId: params.sessionId,
+          protocol: "SMTP", command: input.command, code: input.code,
+          message: input.message || "Simulated failure", remaining: input.remaining || 1 }));
+      }
+      case "smtpConnectionSimulationList": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        return json(res, 200, simulations.listConnection(params.sessionId));
+      }
+      case "smtpConnectionSimulationDelete": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const rule = simulations.listConnection(params.sessionId).find(value => value.id === params.ruleId);
+        if (!rule) throw new Fault(404, "SMTP connection simulation not found");
+        simulations.delete(rule.id);
+        return json(res, 204, {});
+      }
       case "simulationCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         const input = await body(req);
@@ -498,6 +522,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "emailCreate":
       case "smsCreate": {
         const input = await body(req);
+        if (channel === "email" && typeof input.address === "string" &&
+          isConnectionProbeAddress(input.address))
+          throw new Fault(400, "Connection probe inboxes are created by SMTP only", "INVALID_CONNECTION_PROBE");
         const created = sandbox.create(channel,
           channel === "email" ? input.address : input.phoneNumber,
           input.ttlSeconds, input.observerId, input.generation);
@@ -587,7 +614,11 @@ const smtpOptions: SMTPServerOptions = {
   },
   onClose(session) {
     const id = smtpSessionIds.get(session);
-    if (id) { smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP"); sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id }); }
+    if (id) {
+      for (const rule of simulations.listConnection(id)) simulations.delete(rule.id);
+      smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP");
+      sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id });
+    }
   },
   // Called after the TLS handshake (STARTTLS or implicit SMTPS).
   // Implicit SMTPS can invoke this before onConnect, which records session.secure.
@@ -607,10 +638,12 @@ const smtpOptions: SMTPServerOptions = {
   onAuth(auth, session, callback) {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
-    let inboxAvailable = false;
-    try { inboxAvailable = !!sandbox.find("email", auth.username || ""); } catch { /* expired inbox */ }
-    if (!inboxAvailable)
-      return callback(Object.assign(new Error("Test inbox unavailable"), { responseCode: 535 }));
+    if (smtpAuthPolicy === "INBOX") {
+      let inboxAvailable = false;
+      try { inboxAvailable = !!sandbox.find("email", auth.username || ""); } catch { /* expired inbox */ }
+      if (!inboxAvailable)
+        return callback(Object.assign(new Error("Test inbox unavailable"), { responseCode: 535 }));
+    }
     void smtpSessions.authenticate(id, auth.username || "", auth.password || "", auth.method).then(() => {
       protocolCounters.auth("SMTP");
       sandbox.log("smtp.session.authenticated", undefined, undefined, { sessionId: id });
@@ -638,13 +671,28 @@ const smtpOptions: SMTPServerOptions = {
         chunks.push(buffer);
       }
       if (oversized || stream.sizeExceeded) throw new Fault(413, "MIME too large", "MESSAGE_TOO_LARGE");
+      const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
+        ? session.envelope.mailFrom.address : "unknown@sandbox.test";
+      const recipients: string[] = session.envelope.rcptTo.map((recipient: { address: string }) => recipient.address);
+      const isProbe = recipients.some(isConnectionProbeAddress);
+      if (isProbe) {
+        // Probe requests are never captured as anomalies or passed to simulation rules.
+        const parsed = await new PostalMime().parse(Buffer.concat(chunks));
+        validateConnectionProbeMessage(recipients, parsed.headers.some((header) => header.key === "subject") ? "present" : undefined, parsed.text, parsed.html, parsed.attachments || []);
+        validateConnectionProbeAddress(recipients[0]);
+        const sessionId = smtpSessionIds.get(session);
+        if (!sessionId) throw new Fault(404, "SMTP connection not found", "SMTP_SESSION_NOT_FOUND");
+        deliverConnectionProbe(sandbox, smtpSessions, recipients[0], sessionId);
+        protocolCounters.message("SMTP");
+        callback(null, "Accepted");
+        return;
+      }
       const identity = smtpSessions.listSessions().find(record => record.id === smtpSessionIds.get(session));
-      const rule = simulations.match(identity?.testSessionId, "SMTP", "DATA");
+      const rule = simulations.matchConnection(smtpSessionIds.get(session), "DATA")
+        || simulations.match(identity?.testSessionId, "SMTP", "DATA");
       if (rule) throw new Fault(rule.code, rule.message, "SIMULATED_SMTP_FAILURE");
       const raw = Buffer.concat(chunks);
       const parsed = await new PostalMime().parse(raw);
-      const sender = session.envelope.mailFrom && typeof session.envelope.mailFrom !== "boolean"
-        ? session.envelope.mailFrom.address : "unknown@sandbox.test";
       const attachments: Attachment[] = normalizeMimeAttachments(parsed.attachments || []);
       const metadata = {
         headers: parsed.headers.map((header) => ({

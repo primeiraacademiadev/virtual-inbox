@@ -157,6 +157,9 @@ export const operations: readonly ApiOperation[] = [
     response: "ApplicationFootprint", admin: true, summary: "Read process memory, resource counts and retention without secrets." }),
   management({ id: "protocolMetrics", method: "GET", path: "/admin/test/metrics", tag: "Test", status: 200, admin: true, summary: "Read protocol metrics." }),
 
+  management({ id: "smtpConnectionSimulationCreate", method: "POST", path: "/admin/smtp/sessions/{sessionId}/simulations", tag: "SMTP diagnostics", status: 201, admin: true, summary: "Inject a DATA failure on an active SMTP connection." }),
+  management({ id: "smtpConnectionSimulationList", method: "GET", path: "/admin/smtp/sessions/{sessionId}/simulations", tag: "SMTP diagnostics", status: 200, admin: true, summary: "List connection-scoped simulation rules." }),
+  management({ id: "smtpConnectionSimulationDelete", method: "DELETE", path: "/admin/smtp/sessions/{sessionId}/simulations/{ruleId}", tag: "SMTP diagnostics", status: 204, admin: true, summary: "Delete a connection simulation." }),
   management({ id: "simulationDelete", method: "DELETE", path: "/admin/test/sessions/{sessionId}/simulations/{ruleId}", tag: "Test simulations", status: 204, admin: true, summary: "Delete configured fault." }),
   management({ id: "simulationCreate", method: "POST", path: "/admin/test/sessions/{sessionId}/simulations", tag: "Test", status: 201, admin: true, summary: "Create fault" }),
   management({ id: "simulationList", method: "GET", path: "/admin/test/sessions/{sessionId}/simulations", tag: "Test", status: 200, admin: true, summary: "List faults" }),

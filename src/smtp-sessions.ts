@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { Fault } from "./domain-types.js";
 import { InboxCredentialStore } from "./inbox-credentials.js";
 
@@ -68,20 +68,34 @@ async function verifies(value: string, encoded: SaltedHash): Promise<boolean> {
 /**
  * Ephemeral, bounded SMTP diagnostic history. Passwords only exist in the
  * onAuth call and during hashing/comparison; neither hashes nor salts escape.
- * Client grouping is observational (remote IP + SMTP username), not a verified
- * application identity.
+ * Authenticated clients are grouped by a process-salted HMAC of the exact
+ * username, password and observed remote IP. This is a test identifier, not
+ * proof of production identity or an authorization credential.
  */
 export class SmtpSessionStore {
   private readonly sessions = new Map<string, SmtpSessionRecord>();
+  /** Fresh on every process start; neither this secret nor derived digests leave the store. */
+  private readonly clientSalt = randomBytes(32);
   private readonly clientIds = new Map<string, string>();
 
-  constructor(private readonly maxSessions = 500, private readonly credentialStore = new InboxCredentialStore()) {}
-
-  private clientKey(address: string, username?: string) {
-    return address + "\0" + (username ?? "");
+  constructor(
+    private readonly maxSessions = 500,
+    private readonly credentialStore = new InboxCredentialStore(),
+    private readonly authPolicy: "INBOX" | "OPEN" = "INBOX",
+    private readonly historyHours = 24,
+  ) {
+    if (!Number.isSafeInteger(historyHours) || historyHours < 1)
+      throw new Error("Invalid SMTP session history hours");
   }
-  private clientId(address: string, username?: string) {
-    const key = this.clientKey(address, username);
+
+  private clientKey(address: string, username: string, password: string) {
+    // Length-delimited JSON avoids ambiguous concatenation of credential fields.
+    return createHmac("sha256", this.clientSalt)
+      .update(JSON.stringify([address, username, password]), "utf8")
+      .digest("hex");
+  }
+  private clientId(address: string, username: string, password: string) {
+    const key = this.clientKey(address, username, password);
     let id = this.clientIds.get(key);
     if (!id) {
       id = randomUUID();
@@ -105,7 +119,8 @@ export class SmtpSessionStore {
       throw new Fault(503, "SMTP session capacity reached", "SMTP_SESSION_CAPACITY");
     const id = randomUUID();
     const session: SmtpSessionRecord = {
-      id, clientId: this.clientId(remoteAddress), remoteAddress,
+      // Anonymous connections have no credential-based client identity.
+      id, clientId: randomUUID(), remoteAddress,
       connectedAt: new Date().toISOString(), lastActivityAt: new Date().toISOString(), connected: true,
       authenticated: false, secure, authAttempts: [], messageIds: [], errors: [],
     };
@@ -120,8 +135,11 @@ export class SmtpSessionStore {
       throw new Fault(400, "Invalid SMTP credentials", "INVALID_SMTP_CREDENTIALS");
     const session = this.session(id);
     // Keep bounded history, including the password verification material.
-    const testSessionId = await this.credentialStore.authenticate(username, password);
+    const testSessionId = this.authPolicy === "INBOX"
+      ? await this.credentialStore.authenticate(username, password)
+      : undefined;
     const [userHash, passwordHash] = await Promise.all([hash(username), hash(password)]);
+    const clientId = this.clientId(session.remoteAddress, username, password);
     const attempt: SecretAttempt = {
       id: randomUUID(), at: new Date().toISOString(), method,
       authUser: username, accepted: true, username: userHash, password: passwordHash,
@@ -129,11 +147,13 @@ export class SmtpSessionStore {
     session.authAttempts.push(attempt);
     if (session.authAttempts.length > MAX_ATTEMPTS) session.authAttempts.shift();
     session.authUser = username;
-    session.testSessionId = testSessionId;
-    session.clientId = this.clientId(session.remoteAddress, username);
+    // In OPEN mode, the credential/IP-based client GUID also identifies the
+    // logical test context, independently of any inbox.
+    session.testSessionId = testSessionId ?? clientId;
+    session.clientId = clientId;
     session.authenticated = true;
     session.lastActivityAt = attempt.at;
-    return { id: attempt.id, clientId: session.clientId, testSessionId };
+    return { id: attempt.id, clientId, testSessionId: session.testSessionId };
   }
   disconnect(id: string) {
     const session = this.sessions.get(id);
@@ -154,6 +174,10 @@ export class SmtpSessionStore {
     session.errors.push({ at: session.lastActivityAt, responseCode, code });
     if (session.errors.length > MAX_ERRORS) session.errors.shift();
   }
+  getSession(id: string): PublicSmtpSession | undefined {
+    return this.listSessions().find((session) => session.id === id);
+  }
+
   listSessions(clientId?: string): PublicSmtpSession[] {
     return [...this.sessions.values()]
       .filter((s) => !clientId || s.clientId === clientId)
@@ -211,9 +235,11 @@ export class SmtpSessionStore {
   }
   cleanup(now = Date.now()) {
     for (const [id, session] of this.sessions) {
-      if (!session.connected && Date.parse(session.disconnectedAt || session.connectedAt) < now - 3600000)
+      if (!session.connected && Date.parse(session.disconnectedAt || session.connectedAt) < now - this.historyHours * 3600000)
         this.sessions.delete(id);
     }
+    // A bounded store may evict old closed records under capacity pressure,
+    // even before the configured retention expires. Active records are protected.
     if (this.sessions.size > this.maxSessions) {
       for (const [id, session] of this.sessions) {
         if (!session.connected) this.sessions.delete(id);

@@ -53,3 +53,23 @@ test("connection and client selectors isolate simultaneous suites, with stable t
   assert.equal(store.delete(id.id),true);
   assert.equal(store.delete(id.id),false);
 });
+
+test("bounded transport actions and post-persistence phases are validated", () => {
+  const store = new SmtpReplyRuleStore(10, 250);
+  const base = { phase:"DATA", remaining:1, selectors:{sender:"suite@example.test"} };
+  const delay = store.create({ ...base, action:"delay", durationMs:50 });
+  assert.equal(delay.durationMs,50);
+  assert.equal(store.consume("DATA",{sender:"suite@example.test"})?.action,"delay");
+  const drop = store.create({ ...base, phase:"AFTER_DATA", action:"drop" });
+  assert.equal(store.consume("AFTER_DATA",{sender:"suite@example.test"})?.id,drop.id);
+  const hang = store.create({ ...base, phase:"MAIL", action:"hang", durationMs:200 });
+  assert.equal(hang.durationMs,200);
+  for (const invalid of [
+    { ...base, action:"hang", durationMs:251 },
+    { ...base, action:"delay", durationMs:0 },
+    { ...base, phase:"EHLO", action:"drop" },
+    { ...base, action:"drop", code:451 },
+    { ...base, action:"reply", durationMs:100, code:451 },
+    { ...base, action:"hang", durationMs:100, code:451 },
+  ]) assert.throws(() => store.create(invalid), (error:unknown) => error instanceof Fault && error.status===400);
+});

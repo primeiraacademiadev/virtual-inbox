@@ -19,6 +19,7 @@ export const config = {
   waitMs: positive("MAX_WAIT_TIMEOUT_MS", 120000),
   maxConnections: positive("MAX_CONNECTIONS", 200),
   smtpSessionHistoryHours: positive("SMTP_SESSION_HISTORY_HOURS", 24),
+  smtpSimulationMaxDurationMs: positive("SMTP_SIMULATION_MAX_DURATION_MS", 10000),
   maxInboxes: positive("MAX_INBOX_COUNT", 2000),
   maxObservers: positive("MAX_OBSERVER_COUNT", 500),
   maxAttachments: positive("MAX_ATTACHMENTS_PER_MESSAGE", 20),

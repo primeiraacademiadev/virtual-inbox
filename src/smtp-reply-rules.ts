@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Fault } from "./domain-types.js";
 
-export type SmtpReplyPhase = "MAIL" | "RCPT" | "DATA";
+export type SmtpReplyPhase = "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
+export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang";
 export type SmtpReplySelectors = {
   sender?: string;
   recipient?: string;
@@ -11,8 +12,9 @@ export type SmtpReplySelectors = {
 export type SmtpReplyRule = {
   id: string;
   phase: SmtpReplyPhase;
-  action: "reply";
-  code: number;
+  action: SmtpFaultAction;
+  code?: number;
+  durationMs?: number;
   message: string;
   remaining: number;
   selectors: SmtpReplySelectors;
@@ -25,8 +27,9 @@ export type SmtpReplyContext = {
   smtpSessionId?: string;
 };
 
-const PHASES = new Set(["MAIL", "RCPT", "DATA"]);
-const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors"]);
+const PHASES = new Set(["MAIL", "RCPT", "DATA", "AFTER_DATA"]);
+const ACTIONS = new Set(["reply", "delay", "drop", "hang"]);
+const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors", "durationMs"]);
 const SELECTORS = new Set(["sender", "recipient", "clientId", "smtpSessionId"]);
 const ADDRESS_FIELDS = new Set(["sender", "recipient"]);
 
@@ -38,14 +41,28 @@ function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-export function parseSmtpReplyRule(input: unknown): Omit<SmtpReplyRule, "id" | "createdAt"> {
+export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit<SmtpReplyRule, "id" | "createdAt"> {
   if (!record(input) || Object.keys(input).some((key) => !FIELDS.has(key)))
     invalid("Unsupported SMTP simulation fields");
   if (typeof input.phase !== "string" || !PHASES.has(input.phase))
-    invalid("Only MAIL, RCPT and DATA phases are supported");
-  if (input.action !== "reply")
-    invalid("Only reply actions are supported in this increment");
-  if (!Number.isInteger(input.code) || (input.code as number) < 400 || (input.code as number) > 599)
+    invalid("Only MAIL, RCPT, DATA and AFTER_DATA phases are supported");
+  if (typeof input.action !== "string" || !ACTIONS.has(input.action))
+    invalid("Unsupported SMTP simulation action");
+  const action = input.action as SmtpFaultAction;
+  const timed = action === "delay" || action === "hang";
+  if (timed) {
+    if (!Number.isSafeInteger(input.durationMs) || (input.durationMs as number) < 1 ||
+        (input.durationMs as number) > maxDurationMs)
+      invalid("durationMs must be a positive integer within the configured limit");
+  } else if (input.durationMs !== undefined) {
+    invalid("durationMs is only accepted for delay or hang");
+  }
+  if (action === "reply" && input.code === undefined)
+    invalid("Reply action requires an SMTP error code");
+  if ((action === "drop" || action === "hang") && input.code !== undefined)
+    invalid("Drop and hang actions cannot specify an SMTP reply code");
+  if (input.code !== undefined &&
+      (!Number.isInteger(input.code) || (input.code as number) < 400 || (input.code as number) > 599))
     invalid("SMTP reply code must be an integer from 400 to 599");
   if (!Number.isSafeInteger(input.remaining) || (input.remaining as number) < 1 ||
       (input.remaining as number) > 10000)
@@ -70,8 +87,9 @@ export function parseSmtpReplyRule(input: unknown): Omit<SmtpReplyRule, "id" | "
     invalid("Recipient selector is not available during MAIL");
   return {
     phase: input.phase as SmtpReplyPhase,
-    action: "reply",
-    code: input.code as number,
+    action,
+    ...(input.code === undefined ? {} : { code: input.code as number }),
+    ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs as number }),
     message: (input.message as string | undefined) || "Simulated SMTP failure",
     remaining: input.remaining as number,
     selectors,
@@ -102,10 +120,10 @@ function priority(rule: SmtpReplyRule): number {
  */
 export class SmtpReplyRuleStore {
   private readonly rules = new Map<string, SmtpReplyRule>();
-  constructor(private readonly maxRules = 1000) {}
+  constructor(private readonly maxRules = 1000, private readonly maxDurationMs = 10_000) {}
 
   create(input: unknown): SmtpReplyRule {
-    const parsed = parseSmtpReplyRule(input);
+    const parsed = parseSmtpReplyRule(input, this.maxDurationMs);
     if (this.rules.size >= this.maxRules)
       throw new Fault(507, "SMTP simulation rule capacity reached", "CAPACITY_EXCEEDED");
     const rule = { ...parsed, id: randomUUID(), createdAt: new Date().toISOString() };

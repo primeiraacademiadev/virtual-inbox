@@ -45,3 +45,7 @@ Os IDs SSE usam `runId:sequence`; `log.gap` exige reconciliação, e `log.reset`
 | PUT | `/admin/network` | Configurar endereços (HTTPS e token) |
 
 **Atenção:** a API de gestão é anónima neste MVP, exceto operações administrativas TLS/rede. Usa uma rede de confiança.
+
+## Retenção dos logs (incremento #44)
+
+`MAX_LOG_BUFFER_BYTES=10485760` define a capacidade por bytes do buffer circular do servidor. O `log_id` aumenta sequencialmente por execução. O identificador SSE original `runId:sequence` continua válido para `after` / `Last-Event-ID`. O sinal `log.gap` inclui `missingFrom`/`missingTo` quando os eventos anteriores foram descartados; `log.reset` assinala reinício. A consola permite limitar o histórico local a 500, 2000, 5000 ou 10000 entradas (armazenado na sessão do browser). O número de eventos retidos no servidor depende da dimensão serializada. Filtros estruturados REST/SSE ainda não implementados neste incremento.

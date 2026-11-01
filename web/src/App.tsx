@@ -198,6 +198,35 @@ export default function App() {
   const [logFilter, setLogFilter] = useState("");
   const [logField, setLogField] = useState("type");
   const [serverLogFilter, setServerLogFilter] = useState("");
+  const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
+  const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
+  const recoverGap = async (gap: EventEntry) => {
+    const from = Number(gap.data?.missingFrom), to = Number(gap.data?.missingTo);
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from > to || to - from > 10000) return;
+    setLoadingGaps((old) => [...old, gap.id]);
+    try {
+      const params = new URLSearchParams({ from: String(from), to: String(to) });
+      if (serverLogFilter.trim()) params.set(logField, serverLogFilter.trim());
+      const result = await request<{ events: EventEntry[]; oldest?: string; runId: string }>("/logs?" + params);
+      const recovered = result.events;
+      const missing = recovered.length === 0;
+      if (missing) setUnretrievableGaps((old) => [...old, gap.id]);
+      else setLogs((old) => [...old.filter((entry) => entry.id !== gap.id), ...recovered]
+        .filter((entry, i, all) => all.findIndex((other) => other.id === entry.id) === i)
+        .sort((a, b) => (a.log_id ?? 0) - (b.log_id ?? 0)).slice(-logDepth));
+    } catch {
+      setUnretrievableGaps((old) => [...old, gap.id]);
+    } finally {
+      setLoadingGaps((old) => old.filter((id) => id !== gap.id));
+    }
+  };
+  const gapText = (missing: boolean, from: unknown, to: unknown) => {
+    const terms = locale === "pt-PT"
+      ? ["Entradas irrecuperáveis", "Entradas em falta"]
+      : locale === "fr" ? ["Entrées irrécupérables", "Entrées manquantes"]
+        : ["Unretrievable entries", "Missing entries"];
+    return `${terms[missing ? 0 : 1]} (#${from}–#${to})`;
+  };
   const [connected, setConnected] = useState(false);
   useEffect(() => {
     void request<any>("/connection-info")
@@ -989,7 +1018,13 @@ export default function App() {
                     .map((e) => (
                       <div className="logRow" key={e.id}>
                         <span>{formatDate(e.at)}</span>
-                        {e.type === "log.gap" ? `… Missing from log_id ${e.data?.missingFrom} to ${e.data?.missingTo} …` : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
+                        {e.type === "log.gap" ? (
+                          <button type="button" disabled={unretrievableGaps.includes(e.id) || loadingGaps.includes(e.id)}
+                            onClick={() => void recoverGap(e)}>
+                            {gapText(unretrievableGaps.includes(e.id), e.data?.missingFrom, e.data?.missingTo)}
+                            {loadingGaps.includes(e.id) ? "…" : ""}
+                          </button>
+                        ) : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
                       </div>
                     ))}
                 </div>

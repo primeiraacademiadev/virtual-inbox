@@ -1,3 +1,4 @@
+import { initialHistory, olderHistory, recoverHistoryGap } from "./logs/log-history-service";
 import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel, logPageUrl, snapshotCursor, logSseUrl, mergeOlderPage, pageSnapshot, gapMarker, appendGap, type LogPage } from "./logs/log-model";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
@@ -200,17 +201,15 @@ export default function App() {
   const [logFilter, setLogFilter] = useState("");
   const [logField, setLogField] = useState("type");
   const [serverLogFilter, setServerLogFilter] = useState("");
-  const logPagePath = useCallback((before?: number) =>
-    logPageUrl(logField, serverLogFilter, before), [logField, serverLogFilter]);
   const loadOlder = async () => {
     if (!hasOlder || oldestLoading.current || olderCursor === undefined) return;
     oldestLoading.current = true;
     setLoadingOlder(true);
     try {
-      const page = await request<LogPage>(logPagePath(olderCursor));
-      setLogs((old) => mergeOlderPage(old, page, logDepth));
-      setOlderCursor(page.nextBefore);
-      setHasOlder(page.hasMore);
+      const result = await olderHistory(request, logField, serverLogFilter, olderCursor, logs, logDepth);
+      setLogs(result.entries);
+      setOlderCursor(result.nextBefore);
+      setHasOlder(result.hasMore);
     } finally {
       oldestLoading.current = false;
       setLoadingOlder(false);
@@ -219,13 +218,12 @@ export default function App() {
   const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
   const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
   const recoverGap = async (gap: EventEntry) => {
-    const url = recoverableGapUrl(gap, logField, serverLogFilter);
-    if (!url) return;
+    if (!recoverableGapUrl(gap, logField, serverLogFilter)) return;
     setLoadingGaps((old) => [...old, gap.id]);
     try {
-      const result = await request<{ events: EventEntry[]; runId: string }>(url);
-      if (!result.events.length) setUnretrievableGaps((old) => [...old, gap.id]);
-      else setLogs((old) => mergeRecoveredLogs(old, gap.id, result.events, logDepth));
+      const result = await recoverHistoryGap(request, logField, serverLogFilter, gap, logs, logDepth);
+      if (!result) setUnretrievableGaps((old) => [...old, gap.id]);
+      else setLogs(result);
     } catch {
       setUnretrievableGaps((old) => [...old, gap.id]);
     } finally {
@@ -328,12 +326,12 @@ export default function App() {
     const boot = async () => {
       let cursor = "";
       try {
-        const page = await request<LogPage>(logPagePath());
+        const snapshot = await initialHistory(request, logField, serverLogFilter, logDepth);
         if (closed) return;
-        setLogs(pageSnapshot(page, logDepth));
-        setOlderCursor(page.nextBefore);
-        setHasOlder(page.hasMore);
-        cursor = snapshotCursor(page) ?? "";
+        setLogs(snapshot.entries);
+        setOlderCursor(snapshot.nextBefore);
+        setHasOlder(snapshot.hasMore);
+        cursor = snapshot.cursor ?? "";
       } catch { /* Live stream remains available when history is not. */ }
       if (closed) return;
       activeSse = new EventSource(logSseUrl(path, logField, serverLogFilter, cursor));
@@ -389,7 +387,7 @@ export default function App() {
       closed = true;
       activeSse?.close();
     };
-  }, [observer, refresh, syncObserver, logField, serverLogFilter, logPagePath]);
+  }, [observer, refresh, syncObserver, logField, serverLogFilter]);
   useEffect(() => {
     if (!observer) return;
     const poll = setInterval(() => {

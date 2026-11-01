@@ -87,3 +87,9 @@ Consultar `GET /api/mailboxes?address=<endereço>` para obter a inbox e `POST /a
 ### Identidade SMTP e histórico
 
 Após SMTP AUTH, o servidor associa um GUID `clientId` a um HMAC-SHA-256 interno de username, password e IP remoto, com salt secreto gerado no arranque. O mesmo trio mantém o GUID enquanto durar o processo; mudanças no trio ou reinício geram outra identidade. SMTP anónimo não é agrupado por IP. A resposta `@virtual.inbox` inclui `clientId` (nulo se anónimo) e `sessions`, com `smtpSessionId`, `connectedAt`, `disconnectedAt`, `connected` e `current` (ligação de origem). `SMTP_SESSION_HISTORY_HOURS` define a retenção de ligações fechadas (24 horas por omissão), sujeita à capacidade de memória. A inbox especial mantém TTL independente de 60 segundos.
+
+### Esperar pela descoberta sem criar inbox
+
+O domínio `@virtual.inbox` é reservado: a API normal de criação de inboxes não permite endereços desse domínio. Só um pedido SMTP válido com nonce hexadecimal aleatório de 32 caracteres cria a inbox temporária (TTL 60 segundos). O reenvio não renova a validade.
+
+Para iniciar a escuta **antes de a inbox existir**, utilizar `POST /api/connection-probes/wait-for-message` com `{"address":"<32-hex>@virtual.inbox","timeoutMs":60000}`. O campo `after` (sequência de mensagem) é opcional. O servidor espera no máximo 60 segundos desde o pedido e, se a inbox já existir, nunca além da expiração dela. HTTP 200 devolve a mensagem; 204 indica timeout, expiração ou cancelamento; 400 indica endereço ou parâmetros inválidos. A espera não cria inbox nem prolonga o TTL. O endpoint convencional por `inboxId` continua a exigir uma inbox existente. O número de esperas simultâneas é limitado por `MAX_OBSERVER_COUNT`.

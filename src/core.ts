@@ -378,9 +378,19 @@ export class Sandbox {
     this.emitter.emit("message", message);
     return message;
   }
-  listMessages(id: string) {
+  listMessages(id: string, filters: {
+    after?: number; originalRecipient?: string; from?: string; captureReason?: string;
+    smtpSessionId?: string; authUser?: string;
+  } = {}) {
     this.resource(id);
-    return [...this.messages.values()].filter((message) => message.destinationId === id)
+    return [...this.messages.values()].filter((message) =>
+      message.destinationId === id &&
+      message.sequence > (filters.after ?? 0) &&
+      (!filters.originalRecipient || message.originalRecipient === filters.originalRecipient) &&
+      (!filters.from || message.envelope?.mailFrom === filters.from || (!message.envelope && message.from === filters.from)) &&
+      (!filters.captureReason || message.captureReason === filters.captureReason) &&
+      (!filters.smtpSessionId || message.smtpSessionId === filters.smtpSessionId) &&
+      (!filters.authUser || message.authUser === filters.authUser))
       .sort((left, right) => left.sequence - right.sequence);
   }
   removeMessage(id: string, messageId: string) {

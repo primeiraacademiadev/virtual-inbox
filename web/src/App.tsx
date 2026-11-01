@@ -1,5 +1,5 @@
-import { initialHistory, olderHistory, recoverHistoryGap } from "./logs/log-history-service";
-import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, recoverableGapUrl, gapLabel, logSseUrl, gapMarker, appendGap } from "./logs/log-model";
+import { LogPanel } from "./components/LogPanel";
+import { useLogHistory } from "./logs/useLogHistory";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
   restorePrefs,
@@ -188,48 +188,28 @@ export default function App() {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
-  const [logs, setLogs] = useState<EventEntry[]>([]);
-  const [olderCursor, setOlderCursor] = useState<number | undefined>();
-  const [hasOlder, setHasOlder] = useState(false);
-  const [loadingOlder, setLoadingOlder] = useState(false);
-  const oldestLoading = useRef(false);
-  // Console-only preference: do not persist untrusted input into browser storage.
-  const [logDepth, setLogDepth] = useState(2000);
-  useEffect(() => {
-    setLogs((entries) => entries.slice(-logDepth));
-  }, [logDepth]);
-  const [logFilter, setLogFilter] = useState("");
-  const [logField, setLogField] = useState("type");
-  const [serverLogFilter, setServerLogFilter] = useState("");
-  const loadOlder = async () => {
-    if (!hasOlder || oldestLoading.current || olderCursor === undefined) return;
-    oldestLoading.current = true;
-    setLoadingOlder(true);
-    try {
-      const result = await olderHistory(request, logField, serverLogFilter, olderCursor, logs, logDepth);
-      setLogs(result.entries);
-      setOlderCursor(result.nextBefore);
-      setHasOlder(result.hasMore);
-    } finally {
-      oldestLoading.current = false;
-      setLoadingOlder(false);
-    }
-  };
-  const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
-  const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
-  const recoverGap = async (gap: EventEntry) => {
-    if (!recoverableGapUrl(gap, logField, serverLogFilter)) return;
-    setLoadingGaps((old) => [...old, gap.id]);
-    try {
-      const result = await recoverHistoryGap(request, logField, serverLogFilter, gap, logs, logDepth);
-      if (!result) setUnretrievableGaps((old) => [...old, gap.id]);
-      else setLogs(result);
-    } catch {
-      setUnretrievableGaps((old) => [...old, gap.id]);
-    } finally {
-      setLoadingGaps((old) => old.filter((id) => id !== gap.id));
-    }
-  };
+  const { logs, setLogs, logDepth, setLogDepth, logField, setLogField,
+    serverLogFilter, setServerLogFilter, hasOlder, loadingOlder, loadOlder, recoverGap,
+    unretrievableGaps, loadingGaps, connected } = useLogHistory(observer, {
+      onSession: (session) => {
+        setObserver(session.observerId);
+        sessionStorage.setItem("virtual-inbox-observer", session.observerId);
+        setInboxes(session.inboxes);
+        session.inboxes.forEach(r => void refresh(r.id, r.channel));
+      },
+      onMessage: (entry) => {
+        if (entry.resourceId && entry.type.startsWith("message.")) {
+          const inbox = inboxesRef.current.find(r => r.id === entry.resourceId);
+          if (inbox) void refresh(inbox.id, inbox.channel);
+        }
+      },
+      onMissingObserver: () => {
+        sessionStorage.removeItem("virtual-inbox-observer");
+        setObserver("");
+        setInboxes([]);
+      },
+      onGap: () => { if (observer) void syncObserver(observer); },
+    });
   const [connected, setConnected] = useState(false);
   useEffect(() => {
     void request<any>("/connection-info")
@@ -317,77 +297,6 @@ export default function App() {
     },
     [refresh],
   );
-  useEffect(() => {
-    let activeSse: EventSource | null = null;
-    let closed = false;
-    const path = safeObserver(observer)
-      ? "/api/observers/" + safeObserver(observer) + "/events"
-      : "/api/observers/events";
-    const boot = async () => {
-      let cursor = "";
-      try {
-        const snapshot = await initialHistory(request, logField, serverLogFilter, logDepth);
-        if (closed) return;
-        setLogs(snapshot.entries);
-        setOlderCursor(snapshot.nextBefore);
-        setHasOlder(snapshot.hasMore);
-        cursor = snapshot.cursor ?? "";
-      } catch { /* Live stream remains available when history is not. */ }
-      if (closed) return;
-      activeSse = new EventSource(logSseUrl(path, logField, serverLogFilter, cursor));
-      setConnected(false);
-    const handleSession = (ev: MessageEvent) => {
-      const data = JSON.parse(ev.data) as Observer;
-      if (closed) return;
-      setObserver(data.observerId);
-      sessionStorage.setItem("virtual-inbox-observer", data.observerId);
-      setInboxes(data.inboxes);
-      data.inboxes.forEach((r) => void refresh(r.id, r.channel));
-    };
-    const handleLog = (ev: MessageEvent) => {
-      const entry = JSON.parse(ev.data) as EventEntry;
-      setLogs((p) => appendLog(p, entry, logDepth));
-      if (entry.resourceId && entry.type.startsWith("message.")) {
-        const r = inboxesRef.current.find((x) => x.id === entry.resourceId);
-        if (r) void refresh(r.id, r.channel);
-      }
-    };
-    activeSse.addEventListener("session.initialized", handleSession);
-    activeSse.addEventListener("session.restored", handleSession);
-    activeSse.addEventListener("log", handleLog);
-    activeSse.addEventListener("inbox.notification", handleLog);
-    activeSse.addEventListener("log.gap", (event: MessageEvent) => {
-      const gap = JSON.parse(event.data) as { missingFrom?: number; missingTo?: number };
-      if (gap.missingFrom !== undefined && gap.missingTo !== undefined) {
-        const marker = gapMarker(gap.missingFrom, gap.missingTo, new Date().toISOString());
-        setLogs((entries) => appendGap(entries, marker, logDepth));
-      }
-      if (observer) void syncObserver(observer);
-    });
-    activeSse.addEventListener("log.reset", () => {
-      setLogs([]);
-      if (observer) void syncObserver(observer);
-    });
-    activeSse.onopen = () => setConnected(true);
-    activeSse.onerror = () => {
-      setConnected(false);
-      if (observer) {
-        void request<Observer>("/observers/" + observer).catch((e: Error & { status?: number }) => {
-          if (e.status === 404) {
-            sessionStorage.removeItem("virtual-inbox-observer");
-            setObserver("");
-            setInboxes([]);
-          }
-        });
-      }
-    };
-    };
-    void boot();
-    return () => {
-      closed = true;
-      activeSse?.close();
-    };
-  }, [observer, refresh, syncObserver, logField, serverLogFilter]);
   useEffect(() => {
     if (!observer) return;
     const poll = setInterval(() => {
@@ -633,10 +542,6 @@ export default function App() {
     } catch (error) { setSmtpResult(error instanceof Error ? error.message : "Verification failed"); }
     finally { setSmtpPassword(""); }
   }
-  const filteredLogs = useMemo(
-    () => visibleLogs(logs, logFilter),
-    [logs, logFilter],
-  );
   return (
     <div className="shell">
       <header>
@@ -997,56 +902,18 @@ export default function App() {
                 )}
               </section>
             )}
-            {view !== "inbox" && (
-              <section className="panel">
-                <div className="panelHead">
-                  <strong>{t("logs")}</strong>
-                  <div className="spacer" />
-                  <button onClick={() => setView("inbox")} title={t("minimizeLogs")}>
-                    ▾
-                  </button>
-                </div>
-                <div className="logFilters">
-                  <input
-                    aria-label={t("filterLogs")}
-                    placeholder={t("filterLogs")}
-                    value={logFilter}
-                    onChange={(e) => setLogFilter(e.target.value)}
-                  />
-                  <label>History <select aria-label="Log history depth" value={logDepth} onChange={(e) => setLogDepth(Number(e.target.value))}>
-                    {LOG_DEPTHS.map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select></label>
-                  <label>Server filter <select aria-label="Log filter field" value={logField} onChange={(e) => setLogField(e.target.value)}>
-                    {LOG_FILTER_FIELDS.map((key) => <option key={key}>{key}</option>)}
-                  </select></label>
-                  <input aria-label="Server log filter value" placeholder="Exact match" value={serverLogFilter} onChange={(e) => setServerLogFilter(e.target.value)} />
-                  <button onClick={() => setLogs([])}>{t("clearView")}</button>
-                </div>
-                <div className="panelBody" onScroll={(event) => {
-                  const el = event.currentTarget;
-                  if (el.scrollTop < 120) void loadOlder();
-                }}>
-                  {hasOlder && <button type="button" disabled={loadingOlder} onClick={() => void loadOlder()}>
-                    {loadingOlder ? "Loading…" : "Load older events"}
-                  </button>}
-                  {filteredLogs
-                    .slice()
-                    .reverse()
-                    .map((e) => (
-                      <div className="logRow" key={e.id}>
-                        <span>{formatDate(e.at)}</span>
-                        {e.type === "log.gap" ? (
-                          <button type="button" disabled={unretrievableGaps.includes(e.id) || loadingGaps.includes(e.id)}
-                            onClick={() => void recoverGap(e)}>
-                            {gapLabel(locale, unretrievableGaps.includes(e.id), e.data?.missingFrom, e.data?.missingTo)}
-                            {loadingGaps.includes(e.id) ? "…" : ""}
-                          </button>
-                        ) : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
-                      </div>
-                    ))}
-                </div>
-              </section>
-            )}
+            {view !== "inbox" && <LogPanel
+              logs={logs} depth={logDepth} onDepth={setLogDepth}
+              field={logField} onField={setLogField}
+              serverFilter={serverLogFilter} onServerFilter={setServerLogFilter}
+              hasOlder={hasOlder} loadingOlder={loadingOlder} onOlder={() => void loadOlder()}
+              unretrievableGaps={unretrievableGaps} loadingGaps={loadingGaps}
+              onRecover={gap => void recoverGap(gap)}
+              onClear={() => setLogs([])} onMinimize={() => setView("inbox")}
+              locale={locale} formatDate={formatDate}
+              labels={{ logs: t("logs"), minimize: t("minimizeLogs"),
+                filter: t("filterLogs"), clear: t("clearView") }}
+            />}
           </main>
         </div>
       )}

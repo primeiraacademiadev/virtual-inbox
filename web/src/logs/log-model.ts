@@ -6,14 +6,17 @@ export function appendLog(entries: EventEntry[], entry: EventEntry, depth: numbe
   if (entries.some((x) => x.id === entry.id)) return entries;
   return [...entries.slice(-(depth - 1)), entry];
 }
-export function visibleLogs(entries: EventEntry[], query: string): EventEntry[] {
+export const isLogAnomaly = (entry: EventEntry) => entry.type === "message.captured";
+export function visibleLogs(entries: EventEntry[], query: string, includeAnomalies = true): EventEntry[] {
   const needle = query.toLowerCase();
-  return entries.filter((entry) => entry.type === "log.gap" || JSON.stringify(entry).toLowerCase().includes(needle));
+  return entries.filter((entry) => entry.type === "log.gap" || (includeAnomalies && isLogAnomaly(entry)) || JSON.stringify(entry).toLowerCase().includes(needle));
 }
-export function logStreamQuery(field: string, value: string): string {
+export function logStreamQuery(field: string, value: string, includeAnomalies = true): string {
   const v = value.trim();
-  return v && (LOG_FILTER_FIELDS as readonly string[]).includes(field)
-    ? "?" + new URLSearchParams({ [field]: v }).toString() : "";
+  const params = new URLSearchParams();
+  if (v && (LOG_FILTER_FIELDS as readonly string[]).includes(field)) params.set(field, v);
+  if (!includeAnomalies) params.set("includeAnomalies", "false");
+  return params.size ? "?" + params.toString() : "";
 }
 export function gapRange(event: EventEntry): { from: number; to: number } | null {
   const from = event.data?.missingFrom, to = event.data?.missingTo;
@@ -22,12 +25,13 @@ export function gapRange(event: EventEntry): { from: number; to: number } | null
     from > to || to - from > 10000) return null;
   return { from, to };
 }
-export function recoverableGapUrl(event: EventEntry, field: string, value: string): string | null {
+export function recoverableGapUrl(event: EventEntry, field: string, value: string, includeAnomalies = true): string | null {
   const range = gapRange(event);
   if (!range) return null;
   const params = new URLSearchParams({ from: String(range.from), to: String(range.to) });
   const v = value.trim();
   if (v && (LOG_FILTER_FIELDS as readonly string[]).includes(field)) params.set(field, v);
+  if (!includeAnomalies) params.set("includeAnomalies", "false");
   return "/logs?" + params.toString();
 }
 export function mergeRecoveredLogs(entries: EventEntry[], gapId: string, recovered: EventEntry[], depth: number): EventEntry[] {
@@ -49,11 +53,12 @@ export type LogPage = {
   latest?: { log_id?: number; at: string } | null;
   runId?: string;
 };
-export function logPageUrl(field: string, value: string, before?: number, limit = 20): string {
+export function logPageUrl(field: string, value: string, before?: number, limit = 20, includeAnomalies = true): string {
   const params = new URLSearchParams({ limit: String(limit) });
   if (before !== undefined) params.set("before", String(before));
   const term = value.trim();
   if (term && (LOG_FILTER_FIELDS as readonly string[]).includes(field)) params.set(field, term);
+  if (!includeAnomalies) params.set("includeAnomalies", "false");
   return "/logs?" + params.toString();
 }
 export function snapshotCursor(page: LogPage): string | null {
@@ -61,8 +66,8 @@ export function snapshotCursor(page: LogPage): string | null {
   return page.runId && Number.isSafeInteger(id) && (id ?? 0) > 0
     ? page.runId + ":" + id : null;
 }
-export function logSseUrl(path: string, field: string, value: string, cursor: string | null): string {
-  const query = logStreamQuery(field, value);
+export function logSseUrl(path: string, field: string, value: string, cursor: string | null, includeAnomalies = true): string {
+  const query = logStreamQuery(field, value, includeAnomalies);
   return path + query + (cursor ? (query ? "&" : "?") + "after=" + encodeURIComponent(cursor) : "");
 }
 export function mergeOlderPage(entries: EventEntry[], page: LogPage, depth: number): EventEntry[] {

@@ -44,3 +44,7 @@ Values must be positive safe integers. A single attachment and the complete MIME
 `IDENTITY_DEFAULT_LOCALE=pt-PT`, `IDENTITY_DEFAULT_EMAIL_STRATEGY=FIRST_LAST`, `IDENTITY_DEFAULT_PHONE_STRATEGY=NATIONAL_FORMAT`, `IDENTITY_DEFAULT_PHONE_INCLUDE_COUNTRY_CODE=true`, `IDENTITY_DEFAULT_SAFE_TEST_DATA=false`, `IDENTITY_DEFAULT_GENERATION_MAX_ATTEMPTS=100`, `IDENTITY_DEFAULT_EMAIL_DOMAIN=sandbox.test`.
 
 Supported locales: `pt-PT`, `en-US`, `fr-FR`. Email strategies: `FIRST_LAST`, `LAST_FIRST`, `FIRST_MIDDLE_LAST`, `FIRST_LAST_SUFFIX`, `RANDOM`. Telephone generation uses national profiles, optional country code and the configured test suffix. Realistic numbers are not guaranteed unallocated: never send them to a real carrier as test data. Query `/api/identity-generation/options` for effective defaults.
+
+## Multiple instances and fixed ports
+
+Virtual Inbox is designed for a single shared instance with concurrent SMTP clients and logically isolated tests. Running a second instance is **not recommended**. If an independent instance is unavoidable, explicitly configure all listener ports (`PORT`, `HTTPS_PORT`, `SMTP_PORT`, `SMTPS_PORT`, `POP3_PORT`, `DEMO_PORT`, `DEMO_HTTPS_PORT`) and separate its configuration/TLS files to prevent collisions and interference. Do not rely on automatic/dynamic port discovery: it is not part of the supported operating model.

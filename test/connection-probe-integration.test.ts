@@ -138,7 +138,7 @@ test("real SMTP OPEN discovery identifies the client across connections and inje
     assert.deepEqual(await beforeCreation.json(), [], "waiting must not provision inboxes");
     await first.sendMail({
       envelope: { from: sender, to: [waitingAddress] },
-      raw: "From: sender@example.test\\r\\nTo: " + waitingAddress + "\\r\\n\\r\\n",
+      raw: "From: sender@example.test\r\nTo: " + waitingAddress + "\r\n\r\n",
     });
     const waited = await pending;
     assert.equal(waited.status, 200);

@@ -53,3 +53,7 @@ Os IDs SSE usam `runId:sequence`; `log.gap` exige reconciliação, e `log.reset`
 ### Recuperação de intervalos
 
 `GET /api/logs?from=1201&to=1249` devolve os eventos ainda retidos nesse intervalo inclusivo (máximo 10001 IDs por pedido), com os mesmos filtros opcionais do REST/SSE. A consola permite clicar numa linha `log.gap` para recuperar as entradas; caso não existam, apresenta a indicação localizada de entradas irrecuperáveis. Saltos causados apenas pelos filtros não devem ser tratados como perda de retenção. A recuperação parcial e a reconciliação da sequência continuam sujeitas a testes E2E.
+
+### Paginação inversa (#57)
+
+`GET /api/logs?limit=20` devolve os 20 eventos mais recentes em ordem decrescente. `GET /api/logs?limit=20&before=1234` recupera os anteriores ao `log_id=1234`, sem offset. A resposta contém `nextBefore`, `hasMore`, `oldest` e `latest` com `log_id` e `at`, além de `runId`. O limite permitido é de 1 a 100. A consola usa a primeira página REST para iniciar um SSE com cursor `after=runId:latest.log_id`, evitando perder eventos entre snapshot e subscrição. O scroll permite consultar páginas anteriores.

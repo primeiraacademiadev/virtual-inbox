@@ -1,13 +1,30 @@
 {
   "name": "@virtual-inbox/client",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "private": false,
   "type": "module",
+  "description": "Node.js SDK for disposable Virtual Inbox integration tests",
+  "license": "UNLICENSED",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/client.js",
+  "types": "./dist/client.d.ts",
   "exports": {
-    ".": "./client.ts"
+    ".": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": ">=24"
   },
-  "description": "TypeScript/Node SDK for ephemeral Virtual Inbox tests"
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "@types/node": "^26.6.5"
+  }
 }

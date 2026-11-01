@@ -1,4 +1,4 @@
-import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel } from "./logs/log-model";
+import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel, logPageUrl, snapshotCursor, logSseUrl, mergeOlderPage, pageSnapshot, gapMarker, appendGap, type LogPage } from "./logs/log-model";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
   restorePrefs,
@@ -200,22 +200,15 @@ export default function App() {
   const [logFilter, setLogFilter] = useState("");
   const [logField, setLogField] = useState("type");
   const [serverLogFilter, setServerLogFilter] = useState("");
-  const logPagePath = useCallback((before?: number) => {
-    const params = new URLSearchParams({ limit: "20" });
-    if (before !== undefined) params.set("before", String(before));
-    if (serverLogFilter.trim()) params.set(logField, serverLogFilter.trim());
-    return "/logs?" + params.toString();
-  }, [logField, serverLogFilter]);
+  const logPagePath = useCallback((before?: number) =>
+    logPageUrl(logField, serverLogFilter, before), [logField, serverLogFilter]);
   const loadOlder = async () => {
     if (!hasOlder || oldestLoading.current || olderCursor === undefined) return;
     oldestLoading.current = true;
     setLoadingOlder(true);
     try {
-      const page = await request<{ events: EventEntry[]; nextBefore?: number; hasMore: boolean }>(logPagePath(olderCursor));
-      setLogs((old) => {
-        const known = new Set(old.map((event) => event.id));
-        return [...page.events.filter((event) => !known.has(event.id)).reverse(), ...old].slice(-logDepth);
-      });
+      const page = await request<LogPage>(logPagePath(olderCursor));
+      setLogs((old) => mergeOlderPage(old, page, logDepth));
       setOlderCursor(page.nextBefore);
       setHasOlder(page.hasMore);
     } finally {
@@ -332,20 +325,18 @@ export default function App() {
     const path = safeObserver(observer)
       ? "/api/observers/" + safeObserver(observer) + "/events"
       : "/api/observers/events";
-    const logQuery = logStreamQuery(logField, serverLogFilter);
     const boot = async () => {
       let cursor = "";
       try {
-        const page = await request<{ events: EventEntry[]; nextBefore?: number; hasMore: boolean; latest: {log_id: number}|null; runId: string }>(logPagePath());
+        const page = await request<LogPage>(logPagePath());
         if (closed) return;
-        setLogs(page.events.slice().reverse());
+        setLogs(pageSnapshot(page, logDepth));
         setOlderCursor(page.nextBefore);
         setHasOlder(page.hasMore);
-        if (page.latest) cursor = page.runId + ":" + page.latest.log_id;
+        cursor = snapshotCursor(page) ?? "";
       } catch { /* Live stream remains available when history is not. */ }
       if (closed) return;
-      const separator = logQuery ? "&" : "?";
-      activeSse = new EventSource(path + logQuery + (cursor ? separator + "after=" + encodeURIComponent(cursor) : ""));
+      activeSse = new EventSource(logSseUrl(path, logField, serverLogFilter, cursor));
       setConnected(false);
     const handleSession = (ev: MessageEvent) => {
       const data = JSON.parse(ev.data) as Observer;
@@ -370,12 +361,8 @@ export default function App() {
     activeSse.addEventListener("log.gap", (event: MessageEvent) => {
       const gap = JSON.parse(event.data) as { missingFrom?: number; missingTo?: number };
       if (gap.missingFrom !== undefined && gap.missingTo !== undefined) {
-        setLogs((entries) => [...entries.slice(-(logDepth - 1)), {
-          id: "gap:" + gap.missingFrom + ":" + gap.missingTo,
-          at: new Date().toISOString(),
-          type: "log.gap",
-          data: { missingFrom: gap.missingFrom, missingTo: gap.missingTo },
-        }]);
+        const marker = gapMarker(gap.missingFrom, gap.missingTo, new Date().toISOString());
+        setLogs((entries) => appendGap(entries, marker, logDepth));
       }
       if (observer) void syncObserver(observer);
     });

@@ -225,7 +225,7 @@ export const operations: readonly ApiOperation[] = [
       management({ id: `${channel}Create`, method: "POST", path, tag, status: 201, request: channel === "email" ? "CreateMailbox" : "CreatePhone", response: "Inbox", summary: "Create an inbox with an explicit or generated address." }),
       management({ id: `${channel}Get`, method: "GET", path: `${path}/{inboxId}`, tag, status: 200, response: "Inbox", summary: "Read an active inbox." }),
       management({ id: `${channel}Delete`, method: "DELETE", path: `${path}/{inboxId}`, tag, status: 204, summary: "Delete an inbox and its messages. System inboxes cannot be deleted." }),
-      management({ id: `${channel}Messages`, method: "GET", path: `${path}/{inboxId}/messages`, tag, status: 200, response: "Messages", summary: "List messages in sequence order without consuming them." }),
+      management({ id: `${channel}Messages`, method: "GET", path: `${path}/{inboxId}/messages`, tag, status: 200, response: "Messages", query: "after,originalRecipient,from,captureReason,smtpSessionId,authUser", summary: "List and exactly filter messages without consuming them, including captures in system anomaly inboxes." }),
       management({ id: `${channel}Clear`, method: "DELETE", path: `${path}/{inboxId}/messages`, tag, status: 204, summary: "Delete every message currently in the inbox." }),
       management({ id: `${channel}Message`, method: "GET", path: `${path}/{inboxId}/messages/{messageId}`, tag, status: 200, response: "Message", summary: "Read a message and attachment metadata." }),
       management({ id: `${channel}DeleteMessage`, method: "DELETE", path: `${path}/{inboxId}/messages/{messageId}`, tag, status: 204, summary: "Delete one message." }),

@@ -227,12 +227,12 @@ export class Sandbox {
         const existing = this.resources.get(existingId);
         if (existing && (!existing.expiresAt || Date.parse(existing.expiresAt) > Date.now())) {
           if (ifExists === "return" && !existing.system) return existing;
-          throw new Fault(409, "Identifier already exists", "CONFLICT");
+          throw new Fault(409, "Identifier already exists", "CONFLICT", { address: generatedAddress });
         }
         // Clean up expired entries before recycling the identifier.
         if (existing && existing.expiresAt) this.deleteExpired(existingId);
         if (aliases.every((key) => !this.addressIds.has(key))) break;
-        throw new Fault(409, "Identifier already exists", "CONFLICT");
+        throw new Fault(409, "Identifier already exists", "CONFLICT", { address: generatedAddress });
       }
       aliases = [];
     }

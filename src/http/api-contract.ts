@@ -139,8 +139,8 @@ export const schemas: Record<string, Schema> = {
   WatchResult: object({ recipient: reference("Inbox"), messages: reference("Messages") }, [
     "recipient", "messages",
   ]),
-  Event: object({ id: string, type: string, at: string, resourceId: uuid, messageId: uuid, data: { type: "object" } }, ["id", "type", "at"]),
-  Replay: object({ events: array(reference("Event")), gap: boolean, reset: boolean, runId: uuid, oldest: string, latest: string }, ["events", "gap", "reset", "runId"]),
+  Event: object({ id: string, log_id: integer, type: string, at: string, resourceId: uuid, inboxId: uuid, messageId: uuid, smtpSessionId: string, attemptId: string, data: { type: "object" } }, ["id", "log_id", "type", "at"]),
+  Replay: object({ events: array(reference("Event")), gap: boolean, reset: boolean, runId: uuid, oldest: string, latest: string, missingFrom: integer, missingTo: integer }, ["events", "gap", "reset", "runId"]),
   Identity: object({ source: { enum: ["automatic", "external", "uploaded"] }, subject: string,
     issuer: string, validTo: string, fingerprint256: string, subjectAltName: string }, [
     "source", "subject", "issuer", "validTo", "fingerprint256", "subjectAltName",
@@ -211,7 +211,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "networkSettings", method: "PUT", path: "/admin/network", tag: "Administration", admin: true, status: 202, request: "NetworkSettings", response: "NetworkResult", summary: "Persist network settings. Restart is required for listeners." }),
   management({ id: "importTls", method: "PUT", path: "/admin/tls", tag: "Administration", admin: true, status: 200, request: "ImportIdentity", response: "ImportResult", summary: "Validate, persist and activate a PEM identity without restarting." }),
   management({ id: "tlsNames", method: "PUT", path: "/admin/tls/names", tag: "Administration", admin: true, status: 200, request: "TlsNames", response: "NamesResult", summary: "Replace console-managed SAN additions and regenerate in auto mode." }),
-  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
+  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
   ...streams,
   management({ id: "observerSnapshot", method: "GET", path: "/observers/{observerId}", tag: "Events", status: 200, response: "Observer", summary: "Read subscriptions and renew the observer session." }),
   management({ id: "watchInbox", method: "POST", path: "/observers/{observerId}/inboxes", tag: "Events", status: 200, request: "Watch", response: "WatchResult", summary: "Subscribe an observer; returns the inbox and existing messages." }),

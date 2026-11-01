@@ -12,7 +12,8 @@ export const config = {
   bodyChars: positive("MAX_MESSAGE_BODY_CHARS", 2 * 1024 * 1024),
   messages: positive("MAX_MESSAGE_COUNT", 10000),
   storedBytes: positive("MAX_STORED_BYTES", 256 * 1024 * 1024),
-  logs: positive("MAX_LOG_ENTRIES", 2000),
+  logs: positive("MAX_LOG_ENTRIES", 2000), // legacy entry-count fallback for programmatic Sandbox users
+  logBytes: positive("MAX_LOG_BUFFER_BYTES", 10 * 1024 * 1024),
   defaultTtl: positive("DEFAULT_INBOX_TTL_SECONDS", 1800),
   maxTtl: positive("MAX_INBOX_TTL_SECONDS", 604800),
   observerTtl: positive("OBSERVER_SESSION_TTL_SECONDS", 3600),

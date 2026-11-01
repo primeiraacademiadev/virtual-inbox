@@ -25,6 +25,7 @@ export type Message = {
 export type Observer = { observerId: string; inboxes: Recipient[] };
 export type EventEntry = {
   id: string;
+  log_id?: number;
   type: string;
   at: string;
   resourceId?: string;

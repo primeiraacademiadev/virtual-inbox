@@ -27,7 +27,7 @@ import { decodedSender } from "./mime/decoded-sender.js";
 import PostalMime from "postal-mime";
 import nodemailer from "nodemailer";
 import { normalizeMimeAttachments, sanitizeDownloadName } from "./mime/attachments.js";
-import { Sandbox, Fault, type Channel, type Event, type Attachment } from "./core.js";
+import { Sandbox, Fault, matchesLog, parseLogFilters, type Channel, type Event, type Attachment } from "./core.js";
 import { config } from "./config.js";
 import { isAllowedHost, isAllowedOrigin, applyCors } from "./http/security.js";
 import { createOpenApiDocument, matchApiOperation } from "./http/api-contract.js";
@@ -226,6 +226,7 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   const snapshot = observerId ? sandbox.snapshot(observerId) : sandbox.newObserver();
   const url = new URL(req.url || "/", "https://localhost");
   const after = String(req.headers["last-event-id"] || url.searchParams.get("after") || "");
+  const logFilters = parseLogFilters(url.searchParams);
   const active = () => !observerId || (sandbox.observers.get(observerId)?.expiresAt ?? 0) > Date.now();
   const relevant = (event: Event) => !observerId || !!(
     event.resourceId && sandbox.observers.get(observerId)?.inboxes.has(event.resourceId)
@@ -247,7 +248,7 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   let replaying = true;
   const emit = (event: Event) => {
     if (closed) return;
-    sse(res, "log", event, event.id);
+    if (matchesLog(event, logFilters)) sse(res, "log", event, event.id);
     if (observerId && event.type.startsWith("message.") && relevant(event)) {
       sse(res, "inbox.notification", event);
     }
@@ -259,9 +260,9 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   };
   sandbox.emitter.on("event", callback);
   sse(res, observerId ? "session.restored" : "session.initialized", snapshot);
-  const replay = sandbox.replay(after);
+  const replay = sandbox.replay(after, logFilters);
   if (replay.reset) sse(res, "log.reset", { runId: replay.runId });
-  if (replay.gap) sse(res, "log.gap", { oldest: replay.oldest, latest: replay.latest });
+  if (replay.gap) sse(res, "log.gap", { oldest: replay.oldest, latest: replay.latest, missingFrom: replay.missingFrom, missingTo: replay.missingTo });
   for (const event of replay.events) emit(event);
   replaying = false;
   const emitted = new Set(replay.events.map((event) => event.id));
@@ -522,8 +523,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         const input = await body(req);
         return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
       }
-      case "logs":
-        return json(res, 200, sandbox.replay(url.searchParams.get("after") || undefined));
+      case "logs": {
+        const filters = parseLogFilters(url.searchParams);
+        const from = url.searchParams.get("from");
+        const to = url.searchParams.get("to");
+        if (from !== null || to !== null) {
+          const lower = Number(from), upper = Number(to);
+          if (from === null || to === null || !Number.isSafeInteger(lower) || !Number.isSafeInteger(upper)
+            || lower < 1 || upper < lower || upper - lower > 10000)
+            throw new Fault(400, "Invalid log range", "INVALID_LOG_RANGE");
+          const current = sandbox.replay(undefined, filters);
+          return json(res, 200, {
+            ...current,
+            events: current.events.filter((event) => event.log_id !== undefined
+              && event.log_id >= lower && event.log_id <= upper),
+            requestedFrom: lower, requestedTo: upper,
+          });
+        }
+        return json(res, 200, sandbox.replay(url.searchParams.get("after") || undefined, filters));
+      }
       case "logEvents":
       case "newObserverEvents":
         return observe(req, res);

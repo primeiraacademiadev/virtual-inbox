@@ -75,3 +75,37 @@ test("inbox TTL never expires early and permits up to 10% scheduling tolerance",
     assert.ok(ttlMs >= 60000 && ttlMs <= 66000, `TTL must be within [60000, 66000] ms; got ${ttlMs}`);
   }
 });
+
+test("log IDs remain sequential and SSE cursors are compatible", () => {
+  const s = new Sandbox();
+  const first = s.log("test.one");
+  const second = s.log("test.two");
+  assert.equal(second.log_id, first.log_id! + 1);
+  assert.equal(second.id, s.runId + ":" + second.log_id);
+  assert.deepEqual(s.replay(first.id).events.map((event) => event.id), [second.id]);
+});
+
+test("replay reports precisely the missing range after bounded legacy retention", () => {
+  const s = new Sandbox(2);
+  const first = s.log("test.one");
+  s.log("test.two");
+  const third = s.log("test.three");
+  const result = s.replay(s.runId + ":0");
+  assert.equal(result.gap, true);
+  assert.equal(result.missingFrom, 1);
+  assert.equal(result.missingTo, 1);
+  assert.equal(result.events.at(-1)?.id, third.id);
+  assert.equal(s.replay(first.id).gap, false);
+});
+
+test("log filters use exact matching, AND, and retain global gap metadata", () => {
+  const s = new Sandbox(2);
+  const first = s.log("smtp.accepted", "inbox-a", undefined, { sender: "one@test.invalid", recipient: "a@test.invalid" });
+  s.log("smtp.rejected", "inbox-b", undefined, { sender: "two@test.invalid" });
+  s.log("smtp.accepted", "inbox-a", undefined, { sender: "one@test.invalid", recipients: ["a@test.invalid", "b@test.invalid"] });
+  const filtered = s.replay(s.runId + ":0", { type: "smtp.accepted", sender: "one@test.invalid", recipient: "b@test.invalid" });
+  assert.equal(filtered.events.length, 1);
+  assert.equal(filtered.gap, true);
+  assert.equal(filtered.missingFrom, 1);
+  assert.equal(first.log_id, 1);
+});

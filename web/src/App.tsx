@@ -1,3 +1,4 @@
+import { LOG_DEPTHS, LOG_FILTER_FIELDS, appendLog, visibleLogs, logStreamQuery, recoverableGapUrl, mergeRecoveredLogs, gapLabel } from "./logs/log-model";
 import { IdentityControls } from "./components/identity/IdentityControls";
 import {
   restorePrefs,
@@ -187,7 +188,30 @@ export default function App() {
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
   const [logs, setLogs] = useState<EventEntry[]>([]);
+  // Console-only preference: do not persist untrusted input into browser storage.
+  const [logDepth, setLogDepth] = useState(2000);
+  useEffect(() => {
+    setLogs((entries) => entries.slice(-logDepth));
+  }, [logDepth]);
   const [logFilter, setLogFilter] = useState("");
+  const [logField, setLogField] = useState("type");
+  const [serverLogFilter, setServerLogFilter] = useState("");
+  const [unretrievableGaps, setUnretrievableGaps] = useState<string[]>([]);
+  const [loadingGaps, setLoadingGaps] = useState<string[]>([]);
+  const recoverGap = async (gap: EventEntry) => {
+    const url = recoverableGapUrl(gap, logField, serverLogFilter);
+    if (!url) return;
+    setLoadingGaps((old) => [...old, gap.id]);
+    try {
+      const result = await request<{ events: EventEntry[]; runId: string }>(url);
+      if (!result.events.length) setUnretrievableGaps((old) => [...old, gap.id]);
+      else setLogs((old) => mergeRecoveredLogs(old, gap.id, result.events, logDepth));
+    } catch {
+      setUnretrievableGaps((old) => [...old, gap.id]);
+    } finally {
+      setLoadingGaps((old) => old.filter((id) => id !== gap.id));
+    }
+  };
   const [connected, setConnected] = useState(false);
   useEffect(() => {
     void request<any>("/connection-info")
@@ -281,7 +305,8 @@ export default function App() {
     const path = safeObserver(observer)
       ? "/api/observers/" + safeObserver(observer) + "/events"
       : "/api/observers/events";
-    activeSse = new EventSource(path);
+    const logQuery = logStreamQuery(logField, serverLogFilter);
+    activeSse = new EventSource(path + logQuery);
     setConnected(false);
     const handleSession = (ev: MessageEvent) => {
       const data = JSON.parse(ev.data) as Observer;
@@ -293,7 +318,7 @@ export default function App() {
     };
     const handleLog = (ev: MessageEvent) => {
       const entry = JSON.parse(ev.data) as EventEntry;
-      setLogs((p) => (p.some((x) => x.id === entry.id) ? p : [...p.slice(-499), entry]));
+      setLogs((p) => appendLog(p, entry, logDepth));
       if (entry.resourceId && entry.type.startsWith("message.")) {
         const r = inboxesRef.current.find((x) => x.id === entry.resourceId);
         if (r) void refresh(r.id, r.channel);
@@ -303,7 +328,16 @@ export default function App() {
     activeSse.addEventListener("session.restored", handleSession);
     activeSse.addEventListener("log", handleLog);
     activeSse.addEventListener("inbox.notification", handleLog);
-    activeSse.addEventListener("log.gap", () => {
+    activeSse.addEventListener("log.gap", (event: MessageEvent) => {
+      const gap = JSON.parse(event.data) as { missingFrom?: number; missingTo?: number };
+      if (gap.missingFrom !== undefined && gap.missingTo !== undefined) {
+        setLogs((entries) => [...entries.slice(-(logDepth - 1)), {
+          id: "gap:" + gap.missingFrom + ":" + gap.missingTo,
+          at: new Date().toISOString(),
+          type: "log.gap",
+          data: { missingFrom: gap.missingFrom, missingTo: gap.missingTo },
+        }]);
+      }
       if (observer) void syncObserver(observer);
     });
     activeSse.addEventListener("log.reset", () => {
@@ -327,7 +361,7 @@ export default function App() {
       closed = true;
       activeSse?.close();
     };
-  }, [observer, refresh, syncObserver]);
+  }, [observer, refresh, syncObserver, logField, serverLogFilter]);
   useEffect(() => {
     if (!observer) return;
     const poll = setInterval(() => {
@@ -574,7 +608,7 @@ export default function App() {
     finally { setSmtpPassword(""); }
   }
   const filteredLogs = useMemo(
-    () => logs.filter((x) => JSON.stringify(x).toLowerCase().includes(logFilter.toLowerCase())),
+    () => visibleLogs(logs, logFilter),
     [logs, logFilter],
   );
   return (
@@ -953,6 +987,13 @@ export default function App() {
                     value={logFilter}
                     onChange={(e) => setLogFilter(e.target.value)}
                   />
+                  <label>History <select aria-label="Log history depth" value={logDepth} onChange={(e) => setLogDepth(Number(e.target.value))}>
+                    {LOG_DEPTHS.map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select></label>
+                  <label>Server filter <select aria-label="Log filter field" value={logField} onChange={(e) => setLogField(e.target.value)}>
+                    {LOG_FILTER_FIELDS.map((key) => <option key={key}>{key}</option>)}
+                  </select></label>
+                  <input aria-label="Server log filter value" placeholder="Exact match" value={serverLogFilter} onChange={(e) => setServerLogFilter(e.target.value)} />
                   <button onClick={() => setLogs([])}>{t("clearView")}</button>
                 </div>
                 <div className="panelBody">
@@ -962,7 +1003,13 @@ export default function App() {
                     .map((e) => (
                       <div className="logRow" key={e.id}>
                         <span>{formatDate(e.at)}</span>
-                        {eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
+                        {e.type === "log.gap" ? (
+                          <button type="button" disabled={unretrievableGaps.includes(e.id) || loadingGaps.includes(e.id)}
+                            onClick={() => void recoverGap(e)}>
+                            {gapLabel(locale, unretrievableGaps.includes(e.id), e.data?.missingFrom, e.data?.missingTo)}
+                            {loadingGaps.includes(e.id) ? "…" : ""}
+                          </button>
+                        ) : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
                       </div>
                     ))}
                 </div>

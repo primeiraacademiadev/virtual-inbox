@@ -578,7 +578,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
-        return json(res, 200, sandbox.listMessages(inboxId).map(publicMessage));
+        return json(res, 200, sandbox.listMessages(inboxId).filter(m => m.sequence > Number(url.searchParams.get("after") || 0)).map(publicMessage));
       case "emailClear":
       case "smsClear":
         sandbox.clearMessages(inboxId);

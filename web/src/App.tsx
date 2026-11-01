@@ -210,7 +210,6 @@ export default function App() {
       },
       onGap: () => { if (observer) void syncObserver(observer); },
     });
-  const [connected, setConnected] = useState(false);
   useEffect(() => {
     void request<any>("/connection-info")
       .then((data) => {

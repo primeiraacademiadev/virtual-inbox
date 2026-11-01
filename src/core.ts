@@ -74,8 +74,10 @@ export type Event = {
   data?: Record<string, unknown>;
 };
 export const logFilterKeys = ["type", "inboxId", "messageId", "smtpSessionId", "attemptId", "sender", "recipient", "ruleId"] as const;
-export type LogFilters = Partial<Record<(typeof logFilterKeys)[number], string>>;
+export type LogFilters = Partial<Record<(typeof logFilterKeys)[number], string>> & { includeAnomalies?: boolean };
+export const isAnomaly = (event: Event): boolean => event.type === "message.captured";
 export function matchesLog(event: Event, filters: LogFilters = {}): boolean {
+  if (filters.includeAnomalies !== false && isAnomaly(event)) return true;
   const data = event.data ?? {};
   const fields: Record<(typeof logFilterKeys)[number], unknown> = {
     type: event.type, inboxId: event.inboxId ?? event.resourceId, messageId: event.messageId,
@@ -94,6 +96,10 @@ export function matchesLog(event: Event, filters: LogFilters = {}): boolean {
 }
 export function parseLogFilters(params: URLSearchParams): LogFilters {
   const filters: LogFilters = {};
+  const anomalyValues = params.getAll("includeAnomalies");
+  if (anomalyValues.length > 1 || anomalyValues.some(value => value !== "true" && value !== "false"))
+    throw new Fault(400, "Invalid anomaly visibility", "INVALID_LOG_FILTER");
+  if (anomalyValues.length) filters.includeAnomalies = anomalyValues[0] === "true";
   for (const key of logFilterKeys) {
     const values = params.getAll(key);
     if (values.length > 1 || values.some((value) => !value || value.length > 320))

@@ -109,7 +109,7 @@ export function useLogHistory(
       // Prefetch two additional pages without delaying the live SSE connection.
       if (snapshotCursor && snapshotHasMore) {
         void (async () => {
-          let before = snapshotCursor;
+          let before: number | undefined = snapshotCursor;
           for (let page = 0; page < 2 && before !== undefined && !closed; page++) {
             try {
               const history = await olderHistory(request, logField, serverLogFilter, before,

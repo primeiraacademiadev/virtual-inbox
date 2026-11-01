@@ -187,6 +187,14 @@ export default function App() {
   const [seen, setSeen] = useState<Record<string, string[]>>({});
   const [detail, setDetail] = useState<Message | null>(null);
   const [logs, setLogs] = useState<EventEntry[]>([]);
+  const [logDepth, setLogDepth] = useState(() => {
+    const raw = Number(sessionStorage.getItem("virtual-inbox-log-depth") || 2000);
+    return [500, 2000, 5000, 10000].includes(raw) ? raw : 2000;
+  });
+  useEffect(() => {
+    sessionStorage.setItem("virtual-inbox-log-depth", String(logDepth));
+    setLogs((entries) => entries.slice(-logDepth));
+  }, [logDepth]);
   const [logFilter, setLogFilter] = useState("");
   const [connected, setConnected] = useState(false);
   useEffect(() => {
@@ -293,7 +301,7 @@ export default function App() {
     };
     const handleLog = (ev: MessageEvent) => {
       const entry = JSON.parse(ev.data) as EventEntry;
-      setLogs((p) => (p.some((x) => x.id === entry.id) ? p : [...p.slice(-499), entry]));
+      setLogs((p) => (p.some((x) => x.id === entry.id) ? p : [...p.slice(-(logDepth - 1)), entry]));
       if (entry.resourceId && entry.type.startsWith("message.")) {
         const r = inboxesRef.current.find((x) => x.id === entry.resourceId);
         if (r) void refresh(r.id, r.channel);
@@ -303,7 +311,16 @@ export default function App() {
     activeSse.addEventListener("session.restored", handleSession);
     activeSse.addEventListener("log", handleLog);
     activeSse.addEventListener("inbox.notification", handleLog);
-    activeSse.addEventListener("log.gap", () => {
+    activeSse.addEventListener("log.gap", (event: MessageEvent) => {
+      const gap = JSON.parse(event.data) as { missingFrom?: number; missingTo?: number };
+      if (gap.missingFrom !== undefined && gap.missingTo !== undefined) {
+        setLogs((entries) => [...entries.slice(-(logDepth - 1)), {
+          id: "gap:" + gap.missingFrom + ":" + gap.missingTo,
+          at: new Date().toISOString(),
+          type: "log.gap",
+          data: { missingFrom: gap.missingFrom, missingTo: gap.missingTo },
+        }]);
+      }
       if (observer) void syncObserver(observer);
     });
     activeSse.addEventListener("log.reset", () => {
@@ -953,6 +970,9 @@ export default function App() {
                     value={logFilter}
                     onChange={(e) => setLogFilter(e.target.value)}
                   />
+                  <label>History <select aria-label="Log history depth" value={logDepth} onChange={(e) => setLogDepth(Number(e.target.value))}>
+                    {[500, 2000, 5000, 10000].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select></label>
                   <button onClick={() => setLogs([])}>{t("clearView")}</button>
                 </div>
                 <div className="panelBody">
@@ -962,7 +982,7 @@ export default function App() {
                     .map((e) => (
                       <div className="logRow" key={e.id}>
                         <span>{formatDate(e.at)}</span>
-                        {eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
+                        {e.type === "log.gap" ? `… Missing from log_id ${e.data?.missingFrom} to ${e.data?.missingTo} …` : eventLabel(locale, e.type)} <span>{e.resourceId?.slice(0, 8) || ""}</span>
                       </div>
                     ))}
                 </div>

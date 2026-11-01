@@ -93,3 +93,12 @@ test("anomaly visibility propagates to REST, SSE and local filters", () => {
   assert.equal(logSseUrl("/api/logs/events", "inboxId", "alpha", "run:4", false),
     "/api/logs/events?inboxId=alpha&includeAnomalies=false&after=run%3A4");
 });
+
+test("partial gap recovery retains every unresolved subrange", () => {
+  const gap = { id: "gap:2:8", type: "log.gap", at: "2026-11-01T00:00:00Z",
+    data: { missingFrom: 2, missingTo: 8 } } as EventEntry;
+  const merged = mergeRecoveredLogs([event(1), gap, event(9)], gap.id, [event(3), event(6)], 50);
+  assert.deepEqual(merged.map(e => e.id), ["run:1", "gap:2:2", "run:3", "gap:4:5", "run:6", "gap:7:8", "run:9"]);
+  const complete = mergeRecoveredLogs([gap], gap.id, [event(2),event(3),event(4),event(5),event(6),event(7),event(8)], 50);
+  assert.ok(complete.every(e => e.type !== "log.gap"));
+});

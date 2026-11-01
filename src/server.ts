@@ -581,7 +581,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
           ? (() => { try { return sandbox.find(channel, requestedAddress); } catch { return undefined; } })() : undefined;
         const created = sandbox.create(channel, requestedAddress,
           input.ttlSeconds, input.observerId, input.generation, input.ifExists ?? "error");
-        if (created.channel === "email") {
+        if (created.channel === "email" && (!existing || existing.id !== created.id)) {
           credentialStore.createInbox(created.address);
           inboxAddresses.set(created.id, created.address);
         }

@@ -1,4 +1,5 @@
-import type { Event } from "./core.js";
+import type { Event } from "../core.js";
+import { Fault } from "../domain-types.js";
 
 /** Observers only receive events bound to inboxes in their own watch set. */
 export function isObserverEventVisible(event: Event, watchedInboxIds: ReadonlySet<string>): boolean {
@@ -26,7 +27,7 @@ export function parseEventFilter(params: URLSearchParams): EventFilter {
   const filter: EventFilter = {};
   for (const [key, value] of params) {
     if (!allowed.has(key) || value.length > 320 || (key !== "after" && !value.trim()))
-      throw new Error("Invalid log filter");
+      throw new Fault(400, "Invalid log filter", "INVALID_LOG_FILTER");
     if (key !== "after") filter[key as keyof EventFilter] = value;
   }
   return filter;

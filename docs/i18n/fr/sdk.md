@@ -39,3 +39,7 @@ Le SDK TypeScript `sdk/client.ts` renvoie les `headers` MIME originaux (ordonné
 Exemple : `wait(inbox, { header: { name: "X-Message-ID", valueContains: marker }, htmlContains: "code" })`. `bodyContains` recherche dans le texte et le HTML ; `htmlContains` uniquement dans le HTML. Les filtres sont combinés par ET ; HTTP `204` devient `null`. `after` est une séquence de message, pas un identifiant SSE.
 
 Les diagnostics SMTP exigent HTTPS et `ADMIN_TOKEN`. Ne pas journaliser les mots de passe ni les tokens. STARTTLS actualise la session existante avec `secure: true`.
+
+## SDK autonome et erreurs typées
+
+Le paquet ESM `@virtual-inbox/client` version 0.2.0 peut être créé avec `npm run build --prefix sdk` et `npm pack --prefix sdk`, puis installé dans un autre dépôt sans récupérer le code du serveur. La publication dans un registre est distincte et non activée. `VirtualInboxError` conserve `status`, `errorCode`, `errorParams` et `cause`. `waitOrThrow()` indique l'absence d'observation pendant le délai, sans la confondre avec un rejet SMTP. Le diagnostic ne contient que les métadonnées de cinq messages récents de la boîte demandée, jamais les journaux globaux ou les anomalies d'autres tests. `wait()` continue à retourner `null` pour HTTP 204. Les opérations administratives (sessions et simulations SMTP) exigent `adminUrl` HTTPS et `adminToken` explicites. Ne jamais enregistrer le token dans les journaux de tests.

@@ -48,3 +48,9 @@ Supported locales: `pt-PT`, `en-US`, `fr-FR`. Email strategies: `FIRST_LAST`, `L
 ## Multiple instances and fixed ports
 
 Virtual Inbox is designed for a single shared instance with concurrent SMTP clients and logically isolated tests. Running a second instance is **not recommended**. If an independent instance is unavoidable, explicitly configure all listener ports (`PORT`, `HTTPS_PORT`, `SMTP_PORT`, `SMTPS_PORT`, `POP3_PORT`, `DEMO_PORT`, `DEMO_HTTPS_PORT`) and separate its configuration/TLS files to prevent collisions and interference. Do not rely on automatic/dynamic port discovery: it is not part of the supported operating model.
+
+## SMTP client identities and retention
+
+`SMTP_AUTH_POLICY=INBOX` is the backward-compatible default; `OPEN` accepts test credentials without inbox provisioning. Anonymous SMTP is allowed in both modes. On startup, a fresh secret salt is generated. For successful AUTH, Virtual Inbox computes an internal HMAC-SHA-256 over the exact username, password, and remote IP, and associates a random `clientId` GUID with that digest. Same inputs on this run yield the same client; changes to credentials/IP or restarting yield a different identity. This is a testing correlation identifier, not an authorization credential. Anonymous connections are separate and are not grouped by IP.
+
+`SMTP_SESSION_HISTORY_HOURS=24` retains closed SMTP connection records for up to 24 hours (configurable positive integer), subject to in-memory capacity. Active connections are not evicted. `/api/admin/smtp/sessions?clientId=<guid>` lists retained records. The reserved `@virtual.inbox` probe returns the sending connection and all retained connections of its identified client with connection timestamps; anonymous probes return their own connection only. The probe mailbox TTL remains 60 seconds.

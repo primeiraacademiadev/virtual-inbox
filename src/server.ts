@@ -261,7 +261,7 @@ function observe(req: IncomingMessage, res: ServerResponse, observerId?: string)
   sse(res, observerId ? "session.restored" : "session.initialized", snapshot);
   const replay = sandbox.replay(after);
   if (replay.reset) sse(res, "log.reset", { runId: replay.runId });
-  if (replay.gap) sse(res, "log.gap", { oldest: replay.oldest, latest: replay.latest });
+  if (replay.gap) sse(res, "log.gap", { oldest: replay.oldest, latest: replay.latest, missingFrom: replay.missingFrom, missingTo: replay.missingTo });
   for (const event of replay.events) emit(event);
   replaying = false;
   const emitted = new Set(replay.events.map((event) => event.id));

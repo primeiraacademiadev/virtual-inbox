@@ -75,7 +75,11 @@ export class SmtpSessionStore {
   private readonly sessions = new Map<string, SmtpSessionRecord>();
   private readonly clientIds = new Map<string, string>();
 
-  constructor(private readonly maxSessions = 500, private readonly credentialStore = new InboxCredentialStore()) {}
+  constructor(
+    private readonly maxSessions = 500,
+    private readonly credentialStore = new InboxCredentialStore(),
+    private readonly authPolicy: "INBOX" | "OPEN" = "INBOX",
+  ) {}
 
   private clientKey(address: string, username?: string) {
     return address + "\0" + (username ?? "");
@@ -120,7 +124,9 @@ export class SmtpSessionStore {
       throw new Fault(400, "Invalid SMTP credentials", "INVALID_SMTP_CREDENTIALS");
     const session = this.session(id);
     // Keep bounded history, including the password verification material.
-    const testSessionId = await this.credentialStore.authenticate(username, password);
+    const testSessionId = this.authPolicy === "INBOX"
+      ? await this.credentialStore.authenticate(username, password)
+      : undefined;
     const [userHash, passwordHash] = await Promise.all([hash(username), hash(password)]);
     const attempt: SecretAttempt = {
       id: randomUUID(), at: new Date().toISOString(), method,
@@ -154,6 +160,10 @@ export class SmtpSessionStore {
     session.errors.push({ at: session.lastActivityAt, responseCode, code });
     if (session.errors.length > MAX_ERRORS) session.errors.shift();
   }
+  getSession(id: string): PublicSmtpSession | undefined {
+    return this.listSessions().find((session) => session.id === id);
+  }
+
   listSessions(clientId?: string): PublicSmtpSession[] {
     return [...this.sessions.values()]
       .filter((s) => !clientId || s.clientId === clientId)

@@ -93,3 +93,7 @@ The entire `@virtual.inbox` domain is reserved: ordinary mailbox creation cannot
 ### Anomaly visibility in logs
 
 When filtering by inbox, sender, or another context, `message.captured` events remain visible by default even if they do not match the filter. Set `includeAnomalies=false` on REST `/api/logs` or SSE streams (including observer streams) to focus strictly on matching events. The console exposes an enabled-by-default “Include anomalies” option. Filtering is not authorization; use synthetic test data only.
+
+### Searching captured messages
+
+System inboxes remain shared. `GET /api/mailboxes/{inboxId}/messages` and the SMS equivalent support combinable exact filters: `originalRecipient`, `from` (SMTP envelope sender when available), `captureReason`, `smtpSessionId`, `authUser`, and numeric cursor `after`. The console groups counts by original recipient and capture reason and filters on recipient, sender and reason. This changes neither storage nor authorization; use synthetic data only.

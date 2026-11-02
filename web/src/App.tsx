@@ -1,3 +1,4 @@
+import { AnomalyOverview } from "./components/AnomalyOverview";
 import { LogPanel } from "./components/LogPanel";
 import { useLogHistory } from "./logs/useLogHistory";
 import { IdentityControls } from "./components/identity/IdentityControls";
@@ -796,7 +797,16 @@ export default function App() {
                   </div>
                 )}
                 <div className="panelBody inboxScroll">
-                  {active && (
+                  {active?.system ? <AnomalyOverview
+                    messages={messages[active.id] || []} locale={locale}
+                    onSelect={(message) => {
+                      setDetail(message);
+                      setSeen(previous => ({
+                        ...previous,
+                        [active.id]: [...new Set([...(previous[active.id] || []), message.id])],
+                      }));
+                    }}
+                  /> : active && (
                     <div className="messages">
                       {(messages[active.id] || [])
                         .slice()

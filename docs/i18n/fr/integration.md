@@ -93,3 +93,7 @@ Le domaine `@virtual.inbox` est reserve : la creation manuelle des boites y est 
 ### Visibilité des anomalies dans les journaux
 
 Lorsqu'un filtre cible une boîte ou un expéditeur, les événements `message.captured` restent visibles par défaut, même hors filtre. Définissez `includeAnomalies=false` sur `/api/logs` ou les flux SSE pour un mode strictement ciblé. La console propose l'option «Include anomalies», activée par défaut. Les filtres ne constituent pas une autorisation ; seules des données synthétiques doivent être utilisées.
+
+### Recherche des messages capturés
+
+Les boîtes système restent partagées. `GET /api/mailboxes/{inboxId}/messages` et l'équivalent SMS acceptent les filtres exacts combinables `originalRecipient`, `from` (expéditeur de l'enveloppe SMTP lorsqu'il est disponible), `captureReason`, `smtpSessionId`, `authUser` et le curseur numérique `after`. La console affiche les comptes par destinataire initial et motif, avec filtres dédiés. Le stockage et l'autorisation ne changent pas ; n'utiliser que des données synthétiques.

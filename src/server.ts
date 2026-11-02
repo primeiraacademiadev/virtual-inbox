@@ -625,7 +625,24 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 204, {});
       case "emailMessages":
       case "smsMessages":
-        return json(res, 200, sandbox.listMessages(inboxId).filter(m => m.sequence > Number(url.searchParams.get("after") || 0)).map(publicMessage));
+        {
+          const allowed = ["after", "originalRecipient", "from", "captureReason", "smtpSessionId", "authUser"];
+          const values: Record<string, string> = {};
+          for (const key of allowed) {
+            const all = url.searchParams.getAll(key);
+            if (all.length > 1 || all.some(value => !value || value.length > 320))
+              throw new Fault(400, "Invalid message filter", "INVALID_MESSAGE_FILTER");
+            if (all.length) values[key] = all[0];
+          }
+          const after = values.after === undefined ? 0 : Number(values.after);
+          if (!Number.isSafeInteger(after) || after < 0)
+            throw new Fault(400, "Invalid message cursor", "INVALID_MESSAGE_FILTER");
+          return json(res, 200, sandbox.listMessages(inboxId, {
+            after, originalRecipient: values.originalRecipient, from: values.from,
+            captureReason: values.captureReason, smtpSessionId: values.smtpSessionId,
+            authUser: values.authUser,
+          }).map(publicMessage));
+        }
       case "emailClear":
       case "smsClear":
         sandbox.clearMessages(inboxId);

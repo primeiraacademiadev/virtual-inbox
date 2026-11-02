@@ -97,3 +97,7 @@ Para iniciar a escuta **antes de a inbox existir**, utilizar `POST /api/connecti
 ### Visibilidade de anomalias nos logs
 
 Ao filtrar por inbox, remetente ou outro contexto, eventos `message.captured` continuam visíveis por omissão, mesmo quando não correspondem ao filtro. Defina `includeAnomalies=false` nas consultas REST `/api/logs` e streams SSE `/api/logs/events` (incluindo streams de observadores) para entrar em modo focado. A consola apresenta a opção «Include anomalies» ligada por omissão. A filtragem não é autorização nem altera a captura; os dados devem ser sintéticos.
+
+### Pesquisa de mensagens capturadas
+
+As inboxes de sistema continuam partilhadas. `GET /api/mailboxes/{inboxId}/messages` e o equivalente SMS aceitam filtros exatos combináveis `originalRecipient`, `from` (remetente do envelope SMTP quando disponível), `captureReason`, `smtpSessionId`, `authUser`, e cursor numérico `after`. A consola das inboxes de sistema mostra contagens agrupadas por destinatário original e motivo, com filtros por destinatário, remetente e motivo. Não altera o armazenamento nem a autorização: utilizar exclusivamente dados sintéticos.

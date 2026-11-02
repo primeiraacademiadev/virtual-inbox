@@ -1,0 +1,43 @@
+name: Publish Virtual Inbox SDK
+on:
+  push:
+    tags:
+      - 'sdk-v*'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    if: github.repository == 'primeiraacademiadev/virtual-inbox'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - name: Validate SDK tag and package metadata
+        shell: bash
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const pkg = JSON.parse(fs.readFileSync("sdk/package.json", "utf8"));
+            const tag = process.env.GITHUB_REF_NAME;
+            if (pkg.name !== "@virtual-inbox/client" || tag !== "sdk-v" + pkg.version) {
+              throw new Error("SDK name or tag/version mismatch");
+            }
+            if (pkg.license === "UNLICENSED") {
+              throw new Error("A distribution license must be approved before publishing");
+            }
+          '
+      - name: Install SDK build dependencies
+        run: npm install --prefix sdk --ignore-scripts --no-package-lock --no-audit --no-fund
+      - name: Compile SDK
+        run: npm run build --prefix sdk
+      - name: Verify package contents
+        run: npm pack --dry-run --prefix sdk
+      - name: Publish with npm Trusted Publishing (OIDC)
+        working-directory: sdk
+        run: npm publish --access public

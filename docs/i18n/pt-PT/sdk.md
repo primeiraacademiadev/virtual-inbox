@@ -55,3 +55,14 @@ Por omissão, criar novamente o mesmo endereço continua a devolver `409`. Para 
 ## Retenção e sequência de logs (incremento #44)
 
 `MAX_LOG_BUFFER_BYTES` limita a memória ocupada pelo histórico circular (10485760 bytes = 10 MiB por omissão; inteiro positivo). Eventos maiores do que o limite não são retidos, mas são emitidos em direto. Cada evento inclui `log_id` crescente por execução e preserva `id=runId:sequence` para compatibilidade. `log.gap` indica `missingFrom` e `missingTo` quando o cursor refere eventos já descartados; `log.reset` assinala mudança de execução. A consola permite selecionar 500, 2000, 5000 ou 10000 entradas nesta sessão de navegador; não há persistência após fecho. O número efetivo de eventos no buffer depende do tamanho serializado de cada evento. Apenas dados sintéticos devem ser utilizados. Os endpoints REST `/api/logs` e SSE `/api/logs/events` (incluindo observadores) aceitam `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient` e `ruleId`; correspondência exata, conjunção de critérios. `recipient` corresponde a qualquer membro de um array. Eventos fora do filtro não representam lacunas.
+
+## Simulação de AUTH e âmbitos das regras SMTP (v0.3)
+
+Antes da ligação, `resolveSmtp({credentials:{username,password}, origin:{ip}})` resolve um ou ambos os critérios e devolve IDs opacos e uma árvore das ligações **efetivamente observadas**, sem devolver a password. Com `createSmtpRule`, uma regra AUTH específica de IP não precisa de indicar credenciais:
+
+```ts
+await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
+  priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
+```
+
+As regras **GLOBAL** não têm `selectors` (ou usam `{}`); as **SPECIFIC** têm pelo menos um. Todos os seletores presentes são combinados por **AND**. Se não estiverem presentes, não restringem; **não existe wildcard `"*"`**. Primeiro procura-se uma regra SPECIFIC elegível, depois GLOBAL; dentro de cada âmbito decide a maior `priority` e, em empate, a regra inserida primeiro. Consome-se apenas uma regra por evento. AUTH aceita respostas 400–599; CONNECT/EHLO e inbox/SMS ficam para outras evoluções. O resolve e a configuração exigem HTTPS e token administrativo; passwords nunca entram nos logs. [Especificação completa](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).

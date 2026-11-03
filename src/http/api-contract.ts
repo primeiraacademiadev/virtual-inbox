@@ -135,7 +135,7 @@ export const schemas: Record<string, Schema> = {
     priority: { type: "integer", minimum: -10000, maximum: 10000 }, selectors: reference("SmtpReplySelectors"),
   }, ["phase", "action", "remaining"]),
   SmtpReplyRule: object({
-    id: uuid, phase: { enum: ["AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
+    id: uuid, phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
     code: integer, message: string, durationMs: integer, remaining: integer,
     priority: integer, scope: { enum: ["GLOBAL", "SPECIFIC"] },
     selectors: reference("SmtpReplySelectors"), createdAt: string,

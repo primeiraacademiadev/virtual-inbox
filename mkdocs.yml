@@ -61,6 +61,7 @@ plugins:
             SMTP diagnostics: Diagnósticos SMTP
             SMTP rule scopes: Âmbitos das regras SMTP
             Contract audit: Auditoria de contratos
+            Consumer regressions: Regressões de consumidores
             Internationalization: Internacionalização
             Integration notes: Notas de integração
             Search: Pesquisa
@@ -87,6 +88,7 @@ plugins:
             SMTP diagnostics: Diagnostics SMTP
             SMTP rule scopes: Portées des règles SMTP
             Contract audit: Audit des contrats
+            Consumer regressions: Régressions des consommateurs
             Internationalization: Internationalisation
             Integration notes: Notes d'intégration
             Search: Recherche
@@ -112,6 +114,7 @@ nav:
       - SMTP diagnostics: reference/smtp-session-diagnostics.md
       - SMTP rule scopes: reference/smtp-rule-scopes.md
       - Contract audit: reference/contract-consistency-audit.md
+      - Consumer regressions: reference/consumer-regressions.md
       - Internationalization: reference/i18n.md
       - Integration notes: reference/integration.md
       - Search: reference/search.md

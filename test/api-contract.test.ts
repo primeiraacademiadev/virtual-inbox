@@ -63,3 +63,25 @@ test("SMTP observation uses no administrative security while verification and wr
   assert.deepEqual(post("/admin/smtp/sessions/{sessionId}/verify").security, [{ adminToken: [] }]);
   assert.deepEqual(post("/admin/smtp/reply-rules").security, [{ adminToken: [] }]);
 });
+
+test("OpenAPI exposes all SMTP rule phases and proper query/readiness response shapes", () => {
+  const input = schemas.SmtpReplyRuleInput as { properties: Record<string, {enum?:string[]}> };
+  const output = schemas.SmtpReplyRule as { properties: Record<string, {enum?:string[]}> };
+  const expected = ["CONNECT","EHLO","AUTH","MAIL","RCPT","DATA","AFTER_DATA"];
+  assert.deepEqual(input.properties.phase.enum,expected);
+  assert.deepEqual(output.properties.phase.enum,expected);
+  const contract = createOpenApiDocument();
+  const ready = contract.paths["/ready"].get as {responses: Record<number, {content:Record<string,{schema:unknown}>}>};
+  assert.deepEqual(ready.responses[503].content["application/json"].schema,
+    {$ref:"#/components/schemas/Readiness"});
+  const logs = contract.paths["/logs"].get as {parameters:Array<{name:string;in:string}>;responses:Record<number,{content:Record<string,{schema:unknown}>}>};
+  assert.ok(logs.parameters.some(param=>param.name==="after" && param.in==="query"));
+  assert.ok(logs.parameters.some(param=>param.name==="limit" && param.in==="query"));
+  assert.ok(!logs.parameters.some(param=>param.name.includes(",")));
+  assert.deepEqual(logs.responses[200].content["application/json"].schema,
+    {$ref:"#/components/schemas/LogResponse"});
+  const logResponse = schemas.LogResponse as {oneOf:unknown[]};
+  assert.deepEqual(logResponse.oneOf,[
+    {$ref:"#/components/schemas/Replay"},{$ref:"#/components/schemas/LogPage"}
+  ]);
+});

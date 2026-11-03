@@ -28,7 +28,7 @@ export class SmtpRuleIdentities {
   }
 
   resolve(input: unknown, sessions: ReadonlyArray<{
-    id: string; remoteAddress: string; credentialsId?: string;
+    id: string; remoteAddress: string; credentialsIds?: readonly string[];
     connected: boolean; connectedAt: string;
   }>) {
     if (!input || typeof input !== "object" || Array.isArray(input))
@@ -62,12 +62,12 @@ export class SmtpRuleIdentities {
       ip = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
     }
     const matched = sessions.filter(s =>
-      (credentialsId === undefined || s.credentialsId === credentialsId) &&
+      (credentialsId === undefined || s.credentialsIds?.includes(credentialsId) === true) &&
       (ip === undefined || (s.remoteAddress.startsWith("::ffff:") ?
         s.remoteAddress.slice(7) : s.remoteAddress) === ip));
     // A tree is a projection of independent dimensions, not their persisted ownership.
     const groups = new Map<string, { id: string; ip: string; connections: Array<{
-      id: string; credentialsId?: string; connected: boolean; connectedAt: string;
+      id: string; credentialsIds?: readonly string[]; connected: boolean; connectedAt: string;
     }> }>();
     for (const session of matched) {
       const address = session.remoteAddress.replace(/^::ffff:/, "");
@@ -75,7 +75,7 @@ export class SmtpRuleIdentities {
       let group = groups.get(id);
       if (!group) { group = { id, ip: address, connections: [] }; groups.set(id, group); }
       group.connections.push({ id: session.id,
-        ...(session.credentialsId ? { credentialsId: session.credentialsId } : {}),
+        ...(session.credentialsIds?.length ? { credentialsIds: [...session.credentialsIds] } : {}),
         connected: session.connected, connectedAt: session.connectedAt });
     }
     if (originId && ip && !groups.has(originId))

@@ -51,3 +51,15 @@ test("demo routes are excluded from the main contract and admin writes declare s
   assert.ok(wait.responses[200]);
   assert.ok(wait.responses[204]);
 });
+
+
+test("SMTP observation uses no administrative security while verification and writes remain protected", () => {
+  const main = createOpenApiDocument();
+  const get = (path: string) => main.paths[path].get as { security: unknown };
+  const post = (path: string) => main.paths[path].post as { security: unknown };
+  assert.deepEqual(get("/admin/smtp/attempts").security, []);
+  assert.deepEqual(get("/admin/smtp/sessions").security, []);
+  assert.deepEqual(get("/admin/smtp/clients").security, [{ adminToken: [] }]);
+  assert.deepEqual(post("/admin/smtp/sessions/{sessionId}/verify").security, [{ adminToken: [] }]);
+  assert.deepEqual(post("/admin/smtp/reply-rules").security, [{ adminToken: [] }]);
+});

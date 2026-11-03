@@ -1,0 +1,64 @@
+import React, { useState } from "react";
+import { NavigationIcon } from "./NavigationIcon";
+
+type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
+type Props = {
+  page: AreaPage;
+  docPage: string;
+  docText: string;
+  onPage: (page: AreaPage) => void;
+  onDocument: (doc: string) => void;
+};
+const docs = [
+  { id: "overview", label: "Introduction" },
+  { id: "demo", label: "Getting started" },
+  { id: "integration", label: "Integration" },
+  { id: "sdk", label: "SDK and testing" },
+  { id: "tls", label: "TLS" },
+  { id: "architecture", label: "Architecture" },
+  { id: "development", label: "Development" },
+];
+/** Each top-level area owns its own context navigation; inbox navigation stays separate. */
+export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: Props) {
+  const [collapsed, setCollapsed] = useState(false);
+  const docsArea = page === "documentation" || page === "api";
+  const protocolsArea = page === "smtp" || page === "pop3" || page === "simulations";
+  const area = docsArea ? "Documentation" : protocolsArea ? "Protocols" : "System";
+  const entries: Array<{ key: AreaPage; label: string; icon: React.ComponentProps<typeof NavigationIcon>["name"] }> = docsArea
+    ? [{ key: "documentation", label: "Guides", icon: "documentation" }, { key: "api", label: "API reference", icon: "api" }]
+    : protocolsArea
+      ? [{ key: "smtp", label: "SMTP", icon: "smtp" }, { key: "pop3", label: "POP3", icon: "pop3" }, { key: "simulations", label: "Simulated errors", icon: "error" }]
+      : [{ key: "connections", label: "Connections and TLS", icon: "connections" },
+          { key: "footprint", label: "Footprint", icon: "footprint" }];
+  const headings = docText.split("\n").filter(line => /^#{1,3}\s+/.test(line)).map((line, i) => ({
+    ordinal: i + 1, label: line.replace(/^#{1,3}\s+/, "").replace(/[*_`]/g, "").trim(), level: line.match(/^#+/)?.[0].length || 2,
+  }));
+  return <aside className={"contextSidebar" + (collapsed ? " collapsed" : "")} aria-label={area + " navigation"}>
+    <div className="contextSidebarHeader">
+      {!collapsed && <strong>{area}</strong>}
+      <button type="button" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+        title={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed}
+        onClick={() => setCollapsed(v => !v)}>{collapsed ? "»" : "«"}</button>
+    </div>
+    <nav>
+      {entries.map(entry => <button key={entry.key} type="button"
+        className={entry.key === page ? "active" : ""}
+        aria-current={entry.key === page ? "page" : undefined}
+        title={collapsed ? entry.label : undefined}
+        onClick={() => onPage(entry.key)}><NavigationIcon name={entry.icon} />
+        {!collapsed && <span>{entry.label}</span>}</button>)}
+      {docsArea && page === "documentation" && !collapsed && <>
+        <hr />
+        <span className="contextSectionTitle">Pages</span>
+        {docs.map(doc => <button key={doc.id} type="button" className={docPage === doc.id ? "active" : ""}
+          onClick={() => onDocument(doc.id)}>{doc.label}</button>)}
+      </>}
+      {docsArea && page === "documentation" && !collapsed && headings.length > 0 && <>
+        <hr />
+        <span className="contextSectionTitle">On this page</span>
+        {headings.map(heading => <button key={heading.ordinal} className={heading.level === 3 ? "tocIndented" : ""}
+          type="button" onClick={() => document.getElementById("doc-heading-" + heading.ordinal)?.scrollIntoView({ behavior: "smooth" })}>{heading.label}</button>)}
+      </>}
+    </nav>
+  </aside>;
+}

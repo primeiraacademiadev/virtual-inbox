@@ -1,0 +1,82 @@
+<testsuites id="" name="" tests="27" failures="0" skipped="0" errors="0" time="22.881614999999996">
+<testsuite name="scenarios\api\contracts.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="2" failures="0" skipped="0" time="0.492" errors="0">
+<testcase name="mailbox CRUD and same-origin demo transport" classname="scenarios\api\contracts.spec.ts" time="0.478">
+</testcase>
+<testcase name="generation metadata exposes all supported locales" classname="scenarios\api\contracts.spec.ts" time="0.014">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\resilience\disconnects.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="2" failures="0" skipped="0" time="0.774" errors="0">
+<testcase name="aborted wait request does not prevent later deliveries" classname="scenarios\resilience\disconnects.spec.ts" time="0.332">
+</testcase>
+<testcase name="abrupt SMTP client disconnect does not crash server" classname="scenarios\resilience\disconnects.spec.ts" time="0.442">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\resilience\limits.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="5" failures="0" skipped="0" time="2.27" errors="0">
+<testcase name="short-lived inbox expires and delivers subsequent messages to anomalies" classname="scenarios\resilience\limits.spec.ts" time="1.563">
+</testcase>
+<testcase name="wait-for-message times out without consuming messages" classname="scenarios\resilience\limits.spec.ts" time="0.198">
+</testcase>
+<testcase name="concurrent SMS deliveries are all captured without duplicate IDs" classname="scenarios\resilience\limits.spec.ts" time="0.179">
+</testcase>
+<testcase name="resource quota rejects excess inboxes and service remains healthy" classname="scenarios\resilience\limits.spec.ts" time="0.309">
+</testcase>
+<testcase name="SMS size boundary rejects oversized messages and keeps service responsive" classname="scenarios\resilience\limits.spec.ts" time="0.021">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\resilience\observers.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="3" failures="0" skipped="0" time="0.714" errors="0">
+<testcase name="concurrent observers independently subscribe and receive messages" classname="scenarios\resilience\observers.spec.ts" time="0.13">
+</testcase>
+<testcase name="global message capacity can be recovered by deleting messages" classname="scenarios\resilience\observers.spec.ts" time="0.545">
+</testcase>
+<testcase name="SSE replay delivers events missed during disconnection" classname="scenarios\resilience\observers.spec.ts" time="0.039">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\security\http.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="2" failures="0" skipped="0" time="0.186" errors="0">
+<testcase name="health and Host allowlist" classname="scenarios\security\http.spec.ts" time="0.146">
+</testcase>
+<testcase name="foreign browser Origin is rejected" classname="scenarios\security\http.spec.ts" time="0.04">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\sms\sms.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="1" failures="0" skipped="0" time="0.043" errors="0">
+<testcase name="national and E.164 SMS route to the same inbox" classname="scenarios\sms\sms.spec.ts" time="0.043">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\smtp\protocols.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="3" failures="0" skipped="0" time="0.626" errors="0">
+<testcase name="SMTP plain delivers MIME and exact binary attachments" classname="scenarios\smtp\protocols.spec.ts" time="0.212">
+</testcase>
+<testcase name="SMTP starttls delivers MIME and exact binary attachments" classname="scenarios\smtp\protocols.spec.ts" time="0.233">
+</testcase>
+<testcase name="SMTP smtps delivers MIME and exact binary attachments" classname="scenarios\smtp\protocols.spec.ts" time="0.181">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\sse\events.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="1" failures="0" skipped="0" time="0.048" errors="0">
+<testcase name="SSE emits event after a new inbound SMS" classname="scenarios\sse\events.spec.ts" time="0.048">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\tls\metadata.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="2" failures="0" skipped="0" time="0.021" errors="0">
+<testcase name="TLS status reports active certificate and SAN metadata" classname="scenarios\tls\metadata.spec.ts" time="0.012">
+</testcase>
+<testcase name="certificate write without administrator credentials is rejected" classname="scenarios\tls\metadata.spec.ts" time="0.009">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\tls\restart.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="1" failures="0" skipped="0" time="0.754" errors="0">
+<testcase name="new process recovers the same persisted automatic TLS identity" classname="scenarios\tls\restart.spec.ts" time="0.754">
+</testcase>
+</testsuite>
+<testsuite name="scenarios\tls\rotation.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="protocols" tests="2" failures="0" skipped="0" time="1.054" errors="0">
+<testcase name="managed SAN rotation updates HTTPS, SMTPS and STARTTLS without restart" classname="scenarios\tls\rotation.spec.ts" time="0.778">
+</testcase>
+<testcase name="invalid certificate upload preserves active TLS identity on all listeners" classname="scenarios\tls\rotation.spec.ts" time="0.276">
+</testcase>
+</testsuite>
+<testsuite name="playwright\specs\composer.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="chromium" tests="1" failures="0" skipped="0" time="3.563" errors="0">
+<testcase name="SMTP message captured by API appears in the React console" classname="playwright\specs\composer.spec.ts" time="3.563">
+</testcase>
+</testsuite>
+<testsuite name="playwright\specs\navigation.spec.ts" timestamp="2026-10-24T12:03:39.118Z" hostname="chromium" tests="2" failures="0" skipped="0" time="3.89" errors="0">
+<testcase name="console loads with session and main navigation" classname="playwright\specs\navigation.spec.ts" time="1.862">
+</testcase>
+<testcase name="locale switching preserves a usable console" classname="playwright\specs\navigation.spec.ts" time="2.028">
+</testcase>
+</testsuite>
+</testsuites>

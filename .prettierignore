@@ -1,0 +1,12 @@
+node_modules/
+web/node_modules/
+testing/node_modules/
+dist/
+web/dist/
+coverage/
+.nyc_output/
+testing/reports/
+web/public/wiki/**/search-index.json
+package-lock.json
+web/package-lock.json
+testing/package-lock.json

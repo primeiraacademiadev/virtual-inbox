@@ -306,7 +306,7 @@ export function createOpenApiDocument(audience: ApiAudience = "management") {
   }
   return {
     openapi: "3.1.0",
-    info: { title: audience === "management" ? "Virtual Inbox API" : "Virtual Inbox Demo Sender API", version: "1.0.0", description: "Generated from the HTTP route catalogue. SMTP, STARTTLS and SMTPS are documented separately; they are not HTTP operations. Message data is ephemeral. No authentication is required except for administrative writes." },
+    info: { title: audience === "management" ? "Virtual Inbox API" : "Virtual Inbox Demo Sender API", version: "1.0.0", description: "Generated from the HTTP route catalogue. SMTP, STARTTLS and SMTPS are documented separately; they are not HTTP operations. Message data is ephemeral. Test-data reads are open; some administrative diagnostic reads, credential verification, and administrative mutations require HTTPS plus ADMIN_TOKEN." },
     servers: [{ url: audience === "management" ? "/api" : "/demo", description: "Same origin as the console; configurable HTTP or HTTPS listener." }],
     paths,
     components: { schemas, securitySchemes: { adminToken: { type: "http", scheme: "bearer", description: "ADMIN_TOKEN over HTTPS only; not a JWT." } } },

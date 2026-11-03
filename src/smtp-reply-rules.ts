@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
 export type SmtpReplyPhase = "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
@@ -88,7 +89,7 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
   for (const [key, value] of Object.entries((input.selectors as Record<string, unknown>) || {})) {
     if (key === "origin") {
       if (!record(value) || Object.keys(value).length !== 1 || typeof value.ip !== "string" ||
-          !value.ip.trim() || value.ip.length > 128 || value.ip === "*") invalid("Invalid SMTP origin selector");
+          !isIP(value.ip.startsWith("::ffff:") ? value.ip.slice(7) : value.ip)) invalid("Invalid SMTP origin selector");
       selectors.origin = { ip: value.ip.startsWith("::ffff:") ? value.ip.slice(7) : value.ip };
       continue;
     }

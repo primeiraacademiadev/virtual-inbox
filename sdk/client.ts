@@ -89,7 +89,7 @@ export type SmtpRuleInput = {
 };
 export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string; scope: "GLOBAL" | "SPECIFIC"; priority: number; selectors: SmtpReplySelectors };
 export type SmtpResolveInput = { credentials?: { username: string; password: string }; origin?: { ip: string } };
-export type SmtpResolveOrigin = { id: string; ip: string; connections: Array<{ id: string; credentialsId?: string; connected: boolean; connectedAt: string }> };
+export type SmtpResolveOrigin = { id: string; ip: string; connections: Array<{ id: string; credentialsIds?: string[]; connected: boolean; connectedAt: string }> };
 export type SmtpResolveResult = { credentials?: { id: string; origins: SmtpResolveOrigin[] }; origins?: SmtpResolveOrigin[] };
 export type LegacySimulationInput = {
   protocol: "SMTP" | "POP3";

@@ -169,3 +169,14 @@ test("optional TTL expires unconsumed rules without timer races and frees capaci
   assert.equal(store.consume("MAIL",{})?.id,replacement.id,
     "rules with no TTL stay eligible while remaining is positive");
 });
+
+
+test("reset is a separate connection-breaking action without SMTP reply code", () => {
+  const store = new SmtpReplyRuleStore();
+  const rule = store.create({phase:"CONNECT",action:"reset",remaining:1,
+    selectors:{connection:{port:2525}}});
+  assert.equal(store.consume("CONNECT",{localPort:2525})?.id,rule.id);
+  assert.equal(store.consume("CONNECT",{localPort:2525}),undefined);
+  assert.throws(() => store.create({phase:"MAIL",action:"reset",code:451,remaining:1}),Fault);
+  assert.throws(() => store.create({phase:"MAIL",action:"reset",durationMs:20,remaining:1}),Fault);
+});

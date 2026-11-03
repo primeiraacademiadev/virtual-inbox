@@ -316,6 +316,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "smtpRuleResolve": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const retained = new Set(smtpSessions.listSessions().map(s => s.id));
+        for (const id of smtpCredentialIds.keys()) if (!retained.has(id)) smtpCredentialIds.delete(id);
         const sessions = smtpSessions.listSessions().map(s => ({
           id: s.id, remoteAddress: s.remoteAddress, connected: s.connected,
           connectedAt: s.connectedAt, credentialsId: smtpCredentialIds.get(s.id),
@@ -817,7 +819,7 @@ const smtpOptions: SMTPServerOptions = {
       cancelFaultWaits(id);
       smtpAttempts.disconnect(id);
       for (const rule of simulations.listConnection(id)) simulations.delete(rule.id);
-      smtpSessions.disconnect(id); smtpCredentialIds.delete(id); protocolCounters.disconnect("SMTP");
+      smtpSessions.disconnect(id); protocolCounters.disconnect("SMTP");
       sandbox.log("smtp.session.disconnected", undefined, undefined, { sessionId: id });
     }
   },

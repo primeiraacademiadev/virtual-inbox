@@ -763,7 +763,7 @@ function installGreetingRules(session: object): void {
     const method = commandName === "EHLO" ? "handler_EHLO" : "handler_HELO";
     const original = connection[method]!.bind(connection);
     connection[method] = (command, callback) => {
-      const value = command.toString().trim().split(/\\s+/);
+      const value = command.toString().trim().split(/\s+/);
       const ehloName = value.length === 2 ? value[1].toLowerCase() : undefined;
       const info = session as { remoteAddress?: string; localPort?: number; remotePort?: number };
       const rule = smtpReplyRules.consume("EHLO", {

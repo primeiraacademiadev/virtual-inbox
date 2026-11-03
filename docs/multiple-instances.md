@@ -86,7 +86,13 @@ node -e "Promise.all([3000,3100].map(async p=>{const base='http://127.0.0.1:'+p+
 
 Expect HTTP 200 twice and **different `runId` values**. Discover actual ports with `GET /api/connection-info` on each address. Check both TLS identities by reading their public certificates through `GET /api/tls/status` (no private key is returned); certificate fingerprints should differ because each directory stores an independent locally generated CA and server identity. For TLS *clients*, trust the correct instance-specific `ca.pem` file rather than disabling certificate verification.
 
-For a quick isolation check, create a synthetic inbox in instance A with `POST http://127.0.0.1:3000/api/mailboxes` and JSON `{"address":"parallel-a@sandbox.test"}`; it must not appear in the `GET http://127.0.0.1:3100/api/mailboxes` result on B. Shared process limits (CPU/RAM) and host networking remain common resources.
+For a quick isolation check, run this from the repository root (or any directory with Node.js 24+):
+
+```sh
+node -e "async function check(){const name='parallel-a@sandbox.test';const a='http://127.0.0.1:3000/api/mailboxes';const b='http://127.0.0.1:3100/api/mailboxes';const c=await fetch(a,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:name})});if(c.status!==201)throw Error('Create on A: '+c.status);const r=await fetch(b);if(!r.ok)throw Error('Read B: '+r.status);const boxes=await r.json();if(boxes.some(x=>x.address===name))throw Error('Isolation failed');console.log('Isolated: inbox exists only on A');}check().catch(e=>{console.error(e);process.exitCode=1})"
+```
+
+Run with a fresh instance A so the address has not already been created. Shared process limits (CPU/RAM) and host networking remain common resources.
 
 ## 4. Stop and clean up
 

@@ -56,6 +56,7 @@ plugins:
             SMTP and POP3 test identities: Identidades SMTP e POP3
             Docker: Docker
             Configuration: Configuração
+            Multiple instances: Múltiplas instâncias
             Identity generation: Geração de identidades
             SMTP diagnostics: Diagnósticos SMTP
             Internationalization: Internacionalização
@@ -79,6 +80,7 @@ plugins:
             SMTP and POP3 test identities: Identités SMTP et POP3
             Docker: Docker
             Configuration: Configuration
+            Multiple instances: Instances multiples
             Identity generation: Génération des identités
             SMTP diagnostics: Diagnostics SMTP
             Internationalization: Internationalisation
@@ -101,6 +103,7 @@ nav:
       - SMTP and POP3 test identities: reference/test-identities-and-pop3.md
       - Docker: reference/docker.md
       - Configuration: reference/configuration.md
+      - Multiple instances: reference/multiple-instances.md
       - Identity generation: reference/identity-generation.md
       - SMTP diagnostics: reference/smtp-session-diagnostics.md
       - Internationalization: reference/i18n.md

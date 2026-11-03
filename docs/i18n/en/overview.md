@@ -15,6 +15,8 @@ npm start
 
 Open `http://127.0.0.1:3000`. The same process serves HTTPS at `https://localhost:3443`, SMTP/STARTTLS at `2525` and SMTPS at `2465`. HTTPS requires explicit trust in the local CA. No `.env`, database, Kubernetes or external OpenSSL executable is required. `npm run dev` builds the console then runs the backend in watch mode; Vite is optional.
 
+For concurrent independent test processes, follow the [multiple-instances guide](../../multiple-instances.md); a shared instance remains the recommended default.
+
 ## Choose a journey
 
 Use [Demo](demo.md) to send and inspect messages manually, [Integration](integration.md) to point another application at the sandbox, [Automated tests](sdk.md) to assert delivery, and [TLS](tls.md) to configure trusted encrypted connections. [API](api.md) contains the generated management reference and OpenAPI download.

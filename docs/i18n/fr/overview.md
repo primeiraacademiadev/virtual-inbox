@@ -15,6 +15,8 @@ npm start
 
 Ouvrir `http://127.0.0.1:3000`. Le même processus propose HTTPS sur `https://localhost:3443`, SMTP/STARTTLS sur `2525` et SMTPS sur `2465`. HTTPS nécessite de faire explicitement confiance à l’AC locale. Aucun `.env`, base de données, Kubernetes ou exécutable OpenSSL n’est obligatoire. `npm run dev` construit la console puis lance le backend en watch ; Vite reste optionnel.
 
+Pour plusieurs processus de test indépendants, consulter le [guide multi-instances](../../multiple-instances.md) ; une instance partagée reste l'option recommandée.
+
 ## Choisir un parcours
 
 [Démonstration](demo.md) pour l’usage manuel ; [Intégration](integration.md) pour connecter une application ; [Tests automatiques](sdk.md) pour vérifier les livraisons ; [TLS](tls.md) pour les connexions chiffrées. [API](api.md) fournit la référence générée et OpenAPI.

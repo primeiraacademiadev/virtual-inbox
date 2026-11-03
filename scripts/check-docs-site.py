@@ -22,4 +22,7 @@ for locale, expected_heading in (
 reference = SITE / "reference" / "api" / "index.html"
 if not reference.is_file():
     raise SystemExit(f"Missing shared technical reference: {reference}")
+instances = SITE / "reference" / "multiple-instances" / "index.html"
+if not instances.is_file():
+    raise SystemExit(f"Missing multiple-instance guide: {instances}")
 print("Website entry points, language switcher and reference navigation verified.")

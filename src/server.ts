@@ -757,7 +757,7 @@ function waitForFault(sessionId: string, durationMs: number): Promise<boolean> {
   });
 }
 async function applySmtpFault(
-  phase: SmtpReplyPhase, session: any, sender?: string, recipients?: string[], persisted = false,
+  phase: Exclude<SmtpReplyPhase, "AUTH">, session: any, sender?: string, recipients?: string[], persisted = false,
 ): Promise<boolean> {
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;

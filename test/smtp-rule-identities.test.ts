@@ -27,9 +27,9 @@ test("SMTP resolve projects independent credential and origin relationships", ()
   const ids = new SmtpRuleIdentities();
   const c = ids.credentialsId("suite@example.test","synthetic-secret");
   const sessions = [
-    {id:"s1",remoteAddress:"127.0.0.1",credentialsId:c,connected:true,connectedAt:"2026-01-01T00:00:00Z"},
-    {id:"s2",remoteAddress:"10.1.1.53",credentialsId:c,connected:false,connectedAt:"2026-01-02T00:00:00Z"},
-    {id:"s3",remoteAddress:"127.0.0.1",credentialsId:"another",connected:true,connectedAt:"2026-01-03T00:00:00Z"},
+    {id:"s1",remoteAddress:"127.0.0.1",credentialsIds:[c],connected:true,connectedAt:"2026-01-01T00:00:00Z"},
+    {id:"s2",remoteAddress:"10.1.1.53",credentialsIds:[c],connected:false,connectedAt:"2026-01-02T00:00:00Z"},
+    {id:"s3",remoteAddress:"127.0.0.1",credentialsIds:["another"],connected:true,connectedAt:"2026-01-03T00:00:00Z"},
   ];
   const withCredentials = ids.resolve({credentials:{username:"suite@example.test",password:"synthetic-secret"}},sessions);
   if (!("credentials" in withCredentials) || !withCredentials.credentials) throw Error("Missing credentials");

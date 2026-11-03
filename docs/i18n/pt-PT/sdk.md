@@ -42,7 +42,7 @@ As leituras de sessoes e tentativas SMTP sao abertas em HTTP e HTTPS, sem token,
 
 ## SDK distribuível e erros tipados
 
-O SDK `@virtual-inbox/client` é um pacote ESM compilado a partir de `sdk/client.ts`. A versão publicada no npm é 0.2.1; este branch prepara a versão 0.3.0 com regras AUTH e resolve, **ainda não publicada**. Para criar um pacote local: `npm run build --prefix sdk` e `cd sdk && npm pack --dry-run`; o ficheiro `.tgz` pode ser instalado noutro repositório sem checkout do Virtual Inbox. O SDK foi publicado no npm; versoes futuras seguem o workflow de release. O cliente inclui `VirtualInboxError` (`status`, `errorCode`, `errorParams`, `cause`) e `waitOrThrow()` que distingue ausência de observação de rejeição SMTP. Em timeout, recolhe apenas metadados das últimas cinco mensagens da inbox pretendida; não consulta anomalias nem logs globais de outras suites. O método `wait()` continua a devolver `null` em HTTP 204. Métodos adicionais: `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, sessões SMTP e configuração das regras. As escritas administrativas exigem `adminUrl` HTTPS e `adminToken` explícitos: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Não registar tokens em logs de teste.
+O SDK `@virtual-inbox/client` é um pacote ESM compilado a partir de `sdk/client.ts`. A versão do SDK no repositório é 0.5.0; isto **não significa** que seja a última publicada no npm. Confirmar a versão no registo npm antes da instalação. Para criar um pacote local: `npm run build --prefix sdk` e `cd sdk && npm pack --dry-run`; o ficheiro `.tgz` pode ser instalado noutro repositório sem checkout do Virtual Inbox. O SDK foi publicado no npm; versoes futuras seguem o workflow de release. O cliente inclui `VirtualInboxError` (`status`, `errorCode`, `errorParams`, `cause`) e `waitOrThrow()` que distingue ausência de observação de rejeição SMTP. Em timeout, recolhe apenas metadados das últimas cinco mensagens da inbox pretendida; não consulta anomalias nem logs globais de outras suites. O método `wait()` continua a devolver `null` em HTTP 204. Métodos adicionais: `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, sessões SMTP e configuração das regras. As escritas administrativas exigem `adminUrl` HTTPS e `adminToken` explícitos: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Não registar tokens em logs de teste.
 
 ## Asserções negativas e tentativas SMTP (#39)
 
@@ -56,7 +56,7 @@ Por omissão, criar novamente o mesmo endereço continua a devolver `409`. Para 
 
 `MAX_LOG_BUFFER_BYTES` limita a memória ocupada pelo histórico circular (10485760 bytes = 10 MiB por omissão; inteiro positivo). Eventos maiores do que o limite não são retidos, mas são emitidos em direto. Cada evento inclui `log_id` crescente por execução e preserva `id=runId:sequence` para compatibilidade. `log.gap` indica `missingFrom` e `missingTo` quando o cursor refere eventos já descartados; `log.reset` assinala mudança de execução. A consola permite selecionar 500, 2000, 5000 ou 10000 entradas nesta sessão de navegador; não há persistência após fecho. O número efetivo de eventos no buffer depende do tamanho serializado de cada evento. Apenas dados sintéticos devem ser utilizados. Os endpoints REST `/api/logs` e SSE `/api/logs/events` (incluindo observadores) aceitam `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient` e `ruleId`; correspondência exata, conjunção de critérios. `recipient` corresponde a qualquer membro de um array. Eventos fora do filtro não representam lacunas.
 
-## Simulação de AUTH e âmbitos das regras SMTP (v0.3)
+## Simulação de AUTH e âmbitos das regras SMTP
 
 Antes da ligação, `resolveSmtp({credentials:{username,password}, origin:{ip}})` resolve um ou ambos os critérios e devolve IDs opacos e uma árvore das ligações **efetivamente observadas**, sem devolver a password. Com `createSmtpRule`, uma regra AUTH específica de IP não precisa de indicar credenciais:
 
@@ -65,9 +65,9 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
   priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
 ```
 
-As regras **GLOBAL** não têm `selectors` (ou usam `{}`); as **SPECIFIC** têm pelo menos um. Todos os seletores presentes são combinados por **AND**. Se não estiverem presentes, não restringem; **não existe wildcard `"*"`**. Primeiro procura-se uma regra SPECIFIC elegível, depois GLOBAL; dentro de cada âmbito decide a maior `priority` e, em empate, a regra inserida primeiro. Consome-se apenas uma regra por evento. AUTH aceita respostas 400–599; CONNECT/EHLO e inbox/SMS ficam para outras evoluções. O resolve e a configuração exigem HTTPS e token administrativo; passwords nunca entram nos logs. [Especificação completa](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+As regras **GLOBAL** não têm `selectors` (ou usam `{}`); as **SPECIFIC** têm pelo menos um. Todos os seletores presentes são combinados por **AND**. Se não estiverem presentes, não restringem; **não existe wildcard `"*"`**. Primeiro procura-se uma regra SPECIFIC elegível, depois GLOBAL; dentro de cada âmbito decide a maior `priority` e, em empate, a regra inserida primeiro. Consome-se apenas uma regra por evento. AUTH aceita respostas 400–599; CONNECT/EHLO/HELO já suportam reply/drop/hang/delay. Os seletores por inbox email/SMS continuam previstos no #76. O resolve e a configuração exigem HTTPS e token administrativo; passwords nunca entram nos logs. [Especificação completa](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
 
-## Simulação de CONNECT e EHLO (código SDK v0.4.0)
+## Simulação de CONNECT e EHLO
 
 As regras CONNECT são avaliadas **após aceitar a ligação TCP, antes da saudação SMTP 220**. As regras EHLO são avaliadas quando o cliente envia HELO/EHLO. As ações são `reply` (4xx/5xx), `drop` (corte sem resposta), `hang` (espera limitada e corte) e `delay` (atraso limitado de resposta ou continuação normal).
 
@@ -82,10 +82,10 @@ await sdk.createSmtpRule({
 });
 ```
 
-`connection.port` é a **porta local do listener**; `remotePort` é metadado efémero. O nome EHLO é **declarado pelo cliente**, sem autenticação, e não é conhecido em CONNECT; as credenciais não são conhecidas nem em CONNECT nem em EHLO. Seletores presentes usam AND; ausentes não restringem. Regras SPECIFIC elegíveis têm precedência sobre GLOBAL, independentemente da prioridade numérica. `drop` após accept não equivale a recusa da ligação TCP. O código do SDK 0.4.0 está preparado, **ainda sem publicação**; npm 0.3.0 é a última versão cuja publicação foi confirmada.
+`connection.port` é a **porta local do listener**; `remotePort` é metadado efémero. O nome EHLO é **declarado pelo cliente**, sem autenticação, e não é conhecido em CONNECT; as credenciais não são conhecidas nem em CONNECT nem em EHLO. Seletores presentes usam AND; ausentes não restringem. Regras SPECIFIC elegíveis têm precedência sobre GLOBAL, independentemente da prioridade numérica. `drop` após accept não equivale a recusa da ligação TCP. Estas capacidades CONNECT/EHLO estão disponíveis no código do repositório. Confirmar a versão do pacote no registo npm antes de as utilizar.
 
 
-## Operações adicionais para consumidores (SDK fonte 0.5.0, não publicado)
+## Operações adicionais para consumidores (SDK fonte 0.5.0)
 
 O SDK já inclui `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` e gestão de regras. Acrescenta agora:
 
@@ -99,4 +99,4 @@ if (replay.gap || replay.reset) {
 }
 ```
 
-`logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. A versão fonte 0.5.0 **ainda não foi publicada** no npm.
+`logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. O SDK no repositório está na versão 0.5.0; confirmar no registo npm a disponibilidade dessa versão antes de a instalar.

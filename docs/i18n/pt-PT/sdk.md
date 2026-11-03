@@ -93,10 +93,16 @@ O SDK já inclui `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSe
 const state = await sdk.ready(); // HTTP 503 devolve { ready: false, ... }
 const message = await sdk.getMessage(inbox, messageId);
 await sdk.deleteMessage(inbox, messageId);
-const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+const page = await sdk.logs({ limit: 100, ruleId }); // página descendente
+const replay = await sdk.logs({ after: "runId:120", ruleId }); // replay por ID de evento
 if (replay.gap || replay.reset) {
   // Tratar missingFrom/missingTo e runId antes de continuar.
 }
 ```
 
 `logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. O SDK no repositório está na versão 0.5.0; confirmar no registo npm a disponibilidade dessa versão antes de a instalar.
+
+
+### Modos de consulta dos logs
+
+O replay do log usa o identificador de evento `runId:log_id` (igual ao cursor SSE), **não apenas o número log_id**. `limit`/`before` selecionam paginação descendente e não podem ser combinados com `after` ou `from`/`to`. As respostas são distintas: replay inclui `gap`/`reset`/`missingFrom`/`missingTo`, enquanto a página inclui `hasMore`/`nextBefore`. O exemplo `runId:120` é ilustrativo; utilizar um ID efetivamente devolvido pelo servidor.

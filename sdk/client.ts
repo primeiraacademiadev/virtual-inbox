@@ -81,7 +81,7 @@ export type SmtpReplySelectors = {
 };
 export type SmtpRuleInput = {
   phase: "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
-  action: "reply" | "delay" | "drop" | "hang";
+  action: "reply" | "delay" | "drop" | "hang" | "reset";
   remaining: number;
   selectors?: SmtpReplySelectors;
   priority?: number;

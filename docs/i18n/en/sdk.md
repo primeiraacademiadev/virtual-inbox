@@ -93,10 +93,16 @@ The SDK includes the existing `create`, `delete`, `messages`, `wait`, `smtpAttem
 const state = await sdk.ready(); // 503 during startup returns { ready: false, ... }
 const one = await sdk.getMessage(inbox, messageId);
 await sdk.deleteMessage(inbox, messageId);
-const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+const page = await sdk.logs({ limit: 100, ruleId }); // página descendente
+const replay = await sdk.logs({ after: "runId:120", ruleId }); // replay por ID de evento
 if (replay.gap || replay.reset) {
   // Handle the server's missingFrom/missingTo and runId before resuming.
 }
 ```
 
 `logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. The repository SDK source is 0.5.0; verify availability of this version in npm before installation.
+
+
+### Log cursor modes
+
+Log replay uses the exact `runId:log_id` event ID (the same cursor as SSE), **not a bare numeric log_id**. `limit`/`before` selects descending pagination and must never be mixed with `after` or `from`/`to`. The result shape differs: replay has `gap`/`reset`/`missingFrom`/`missingTo`, while pagination has `hasMore`/`nextBefore`. The example `runId:120` is illustrative; use an ID actually returned by your server.

@@ -5,7 +5,7 @@ Status: V1-V4 merged. V7-V9 proposed in a separate PR following real Communicati
 ## V1 SMTP authentication and sessions
 Accept arbitrary SMTP test credentials with onAuth. Each SMTP connection has a UUID and records remote address, TLS, authentication attempt metadata, timestamps, messages and errors. Client grouping by IP and authenticated username is observational, not proof of application identity.
 
-Username and password are independently derived with scrypt using random per-value 16-byte salts. Digest and salt remain only in the bounded ephemeral server store, never in REST, SSE or logs. POST /api/admin/smtp/sessions/{sessionId}/verify accepts user and password over HTTPS with ADMIN_TOKEN, checks a recorded attempt and returns match booleans. The console offers an SMTP clients view, history and verification. GET /api/admin/smtp/clients and /api/admin/smtp/sessions are also admin-only over HTTPS.
+Username and password are independently derived with scrypt using random per-value 16-byte salts. Digest and salt remain only in the bounded ephemeral server store, never in REST, SSE or logs. POST /api/admin/smtp/sessions/{sessionId}/verify accepts user and password over HTTPS with ADMIN_TOKEN, checks a recorded attempt and returns match booleans. The console offers an SMTP clients view, history and verification. GET /api/admin/smtp/sessions and filtered GET /api/admin/smtp/attempts are public diagnostic reads over HTTP or HTTPS without an admin token (ADR-0001). GET /api/admin/smtp/clients remains an authenticated HTTPS operation in this change.
 
 ## V2 Message metadata
 Email responses expose MIME headers as an ordered array (including repetitions), the entire SMTP envelope and smtpSessionId. Bcc is derived from RCPT TO even when absent from headers.
@@ -23,7 +23,7 @@ Restrict listener exposure to trusted test networks. Configure NODE_EXTRA_CA_CER
 - VI-A00: Communication with SMTP AUTH sends and delivers without EAUTH 535.
 - VI-A01: Credential check matches original values and rejects incorrect user/password.
 - VI-A02: Distinct TCP connections get distinct sessions; client grouping is consistent.
-- VI-A03: Diagnostics inaccessible over HTTP or without valid HTTPS admin token.
+- VI-A03: Session and filtered attempt observations work on HTTP and HTTPS without a token; credential verification and simulation writes remain restricted to HTTPS with an admin token.
 - VI-A04: Envelope contains Bcc recipient even where MIME headers do not.
 - VI-A05: HTML-only message is located by bodyContains and htmlContains.
 - VI-A06: Header search finds X-Message-Id and Reply-To.

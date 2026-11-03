@@ -84,25 +84,26 @@ test("VI-R03: global fallback never overrides specific matches, even under inter
 
 test("VI-R04: replay gap and process reset retain run-scoped ordering and filter out false gaps", () => {
   const box = new Sandbox(3);
-  const [one,two,three,four] = [
+  const [one,two,three,four,five] = [
     box.log("smtp.session.connected",undefined,undefined,{smtpSessionId:"s1"}),
     box.log("smtp.simulation.applied",undefined,undefined,{ruleId:"r1",smtpSessionId:"s1"}),
     box.log("smtp.session.connected",undefined,undefined,{smtpSessionId:"s2"}),
     box.log("smtp.simulation.applied",undefined,undefined,{ruleId:"r2",smtpSessionId:"s2"}),
+    box.log("smtp.simulation.applied",undefined,undefined,{ruleId:"r3",smtpSessionId:"s3"}),
   ];
-  assert.deepEqual([one,two,three,four].map(e=>e.log_id),[1,2,3,4]);
+  assert.deepEqual([one,two,three,four,five].map(e=>e.log_id),[1,2,3,4,5]);
   const replay = box.replay(one.id,{type:"smtp.simulation.applied",includeAnomalies:false});
   assert.equal(replay.gap,true);
   assert.equal(replay.missingFrom,2);
-  assert.equal(replay.missingTo,1 === 0 ? 0 : 1); // overridden below by retention-specific assertions
-  assert.deepEqual(replay.events.map(e=>e.id),[two.id,four.id]);
+  assert.equal(replay.missingTo,2);
+  assert.deepEqual(replay.events.map(e=>e.id),[four.id,five.id]);
   assert.ok(replay.events.every(e=>e.type==="smtp.simulation.applied"));
-  const filtered = box.replay(two.id,{ruleId:"r2",includeAnomalies:false});
+  const filtered = box.replay(three.id,{ruleId:"r2",includeAnomalies:false});
   assert.equal(filtered.gap,false,"events filtered out by query are not missing history");
   assert.deepEqual(filtered.events.map(e=>e.id),[four.id]);
   const newRun = new Sandbox(3);
   newRun.log("smtp.session.connected");
-  const reset = newRun.replay(four.id);
+  const reset = newRun.replay(five.id);
   assert.equal(reset.reset,true);
   assert.notEqual(newRun.runId,box.runId);
 });

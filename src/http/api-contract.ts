@@ -131,12 +131,14 @@ export const schemas: Record<string, Schema> = {
   SmtpReplyRuleInput: object({
     phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
     code: { type: "integer", minimum: 400, maximum: 599 },
-    message: string, durationMs: { type: "integer", minimum: 1 }, remaining: { type: "integer", minimum: 1, maximum: 10000 },
+    message: string, durationMs: { type: "integer", minimum: 1 },
+    ttlMs: { type: "integer", minimum: 1, maximum: 86400000 }, remaining: { type: "integer", minimum: 1, maximum: 10000 },
     priority: { type: "integer", minimum: -10000, maximum: 10000 }, selectors: reference("SmtpReplySelectors"),
   }, ["phase", "action", "remaining"]),
   SmtpReplyRule: object({
     id: uuid, phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
-    code: integer, message: string, durationMs: integer, remaining: integer,
+    code: integer, message: string, durationMs: integer,
+    ttlMs: integer, expiresAt: { type: "string", format: "date-time" }, remaining: integer,
     priority: integer, scope: { enum: ["GLOBAL", "SPECIFIC"] },
     selectors: reference("SmtpReplySelectors"), createdAt: string,
   }, ["id", "phase", "action", "remaining", "priority", "scope", "selectors", "createdAt"]),

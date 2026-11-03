@@ -129,14 +129,14 @@ export const schemas: Record<string, Schema> = {
     id: uuid, credentialsIds: array(uuid), connected: boolean, connectedAt: string,
   }, ["id", "connected", "connectedAt"])) }, ["id", "ip", "connections"]),
   SmtpReplyRuleInput: object({
-    phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
+    phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang", "reset"] },
     code: { type: "integer", minimum: 400, maximum: 599 },
     message: string, durationMs: { type: "integer", minimum: 1 },
     ttlMs: { type: "integer", minimum: 1, maximum: 86400000 }, remaining: { type: "integer", minimum: 1, maximum: 10000 },
     priority: { type: "integer", minimum: -10000, maximum: 10000 }, selectors: reference("SmtpReplySelectors"),
   }, ["phase", "action", "remaining"]),
   SmtpReplyRule: object({
-    id: uuid, phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
+    id: uuid, phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang", "reset"] },
     code: integer, message: string, durationMs: integer,
     ttlMs: integer, expiresAt: { type: "string", format: "date-time" }, remaining: integer,
     priority: integer, scope: { enum: ["GLOBAL", "SPECIFIC"] },

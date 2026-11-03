@@ -125,7 +125,7 @@ export const schemas: Record<string, Schema> = {
     origins: array(reference("SmtpResolveOrigin")),
   }),
   SmtpResolveOrigin: object({ id: uuid, ip: string, connections: array(object({
-    id: uuid, credentialsId: uuid, connected: boolean, connectedAt: string,
+    id: uuid, credentialsIds: array(uuid), connected: boolean, connectedAt: string,
   }, ["id", "connected", "connectedAt"])) }, ["id", "ip", "connections"]),
   SmtpReplyRuleInput: object({
     phase: { enum: ["AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },

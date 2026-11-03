@@ -1,6 +1,6 @@
 # Running independent Virtual Inbox instances
 
-Virtual Inbox **recommends one shared instance** for ordinary suites, but multiple processes on the same host are fully supported when each instance owns its listeners and persistent configuration. They have **independent process memory**: no shared inboxes, messages, logs, SMTP sessions, fault rules, observers, or counters. This is process-level isolation, not an authorization or tenant model (see [ADR-0001](adr/0001-test-sandbox-observability.md)). Use synthetic data on a trusted test network.
+Virtual Inbox **recommends one shared instance** for ordinary suites, but multiple processes on the same host are fully supported when each instance owns its listeners and persistent configuration. They have **independent process memory**: no shared inboxes, messages, logs, SMTP sessions, fault rules, observers, or counters. This is process-level isolation, not an authorization or tenant model (see [ADR-0001](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/adr/0001-test-sandbox-observability.md)). Use synthetic data on a trusted test network.
 
 This example runs **two instances with TLS enabled** on Windows PowerShell, CMD or a POSIX shell. It does not require Docker, a dedicated multi-instance mode, or a new service.
 

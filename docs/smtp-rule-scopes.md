@@ -1,4 +1,4 @@
-# SMTP simulation rule scope, selectors and AUTH failures
+# SMTP simulation scopes, selectors and protocol failures
 
 > **Test sandbox only.** All addresses and credentials must be synthetic. The in-memory rule store is per Virtual Inbox process, without multi-tenant authorization. The administration endpoints for resolving credentials and creating rules require HTTPS + `ADMIN_TOKEN`.
 

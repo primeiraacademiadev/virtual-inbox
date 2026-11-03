@@ -202,6 +202,23 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     const hangResult = await observeSocket();
     assert.equal(hangResult.reply,"","hang must not send a SMTP code");
     assert.ok(hangResult.elapsed >= 90,"hang waited before disconnect");
+    const connectDelayResponse = await api("POST", "/admin/smtp/reply-rules", {
+      phase:"CONNECT",action:"delay",code:421,durationMs:120,remaining:1,
+      selectors:{connection:{port:smtpPort}},
+    });
+    assert.equal(connectDelayResponse.status,201);
+    const delayedConnect = await observeSocket();
+    assert.match(delayedConnect.reply,/^421 /);
+    assert.ok(delayedConnect.elapsed>=90,"delayed CONNECT reply");
+    const ehloDelayResponse = await api("POST", "/admin/smtp/reply-rules", {
+      phase:"EHLO",action:"delay",code:421,durationMs:120,remaining:1,
+      selectors:{ehloName:"delay.example.test"},
+    });
+    assert.equal(ehloDelayResponse.status,201);
+    const delayedEhlo = await observeSocket("EHLO delay.example.test");
+    assert.match(delayedEhlo.reply,/^220 /);
+    assert.match(delayedEhlo.reply,/421 /);
+    assert.ok(delayedEhlo.elapsed>=90,"delayed EHLO reply");
     const earlyLogResponse = await fetch("http://127.0.0.1:" + port +
       "/api/logs?type=smtp.simulation.applied");
     assert.equal(earlyLogResponse.status,200);

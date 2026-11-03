@@ -106,6 +106,14 @@ test("transport simulation: MAIL delay, post-DATA drop and persistence without A
     const again=await fetch("http://127.0.0.1:"+httpPort+"/api/mailboxes/"+inbox.id+"/messages");
     const later=await again.json() as Array<{subject:string}>;
     assert.ok(!later.some((m)=>m.subject==="pre-hang"),"DATA hang must not persist");
+    await admin({phase:"MAIL", action:"reset", remaining:1, selectors:{sender}});
+    await assert.rejects(send("wire-reset"), "TCP reset should interrupt the SMTP client");
+    const afterReset=await fetch("http://127.0.0.1:"+httpPort+"/api/mailboxes/"+inbox.id+"/messages");
+    const finalMessages=await afterReset.json() as Array<{subject:string}>;
+    assert.ok(!finalMessages.some((m)=>m.subject==="wire-reset"), "MAIL reset must not persist data");
+    await send("following-reset");
+    assert.equal((await fetch("http://127.0.0.1:"+httpPort+"/api/health")).status,200);
+
   } finally {
     if (child.exitCode===null) {
       child.kill("SIGTERM");

@@ -33,4 +33,4 @@ The volume preserves certificates/settings, not messages. Within Compose use the
 
 ## First check and troubleshooting
 
-`GET /api/health` should return `status: ok` and a `runId`. No console: run `npm run build` and refresh. Connection refused: check process, published ports and `/api/connection-info`. Port in use: change the relevant environment variable before starting. A setting apparently ignored may be overridden by persisted network settings; see [TLS](tls.md).
+`GET /api/health` should return `status: ok` and a `runId`. No console: run `npm run build` and refresh. Connection refused: check process, published ports and `/api/connection-info`. Port in use: change the relevant environment variable before starting. Environment values take precedence over persisted network settings; inspect startup warnings for shadowed saved keys, then see [TLS](tls.md).

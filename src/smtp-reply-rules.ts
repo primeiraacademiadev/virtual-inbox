@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
 export type SmtpReplyPhase = "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
-export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang";
+export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang" | "reset";
 export type SmtpReplySelectors = {
   sender?: string;
   recipient?: string;
@@ -41,7 +41,7 @@ export type SmtpReplyContext = {
 };
 
 const PHASES = new Set(["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"]);
-const ACTIONS = new Set(["reply", "delay", "drop", "hang"]);
+const ACTIONS = new Set(["reply", "delay", "drop", "hang", "reset"]);
 const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors", "durationMs", "priority", "ttlMs"]);
 const SELECTORS = new Set(["sender", "recipient", "clientId", "smtpSessionId", "origin", "credentialsId", "connection", "ehloName"]);
 const ADDRESS_FIELDS = new Set(["sender", "recipient"]);
@@ -77,8 +77,8 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
     invalid("AUTH currently supports reply rules only");
   if (action === "reply" && input.code === undefined)
     invalid("Reply action requires an SMTP error code");
-  if ((action === "drop" || action === "hang") && input.code !== undefined)
-    invalid("Drop and hang actions cannot specify an SMTP reply code");
+  if ((action === "drop" || action === "hang" || action === "reset") && input.code !== undefined)
+    invalid("Drop, reset and hang actions cannot specify an SMTP reply code");
   if (input.code !== undefined &&
       (!Number.isInteger(input.code) || (input.code as number) < 400 || (input.code as number) > 599))
     invalid("SMTP reply code must be an integer from 400 to 599");

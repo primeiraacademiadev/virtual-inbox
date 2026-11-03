@@ -109,6 +109,10 @@ export type ConnectionDataSimulationInput = {
 export type TestSession = { sessionId: string; inbox: string };
 export type SmtpClient = { id: string; remoteAddress?: string; authUser?: string; activeSessions: number; totalSessions: number };
 export type ConnectionInfo = Record<string, unknown>;
+export type Readiness = { ready: boolean; runId: string; listeners: Array<{name:string; port:number; host:string}> };
+export type LogEvent = { id:string; log_id:number; type:string; at:string; resourceId?:string; inboxId?:string; messageId?:string; smtpSessionId?:string; attemptId?:string; data?:Record<string,unknown> };
+export type LogReplay = {events:LogEvent[];gap:boolean;reset:boolean;runId:string;oldest?:string;latest?:string;missingFrom?:number;missingTo?:number};
+export type LogFilters = { after?:number; limit?:number; before?:number; from?:number; to?:number; type?:string; inboxId?:string; messageId?:string; smtpSessionId?:string; attemptId?:string; sender?:string; recipient?:string; ruleId?:string; includeAnomalies?:boolean };
 
 /** HTTP failures retain the structured server error and the original cause. */
 export class VirtualInboxError extends Error {
@@ -214,6 +218,18 @@ export class VirtualInboxClient {
     });
   }
 
+  /** A 503 response is returned as readiness=false, not confused with transport failure. */
+  async ready(): Promise<Readiness> {
+    const response = await this.fetchResponse("/ready");
+    if (response.status !== 200 && response.status !== 503) await this.responseError(response);
+    try {
+      return await response.json() as Readiness;
+    } catch (cause) {
+      throw new VirtualInboxError("Invalid readiness response", response.status,
+        "INVALID_RESPONSE", {}, {cause});
+    }
+  }
+
   capabilities(): Promise<{ version: string; schemaVersion: number; protocols: Record<string, boolean>; smtpAuthPolicy: "INBOX" | "OPEN"; inbox: {idempotentCreate:boolean; ifExists:string[]; reservedDomain:string}; simulation: {phases:string[]; actions:string[]} }> {
     return this.request("/capabilities");
   }
@@ -222,6 +238,28 @@ export class VirtualInboxClient {
     const collection = channel === "email" ? "/mailboxes" : "/phone-numbers";
     const found = await this.request<Inbox[]>(collection + "?address=" + encodeURIComponent(address));
     return found[0] ?? null;
+  }
+
+  getMessage(inbox: Inbox, messageId: string): Promise<InboxMessage> {
+    return this.request(this.path(inbox) + "/messages/" + encodeURIComponent(messageId));
+  }
+
+  deleteMessage(inbox: Inbox, messageId: string): Promise<void> {
+    return this.request(this.path(inbox) + "/messages/" + encodeURIComponent(messageId),
+      {method:"DELETE"});
+  }
+
+  /** Replay structured logs with explicit cursor and server-side filters. */
+  logs(filters: LogFilters = {}): Promise<LogReplay> {
+    const query = new URLSearchParams();
+    for (const [key,value] of Object.entries(filters)) {
+      if (value === undefined) continue;
+      if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0))
+        throw new VirtualInboxError("Invalid log cursor or limit", 0, "INVALID_LOG_FILTER");
+      query.set(key,String(value));
+    }
+    const suffix = query.size ? "?" + query : "";
+    return this.request("/logs" + suffix);
   }
 
   messages(inbox: Inbox, after = 0): Promise<InboxMessage[]> {

@@ -762,8 +762,10 @@ async function applySmtpFault(
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;
   const clientId = current?.authenticated ? current.clientId : undefined;
+  const credentialsId = smtpSessionId ? smtpCredentialIds.get(smtpSessionId) : undefined;
+  const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
   const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId,
-    originIp: current?.remoteAddress?.replace(/^::ffff:/, "") });
+    originIp, credentialsId });
   if (!rule) return false;
   const responseCode = rule.code;
   const attemptId=activeAttempts.get(session);
@@ -774,7 +776,8 @@ async function applySmtpFault(
   sandbox.log("smtp.simulation.applied", undefined, undefined, {
     ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
     phase, action: rule.action, responseCode, durationMs: rule.durationMs,
-    originIp: current?.remoteAddress?.replace(/^::ffff:/, ""),
+    originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
+    credentialsId,
     smtpSessionId, clientId, sender, recipients, persisted, outcome,
   });
   if (rule.action !== "delay" || responseCode !== undefined) {

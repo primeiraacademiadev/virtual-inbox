@@ -54,14 +54,16 @@ These two rules do not conflict: AUTH from `10.1.1.53` receives `454` three time
 
 | Selector | Meaning | Eligible phases in this delivery |
 | --- | --- | --- |
-| `origin.ip` | Remote IP, IPv4 or IPv6, normalized from IPv4-mapped IPv6 | AUTH, MAIL, RCPT, DATA, AFTER_DATA |
+| `origin.ip` | Remote IP, IPv4 or IPv6, normalized from IPv4-mapped IPv6 | CONNECT, EHLO, AUTH, MAIL, RCPT, DATA, AFTER_DATA |
 | `credentialsId` | Opaque ID for the exact synthetic username+password pair resolved via the API | AUTH, MAIL, RCPT, DATA, AFTER_DATA |
-| `smtpSessionId` | Single observed SMTP connection | AUTH, MAIL, RCPT, DATA, AFTER_DATA |
+| `smtpSessionId` | Single observed SMTP connection | CONNECT, EHLO, AUTH, MAIL, RCPT, DATA, AFTER_DATA |
 | `clientId` | Legacy observed client correlation ID, not a credential identity | MAIL, RCPT, DATA, AFTER_DATA |
+| `connection.port` | Local listener/destination TCP port, **not** ephemeral remote port | CONNECT, EHLO, AUTH, MAIL, RCPT, DATA, AFTER_DATA |
+| `ehloName` | Hostname declared by the peer in HELO/EHLO, **not authenticated** | EHLO, AUTH, MAIL, RCPT, DATA, AFTER_DATA |
 | `sender` | MAIL FROM envelope address | MAIL, RCPT, DATA, AFTER_DATA |
 | `recipient` | RCPT TO envelope address | RCPT, DATA, AFTER_DATA |
 
-This release introduces **AUTH reply** rules (SMTP codes 400–599) only. Existing `delay`, `drop`, `hang` actions remain supported for MAIL/RCPT/DATA/AFTER_DATA; do not use them with AUTH yet. CONNECT, EHLO, local listener port, EHLO name and inbox/SMS selectors are reserved for issues #66 and #76 and **are not implemented here**.
+This release supports **CONNECT** and **EHLO/HELO** reply, delay, drop and hang rules, alongside AUTH reply rules (SMTP codes 400–599) and existing MAIL/RCPT/DATA/AFTER_DATA actions. `connection.port` is the **local SMTP listener port**; `remotePort` is diagnostic only. Inbox/SMS selectors remain separate work in #76.
 
 ### Resolve before AUTH
 
@@ -102,6 +104,56 @@ A rule application emits a structured `smtp.simulation.applied` log record with 
 ### Important separation
 
 - **AUTH** knows the presented credentials even if authentication will fail. The simulated error is checked **before normal credential validation**, so it is suitable for repeatable consumer retry tests.
-- **CONNECT** cannot know a username/password, EHLO or recipient. **EHLO** does not know credentials. Those cases belong to #66.
+- **CONNECT** cannot know a username/password, EHLO or recipient. **EHLO** knows a claimed hostname but not credentials. Rules specifying information unavailable in their phase are rejected with HTTP 400.
 - **Inbox email** becomes available during RCPT; **SMS** has a distinct HTTP processing model. Those selectors belong to #76.
 - An IP is not a verified logical client identity; multiple test processes may share it. Distinguish suites using synthetic credentials or separate Virtual Inbox instances when needed.
+
+## CONNECT and EHLO/HELO — real transport failure semantics
+
+A **CONNECT** rule is evaluated after the TCP listener accepts a socket, **before the SMTP 220 banner**. This is not a SYN refusal: the TCP connection already exists. To provoke a genuine TCP connection refusal (`ECONNREFUSED`), stop the listener or use an unused port; no SMTP callback can send a response before TCP accept.
+
+| Phase | Action | Observable behavior |
+| --- | --- | --- |
+| CONNECT | `reply` (`400..599`) | SMTP reply **before** 220, then connection rejected |
+| CONNECT | `drop` | Socket destroyed without SMTP greeting (typically EOF/reset; OS and client dependent) |
+| CONNECT | `hang` (`durationMs`) | No greeting until bounded timeout, then socket destroyed |
+| CONNECT | `delay` (`durationMs`, optional code) | Defer 220 greeting or defer rejection; code sends error before greeting |
+| EHLO / HELO | `reply` (`400..599`) | Normal 220 greeting, then error reply to EHLO/HELO |
+| EHLO / HELO | `drop` | Destroy socket during negotiation |
+| EHLO / HELO | `hang` (`durationMs`) | No EHLO reply until timeout, then disconnect |
+| EHLO / HELO | `delay` (`durationMs`, optional code) | Delay EHLO response; with code, reject after delay |
+
+The actual Nodemailer error classification varies by SMTP phase, client and server reply. A `421` EHLO reply terminates the SMTP session; for other 4xx/5xx codes Nodemailer may retry with HELO. This simulator applies EHLO rules to **both** greeting commands, subject to the rule's `remaining`.
+
+Example: refuse the next two connections to the SMTP listener on port 2525:
+
+```json
+{
+  "phase": "CONNECT",
+  "action": "reply",
+  "code": 421,
+  "remaining": 2,
+  "selectors": { "connection": { "port": 2525 } }
+}
+```
+
+Example: reject the EHLO greeting **only** when the client declares a given hostname, from the given origin:
+
+```json
+{
+  "phase": "EHLO",
+  "action": "reply",
+  "code": 421,
+  "remaining": 1,
+  "selectors": {
+    "origin": { "ip": "10.1.1.53" },
+    "ehloName": "communication-test.example"
+  }
+}
+```
+
+**Precedence remains unchanged:** an eligible SPECIFIC rule is selected before any GLOBAL rule, even if the GLOBAL priority is higher. Within a scope, sort by numeric priority descending and earliest insertion. All selectors present are ANDed; omitted selectors are unrestricted, and `"*"` is not a valid wildcard.
+
+**Observability:** `smtp.simulation.applied` includes `ruleId`, `scope`, `priority`, `phase`, `action`, `smtpSessionId`, `originIp`, `originId`, local/remote ports and `ehloName` if known, without credentials. Bounded delays are cancelled when the socket closes. The `smtp-server` package exposes no public EHLO callback; the Virtual Inbox keeps its version-specific greeting handler adapter isolated and tests it with real SMTP sockets, including TLS regression tests.
+
+**Phase restrictions:** `credentialsId` cannot select CONNECT or EHLO (credentials are unknown); `ehloName` cannot select CONNECT. The destination inbox remains unavailable at either stage.

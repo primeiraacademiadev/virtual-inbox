@@ -1,30 +1,32 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
 /** Ephemeral correlators, not authenticated client identities. No secret or raw password leaves this store. */
 export class SmtpRuleIdentities {
   private readonly secret = randomBytes(32);
-  private readonly credentials = new Map<string, string>();
-  private readonly origins = new Map<string, string>();
+  /** Stable in this process, with no growing identity dictionary. */
+  private idFor(kind: string, parts: string[]): string {
+    const digest = createHmac("sha256", this.secret)
+      .update(JSON.stringify([kind, ...parts]), "utf8").digest();
+    const bytes = Buffer.from(digest.subarray(0, 16));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = bytes.toString("hex");
+    return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+  }
 
   credentialsId(username: string, password: string): string {
     if (typeof username !== "string" || typeof password !== "string")
       throw new Fault(400, "Invalid SMTP credentials", "INVALID_SMTP_CREDENTIALS");
-    const key = createHmac("sha256", this.secret)
-      .update(JSON.stringify([username, password]), "utf8").digest("hex");
-    let id = this.credentials.get(key);
-    if (!id) { id = randomUUID(); this.credentials.set(key, id); }
-    return id;
+    return this.idFor("credentials", [username, password]);
   }
 
   originId(ip: string): string {
     if (typeof ip !== "string" || !isIP(ip.startsWith("::ffff:") ? ip.slice(7) : ip))
       throw new Fault(400, "Invalid SMTP origin", "INVALID_SMTP_ORIGIN");
     const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-    let id = this.origins.get(normalized);
-    if (!id) { id = randomUUID(); this.origins.set(normalized, id); }
-    return id;
+    return this.idFor("origin", [normalized]);
   }
 
   resolve(input: unknown, sessions: ReadonlyArray<{

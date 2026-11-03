@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { serveFrontend, errorCode, json, body } from "./http/server-helpers.js";
 import { observe } from "./http/event-stream.js";
+import { protectSmtpSocketErrors } from "./network/socket-errors.js";
 import { createServer as createHttpsServer } from "node:https";
 import {
   readFileSync, existsSync, statSync, writeFileSync, renameSync, mkdirSync,
@@ -989,6 +990,7 @@ const smtpOptions: SMTPServerOptions = {
 };
 const smtp = new SMTPServer(smtpOptions);
 const smtps = tlsIdentity ? new SMTPServer({ ...smtpOptions, secure: true }) : null;
+for (const listener of [smtp, smtps]) if (listener) protectSmtpSocketErrors(listener);
 for (const listener of [smtp, smtps]) listener?.on("error", (error: Error) => {
   if ((error as Error & { code?: string }).code === "SocketError" &&
     error.message === "Socket closed while initiating TLS") return;

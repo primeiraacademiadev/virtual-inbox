@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { createOpenApiDocument, operations } from "../src/http/api-contract.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = readFileSync(join(root, "src/server.ts"), "utf8");
+// HTTP handlers live in the router; keep catalogue parity after splitting bootstrap.
+const source = readFileSync(join(root, "src/http/request-router.ts"), "utf8");
 const handlerIds = source
   .split("\n")
   .map((line) => line.trim())

@@ -58,6 +58,7 @@ def main() -> None:
             content = re.sub(r"(\]\()overview\.md(?=[)#])", r"\1index.md", content)
             # The console's relative reference path is different from the website's.
             content = content.replace("](../../openapi.md)", "](reference/openapi.md)")
+            content = content.replace("](../../multiple-instances.md)", "](reference/multiple-instances.md)")
             name = "index" if page == "overview" else page
             (TARGET / (name + suffix + ".md")).write_text(content, encoding="utf-8")
 

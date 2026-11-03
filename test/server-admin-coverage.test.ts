@@ -179,7 +179,7 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
           reply += chunk.toString();
           if (command && !sent && reply.startsWith("220")) {
             sent = true;
-            socket.write(command + "\\r\\n");
+            socket.write(command + "\r\n");
           }
         });
         socket.on("error", error => { if (!completed) { completed=true;clearTimeout(timer);reject(error); } });

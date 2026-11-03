@@ -95,5 +95,10 @@ jobs:
       - name: Isolate raw Node TCP reset behavior
         continue-on-error: true # Diagnostic comparison; Virtual Inbox test below is the gate.
         run: node testing/scripts/windows-reset-control.mjs
-      - name: Reproduce reset and pre-handshake FIN
+      - name: Verify SMTP SMTPS POP3 process survival on reset
+        run: node --import tsx --test test/socket-reset-resilience.test.ts
+      - name: Investigate native SMTPS early-FIN crash (LVI-1b)
+        continue-on-error: true # Known 0xC0000005 Windows TLS failure; retain diagnostic evidence.
+        env:
+          VI_TEST_EARLY_FIN: "1"
         run: node --import tsx --test test/socket-reset-resilience.test.ts

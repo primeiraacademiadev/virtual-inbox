@@ -42,7 +42,7 @@ La lecture des sessions et tentatives SMTP est ouverte sans token, en HTTP ou HT
 
 ## SDK autonome et erreurs typées
 
-Le paquet ESM `@virtual-inbox/client` (version npm publiee 0.2.1; version source 0.3.0 avec AUTH/resolve non encore publiee) peut être créé avec `npm run build --prefix sdk` et `cd sdk && npm pack --dry-run`, puis installé dans un autre dépôt sans récupérer le code du serveur. Le SDK est publie sur npm; les prochaines versions suivront le workflow de publication. `VirtualInboxError` conserve `status`, `errorCode`, `errorParams` et `cause`. `waitOrThrow()` indique l'absence d'observation pendant le délai, sans la confondre avec un rejet SMTP. Le diagnostic ne contient que les métadonnées de cinq messages récents de la boîte demandée, jamais les journaux globaux ou les anomalies d'autres tests. `wait()` continue à retourner `null` pour HTTP 204. Les ecritures administratives et les simulations SMTP exigent `adminUrl` HTTPS et `adminToken` explicites. Ne jamais enregistrer le token dans les journaux de tests.
+Le paquet ESM `@virtual-inbox/client` (version source du dépôt 0.5.0 ; vérifier séparément la version publiée sur npm) peut être créé avec `npm run build --prefix sdk` et `cd sdk && npm pack --dry-run`, puis installé dans un autre dépôt sans récupérer le code du serveur. Le SDK est publie sur npm; les prochaines versions suivront le workflow de publication. `VirtualInboxError` conserve `status`, `errorCode`, `errorParams` et `cause`. `waitOrThrow()` indique l'absence d'observation pendant le délai, sans la confondre avec un rejet SMTP. Le diagnostic ne contient que les métadonnées de cinq messages récents de la boîte demandée, jamais les journaux globaux ou les anomalies d'autres tests. `wait()` continue à retourner `null` pour HTTP 204. Les ecritures administratives et les simulations SMTP exigent `adminUrl` HTTPS et `adminToken` explicites. Ne jamais enregistrer le token dans les journaux de tests.
 
 ## Assertions negatives et suivi SMTP (#39)
 
@@ -56,7 +56,7 @@ Par defaut, un doublon explicite renvoie toujours `409`. Avec `ifExists: "return
 
 `MAX_LOG_BUFFER_BYTES` fixe à 10485760 octets (10 Mio) par défaut la taille du tampon circulaire; entier positif obligatoire. Les événements trop volumineux ne sont pas conservés, mais sont diffusés en direct. `log_id` est croissant par exécution, tandis que `id=runId:sequence` reste compatible avec SSE. `log.gap` indique `missingFrom` et `missingTo`; `log.reset` signale un redémarrage. La console permet 500, 2000, 5000 ou 10000 entrées par session du navigateur. Le nombre d'événements conservés dépend de leur taille sérialisée. Données synthétiques uniquement. REST et SSE acceptent les filtres exacts `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient`, `ruleId` (conjonction ET); `recipient` correspond à un élément du tableau. Les événements exclus par filtre ne sont pas des lacunes.
 
-## Simulation AUTH et portées des règles SMTP (v0.3)
+## Simulation AUTH et portées des règles SMTP
 
 Avant la connexion, `resolveSmtp({credentials:{username,password}, origin:{ip}})` résout une ou deux dimensions et renvoie leurs identifiants opaques et l'arbre des connexions **réellement observées**, sans mot de passe. Avec `createSmtpRule`, une règle AUTH limitée à une adresse IP ne spécifie aucune restriction sur les identifiants :
 
@@ -65,9 +65,9 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
   priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
 ```
 
-Les règles **GLOBAL** omettent `selectors` (ou utilisent `{}`) ; les règles **SPECIFIC** contiennent au moins un sélecteur. Tous les sélecteurs présents sont combinés avec **AND** ; une dimension absente ne limite pas, et `"*"` n'est **pas pris en charge**. Les règles SPECIFIC éligibles ont priorité sur GLOBAL ; dans chaque portée, `priority` puis l'ordre d'insertion départagent les règles. Une seule règle est consommée par événement. AUTH admet les réponses 400–599 ; CONNECT/EHLO et inbox/SMS restent hors périmètre. Resolve et modification exigent HTTPS et token administratif ; aucun mot de passe dans les logs. [Spécification complète](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+Les règles **GLOBAL** omettent `selectors` (ou utilisent `{}`) ; les règles **SPECIFIC** contiennent au moins un sélecteur. Tous les sélecteurs présents sont combinés avec **AND** ; une dimension absente ne limite pas, et `"*"` n'est **pas pris en charge**. Les règles SPECIFIC éligibles ont priorité sur GLOBAL ; dans chaque portée, `priority` puis l'ordre d'insertion départagent les règles. Une seule règle est consommée par événement. AUTH admet les réponses 400–599 ; CONNECT/EHLO/HELO prennent déjà en charge reply/drop/hang/delay. Les sélecteurs inbox email/SMS restent prévus dans #76. Resolve et modification exigent HTTPS et token administratif ; aucun mot de passe dans les logs. [Spécification complète](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
 
-## Simulation CONNECT et EHLO (SDK source v0.4.0)
+## Simulation CONNECT et EHLO
 
 CONNECT est évalué **après acceptation TCP mais avant le message SMTP 220**. EHLO est évalué à la réception de HELO/EHLO. Actions : `reply` (4xx/5xx), `drop` (fermeture sans réponse), `hang` (attente bornée puis fermeture), `delay` (réponse/continuation différée).
 
@@ -82,10 +82,10 @@ await sdk.createSmtpRule({
 });
 ```
 
-`connection.port` désigne le **port local d'écoute**, et non le port distant éphémère. Le nom EHLO est **déclaré par le client** sans vérification; inconnu à CONNECT. Les identifiants AUTH sont inconnus à CONNECT et EHLO. Les sélecteurs présents sont combinés avec AND; l'absence ne limite pas. SPECIFIC éligible précède GLOBAL, même avec une priorité inférieure. Le drop après accept n'est pas une erreur de refus TCP SYN. SDK 0.4.0 est préparé **sans publication npm à ce stade** (0.3.0 publiée).
+`connection.port` désigne le **port local d'écoute**, et non le port distant éphémère. Le nom EHLO est **déclaré par le client** sans vérification; inconnu à CONNECT. Les identifiants AUTH sont inconnus à CONNECT et EHLO. Les sélecteurs présents sont combinés avec AND; l'absence ne limite pas. SPECIFIC éligible précède GLOBAL, même avec une priorité inférieure. Le drop après accept n'est pas une erreur de refus TCP SYN. Ces capacités CONNECT/EHLO sont disponibles dans les sources du dépôt. Vérifier la version du paquet sur npm avant utilisation.
 
 
-## Opérations supplémentaires pour les consommateurs (SDK source 0.5.0, non publié)
+## Opérations supplémentaires pour les consommateurs (SDK source 0.5.0)
 
 Le SDK dispose déjà de `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` et des règles SMTP. Les opérations suivantes sont ajoutées :
 
@@ -99,4 +99,4 @@ if (replay.gap || replay.reset) {
 }
 ```
 
-`logs()` utilise l'API HTTP de lecture ouverte sans jeton d'administration et **n'est pas** un flux SSE continu. Les curseurs du journal et des messages d'une inbox sont différents. Aucune modification du serveur n'est nécessaire. La source 0.5.0 **n'a pas encore été publiée** sur npm.
+`logs()` utilise l'API HTTP de lecture ouverte sans jeton d'administration et **n'est pas** un flux SSE continu. Les curseurs du journal et des messages d'une inbox sont différents. Aucune modification du serveur n'est nécessaire. La version source du SDK est 0.5.0 ; vérifier sa disponibilité sur npm avant installation.

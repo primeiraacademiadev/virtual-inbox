@@ -55,3 +55,14 @@ Par defaut, un doublon explicite renvoie toujours `409`. Avec `ifExists: "return
 ## Rétention et séquence des journaux (incrément #44)
 
 `MAX_LOG_BUFFER_BYTES` fixe à 10485760 octets (10 Mio) par défaut la taille du tampon circulaire; entier positif obligatoire. Les événements trop volumineux ne sont pas conservés, mais sont diffusés en direct. `log_id` est croissant par exécution, tandis que `id=runId:sequence` reste compatible avec SSE. `log.gap` indique `missingFrom` et `missingTo`; `log.reset` signale un redémarrage. La console permet 500, 2000, 5000 ou 10000 entrées par session du navigateur. Le nombre d'événements conservés dépend de leur taille sérialisée. Données synthétiques uniquement. REST et SSE acceptent les filtres exacts `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient`, `ruleId` (conjonction ET); `recipient` correspond à un élément du tableau. Les événements exclus par filtre ne sont pas des lacunes.
+
+## Simulation AUTH et portées des règles SMTP (v0.3)
+
+Avant la connexion, `resolveSmtp({credentials:{username,password}, origin:{ip}})` résout une ou deux dimensions et renvoie leurs identifiants opaques et l'arbre des connexions **réellement observées**, sans mot de passe. Avec `createSmtpRule`, une règle AUTH limitée à une adresse IP ne spécifie aucune restriction sur les identifiants :
+
+```ts
+await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
+  priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
+```
+
+Les règles **GLOBAL** omettent `selectors` (ou utilisent `{}`) ; les règles **SPECIFIC** contiennent au moins un sélecteur. Tous les sélecteurs présents sont combinés avec **AND** ; une dimension absente ne limite pas, et `"*"` n'est **pas pris en charge**. Les règles SPECIFIC éligibles ont priorité sur GLOBAL ; dans chaque portée, `priority` puis l'ordre d'insertion départagent les règles. Une seule règle est consommée par événement. AUTH admet les réponses 400–599 ; CONNECT/EHLO et inbox/SMS restent hors périmètre. Resolve et modification exigent HTTPS et token administratif ; aucun mot de passe dans les logs. [Spécification complète](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).

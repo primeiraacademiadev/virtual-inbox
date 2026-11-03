@@ -848,6 +848,7 @@ const smtpOptions: SMTPServerOptions = {
     const credentialsId = smtpRuleIdentities.credentialsId(auth.username || "", auth.password || "");
     const seenCredentials = smtpCredentialIds.get(id) || [];
     if (!seenCredentials.includes(credentialsId)) seenCredentials.push(credentialsId);
+    if (seenCredentials.length > 10) seenCredentials.shift();
     smtpCredentialIds.set(id, seenCredentials);
     const current = smtpSessions.getSession(id);
     const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");

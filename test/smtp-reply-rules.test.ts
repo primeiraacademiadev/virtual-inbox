@@ -13,7 +13,7 @@ test("SMTP reply rules validate phase, action, selector availability and reply c
     { phase:"MAIL", action:"drop", code:451, remaining:1, selectors:{sender:"a@b.test"} },
     { phase:"MAIL", action:"reply", code:250, remaining:1, selectors:{sender:"a@b.test"} },
     { phase:"MAIL", action:"reply", code:451, remaining:1, selectors:{recipient:"a@b.test"} },
-    { phase:"RCPT", action:"reply", code:451, remaining:1, selectors:{} },
+    { phase:"AUTH", action:"drop", remaining:1, selectors:{} },
     { phase:"DATA", action:"reply", code:451, remaining:0, selectors:{sender:"a@b.test"} },
     { phase:"DATA", action:"reply", code:451, remaining:1, selectors:{unknown:"a"} },
     { phase:"DATA", action:"reply", code:451, remaining:1, selectors:{sender:"a@b.test"}, message:"bad\r\nheader" },
@@ -25,7 +25,8 @@ test("SMTP reply rules validate phase, action, selector availability and reply c
 test("sender, recipient and both selectors are conjunctive and atomically consumed", () => {
   const store = new SmtpReplyRuleStore();
   const generic = create(store, "RCPT", { recipient:"one@example.test" }, 3);
-  const precise = create(store, "RCPT", { sender:"sender@example.test", recipient:"one@example.test" });
+  const precise = store.create({phase:"RCPT", action:"reply", code:451, remaining:1,
+    priority:10, selectors:{sender:"sender@example.test", recipient:"one@example.test"}});
   const context = {sender:"sender@example.test",recipients:["one@example.test"]};
   assert.equal(store.consume("RCPT", context)?.id, precise.id);
   assert.equal(store.consume("RCPT", context)?.id, generic.id);
@@ -72,4 +73,46 @@ test("bounded transport actions and post-persistence phases are validated", () =
     { ...base, action:"reply", durationMs:100, code:451 },
     { ...base, action:"hang", durationMs:100, code:451 },
   ]) assert.throws(() => store.create(invalid), (error:unknown) => error instanceof Fault && error.status===400);
+});
+
+test("GLOBAL rules are fallback to SPECIFIC, regardless of numeric priority", () => {
+  const store = new SmtpReplyRuleStore();
+  const global = store.create({ phase:"AUTH", action:"reply", code:535,
+    priority:100, remaining:2 });
+  const specific = store.create({ phase:"AUTH", action:"reply", code:454,
+    priority:1, remaining:1, selectors:{origin:{ip:"10.1.1.53"}} });
+  assert.equal(global.scope,"GLOBAL");
+  assert.equal(specific.scope,"SPECIFIC");
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53"})?.id,specific.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53"})?.id,global.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.54"})?.id,global.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.54"}),undefined);
+});
+
+test("priority and insertion order apply inside one scope; all selectors use AND", () => {
+  const store = new SmtpReplyRuleStore();
+  const low = store.create({phase:"AUTH",action:"reply",code:454,priority:1,remaining:2,
+    selectors:{origin:{ip:"10.1.1.53"}}});
+  const first = store.create({phase:"AUTH",action:"reply",code:535,priority:9,remaining:1,
+    selectors:{origin:{ip:"10.1.1.53"},credentialsId:"credential-1"}});
+  const second = store.create({phase:"AUTH",action:"reply",code:451,priority:9,remaining:1,
+    selectors:{origin:{ip:"10.1.1.53"},credentialsId:"credential-1"}});
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.54",credentialsId:"credential-1"}),undefined);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53",credentialsId:"credential-2"})?.id,low.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53",credentialsId:"credential-1"})?.id,first.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53",credentialsId:"credential-1"})?.id,second.id);
+  assert.equal(store.consume("AUTH",{originIp:"10.1.1.53",credentialsId:"credential-1"})?.id,low.id);
+});
+
+test("AUTH rejects impossible phase selectors and invalid wildcard/priority", () => {
+  const store = new SmtpReplyRuleStore();
+  const base = {phase:"AUTH",action:"reply",code:454,remaining:1};
+  for (const selectors of [{sender:"from@example.test"},{recipient:"to@example.test"},
+    {clientId:"legacy-client"},{origin:{ip:"*"}},{origin:{ip:"10.0.0.1"},sender:"from@example.test"}]) {
+    assert.throws(()=>store.create({...base,selectors}),Fault);
+  }
+  assert.throws(()=>store.create({...base,priority:10001}),Fault);
+  assert.throws(()=>store.create({...base,priority:0.5}),Fault);
+  assert.equal(store.create({...base,selectors:{}}).scope,"GLOBAL");
+  assert.equal(store.create(base).scope,"GLOBAL");
 });

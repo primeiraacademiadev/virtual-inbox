@@ -34,6 +34,8 @@ Restrict listener exposure to trusted test networks. Configure NODE_EXTRA_CA_CER
 
 A code-level diagnosis is not equivalent to successful runtime E2E validation. Confirm Communication retry and DLQ behavior in integration tests.
 
+For current scoped rules, AUTH failures and the resolve endpoint, see [SMTP rule scopes](smtp-rule-scopes.md). Specific rules (one or more ANDed selectors) always precede global rules (no selectors); numeric priority only applies within a scope.
+
 ## V7 STARTTLS diagnostics
 
 The SMTP `onSecure` lifecycle callback updates the existing session after a successful STARTTLS handshake, marking `secure: true`. Implicit SMTPS remains secure from connect. A transport upgrade must not create a second SMTP session or store credentials in logs.

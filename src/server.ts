@@ -20,6 +20,7 @@ import { resolveNetworkSetting, shadowedNetworkKeys, environmentControlledKeys, 
 import { SmtpAttemptStore } from "./smtp-attempts.js";
 import { startFixedListeners, type ListenerSpec } from "./listener-readiness.js";
 import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
+import { SmtpRuleIdentities } from "./smtp-rule-identities.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
 import { recordSecuredConnection } from "./smtp-session-lifecycle.js";
@@ -48,6 +49,8 @@ const simulations = new SimulationStore();
 const smtpAttempts = new SmtpAttemptStore();
 const activeAttempts = new WeakMap<object,string>();
 const smtpReplyRules = new SmtpReplyRuleStore(1000, config.smtpSimulationMaxDurationMs);
+const smtpRuleIdentities = new SmtpRuleIdentities();
+const smtpCredentialIds = new Map<string, string[]>();
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();
 let lastCleanupAt: string | null = null;
@@ -310,6 +313,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       case "protocolMetrics": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, protocolCounters.snapshot());
+      }
+      case "smtpRuleResolve": {
+        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
+        const retained = new Set(smtpSessions.listSessions().map(s => s.id));
+        for (const id of smtpCredentialIds.keys()) if (!retained.has(id)) smtpCredentialIds.delete(id);
+        const sessions = smtpSessions.listSessions().map(s => ({
+          id: s.id, remoteAddress: s.remoteAddress, connected: s.connected,
+          connectedAt: s.connectedAt, credentialsIds: smtpCredentialIds.get(s.id),
+        }));
+        return json(res, 200, smtpRuleIdentities.resolve(await body(req), sessions));
       }
       case "smtpReplyRuleCreate": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
@@ -744,12 +757,16 @@ function waitForFault(sessionId: string, durationMs: number): Promise<boolean> {
   });
 }
 async function applySmtpFault(
-  phase: SmtpReplyPhase, session: any, sender?: string, recipients?: string[], persisted = false,
+  phase: Exclude<SmtpReplyPhase, "AUTH">, session: any, sender?: string, recipients?: string[], persisted = false,
 ): Promise<boolean> {
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;
   const clientId = current?.authenticated ? current.clientId : undefined;
-  const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId });
+  const seenCredentials = smtpSessionId ? smtpCredentialIds.get(smtpSessionId) : undefined;
+  const credentialsId = seenCredentials?.at(-1);
+  const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
+  const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId,
+    originIp, credentialsId });
   if (!rule) return false;
   const responseCode = rule.code;
   const attemptId=activeAttempts.get(session);
@@ -758,7 +775,10 @@ async function applySmtpFault(
     : rule.action === "delay" ? (responseCode ? "delayed-rejection" : "delayed-response")
     : rule.action === "drop" ? "disconnected" : "timeout-then-disconnect";
   sandbox.log("smtp.simulation.applied", undefined, undefined, {
-    ruleId: rule.id, phase, action: rule.action, responseCode, durationMs: rule.durationMs,
+    ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
+    phase, action: rule.action, responseCode, durationMs: rule.durationMs,
+    originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
+    credentialsId,
     smtpSessionId, clientId, sender, recipients, persisted, outcome,
   });
   if (rule.action !== "delay" || responseCode !== undefined) {
@@ -825,6 +845,26 @@ const smtpOptions: SMTPServerOptions = {
   onAuth(auth, session, callback) {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
+    const credentialsId = smtpRuleIdentities.credentialsId(auth.username || "", auth.password || "");
+    const seenCredentials = smtpCredentialIds.get(id) || [];
+    if (!seenCredentials.includes(credentialsId)) seenCredentials.push(credentialsId);
+    if (seenCredentials.length > 10) seenCredentials.shift();
+    smtpCredentialIds.set(id, seenCredentials);
+    const current = smtpSessions.getSession(id);
+    const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
+    const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp });
+    if (rule) {
+      const responseCode = rule.code!;
+      sandbox.log("smtp.simulation.applied", undefined, undefined, {
+        ruleId: rule.id, scope: rule.scope, priority: rule.priority, phase: "AUTH",
+        action: rule.action, responseCode, smtpSessionId: id,
+        originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
+        credentialsId, selectors: rule.selectors,
+      });
+      smtpSessions.recordError(id, responseCode, "SIMULATED_SMTP_AUTH");
+      protocolCounters.error("SMTP", true);
+      return callback(Object.assign(new Error(rule.message), { responseCode }));
+    }
     if (smtpAuthPolicy === "INBOX") {
       let inboxAvailable = false;
       try { inboxAvailable = !!sandbox.find("email", auth.username || ""); } catch { /* expired inbox */ }

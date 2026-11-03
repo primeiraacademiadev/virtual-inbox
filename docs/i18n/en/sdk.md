@@ -42,7 +42,7 @@ SMTP session and filtered attempt diagnostics are openly observable on HTTP or H
 
 ## Standalone SDK and typed errors
 
-`@virtual-inbox/client` version 0.2.0 is a compiled ESM package. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The SDK is published to npm; use the published release for consumer integration. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
+`@virtual-inbox/client` is a compiled ESM package. npm currently has 0.2.1 published; this branch prepares 0.3.0 with SMTP AUTH rules and resolve, **not published yet**. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The SDK is published to npm; use the published release for consumer integration. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
 
 ## Negative assertions and SMTP attempt correlation (#39)
 
@@ -55,3 +55,14 @@ Duplicate explicit addresses continue to return `409` by default. Supply `ifExis
 ## Log retention and sequence (#44 increment)
 
 `MAX_LOG_BUFFER_BYTES` limits the circular event history to 10485760 bytes (10 MiB) by default and requires a positive integer. Oversize events are not retained but still emitted to live subscribers. Each event exposes a per-run increasing `log_id`, while `id=runId:sequence` remains unchanged for SSE compatibility. On missing history `log.gap` includes `missingFrom` and `missingTo`; `log.reset` indicates a new process run. Console history depth is selectable (500, 2000, 5000, 10000) per browser session. Retained event count varies with serialized event size. Synthetic test data only. REST and SSE accept exact-match filters `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient`, `ruleId` with AND semantics; recipient matches any element of a recipient array. Filtered-out events are not gaps.
+
+## SMTP AUTH simulation and rule scopes (v0.3)
+
+The administrator can `resolveSmtp({credentials:{username,password}, origin:{ip}})` before connecting; either dimension can be omitted, but not both. It returns opaque credential/origin IDs and a tree of **observed** connections, without the password. Use `credentialsId` from the result in `createSmtpRule`, or select an IP without restricting credentials:
+
+```ts
+await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
+  priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
+```
+
+**GLOBAL** rules omit `selectors` or set `{}`; **SPECIFIC** rules have at least one selector. All selectors are **AND**; absent means unrestricted and `"*"` is **not supported**. Eligible SPECIFIC rules always precede GLOBAL; within each scope higher `priority` wins, then earlier insertion. Only one rule is consumed per event. AUTH supports reply codes 400–599; CONNECT/EHLO and inbox/SMS selection are future work. The resolve and rule mutation APIs require administrative HTTPS and token; the SMTP runtime and logs never reveal passwords. [Full behavior and examples](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).

@@ -195,6 +195,44 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal(inboxResponse.status, 201);
     const inbox = await inboxResponse.json() as { id: string };
     await smtpAuth(credentials.username, credentials.password);
+    // Resolve credentials and IP before preparing an AUTH failure; no password in response.
+    const resolved = await api("POST", "/admin/smtp/resolve", {
+      credentials, origin: { ip: "127.0.0.1" },
+    });
+    assert.equal(resolved.status, 200);
+    const credentialId = resolved.data.credentials.id as string;
+    assert.ok(credentialId);
+    assert.ok(resolved.data.credentials.origins[0].connections.length >= 1);
+    assert.ok(!JSON.stringify(resolved.data).includes(credentials.password));
+    assert.equal((await api("POST", "/admin/smtp/resolve", { credentials }, false)).status, 403);
+    const globalAuth = await api("POST", "/admin/smtp/reply-rules", {
+      phase: "AUTH", action: "reply", code: 535, remaining: 1, priority: 100,
+    });
+    const specificAuth = await api("POST", "/admin/smtp/reply-rules", {
+      phase: "AUTH", action: "reply", code: 454, remaining: 1, priority: 1,
+      selectors: { origin: { ip: "127.0.0.1" }, credentialsId: credentialId },
+    });
+    assert.equal(globalAuth.status, 201);
+    assert.equal(globalAuth.data.scope, "GLOBAL");
+    assert.equal(specificAuth.status, 201);
+    assert.equal(specificAuth.data.scope, "SPECIFIC");
+    await assert.rejects(smtpAuth(credentials.username, credentials.password),
+      (error: unknown) => typeof error === "object" && error !== null &&
+        "responseCode" in error && error.responseCode === 454);
+    await assert.rejects(smtpAuth(credentials.username, credentials.password),
+      (error: unknown) => typeof error === "object" && error !== null &&
+        "responseCode" in error && error.responseCode === 535);
+    await smtpAuth(credentials.username, credentials.password);
+    const authRules = await api("GET", "/admin/smtp/reply-rules");
+    assert.equal(authRules.data.find((r: {id:string}) => r.id === globalAuth.data.id)?.remaining, 0);
+    assert.equal(authRules.data.find((r: {id:string}) => r.id === specificAuth.data.id)?.remaining, 0);
+    const authLogs = await fetch("http://127.0.0.1:" + port +
+      "/api/logs?type=smtp.simulation.applied");
+    assert.equal(authLogs.status, 200);
+    const authLogData = await authLogs.json() as {events: Array<{data?: Record<string,unknown>}>};
+    assert.ok(authLogData.events.some(e => e.data?.ruleId === specificAuth.data.id &&
+      e.data?.scope === "SPECIFIC" && e.data?.credentialsId === credentialId));
+    assert.ok(!JSON.stringify(authLogData).includes(credentials.password));
     const smtpSessions = await api("GET", "/admin/smtp/sessions", undefined, false);
     assert.equal(smtpSessions.status, 200);
     assert.ok(!JSON.stringify(smtpSessions.data).includes(credentials.password));

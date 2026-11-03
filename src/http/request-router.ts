@@ -20,7 +20,7 @@ import { observe } from "./event-stream.js";
 import type { RequestContext } from "../server.js";
 
 const channels: Record<string, Channel> = { mailboxes: "email", "phone-numbers": "sms" };
-function publicMessage(message: import("./core.js").Message) {
+function publicMessage(message: import("../core.js").Message) {
   const { attachments = [], rawMime: _rawMime, ...other } = message;
   return { ...other, attachments: attachments.map(({ id, filename, contentType, size }) => ({
     id, filename, contentType, size,

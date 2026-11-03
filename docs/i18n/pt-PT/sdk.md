@@ -83,3 +83,20 @@ await sdk.createSmtpRule({
 ```
 
 `connection.port` é a **porta local do listener**; `remotePort` é metadado efémero. O nome EHLO é **declarado pelo cliente**, sem autenticação, e não é conhecido em CONNECT; as credenciais não são conhecidas nem em CONNECT nem em EHLO. Seletores presentes usam AND; ausentes não restringem. Regras SPECIFIC elegíveis têm precedência sobre GLOBAL, independentemente da prioridade numérica. `drop` após accept não equivale a recusa da ligação TCP. O código do SDK 0.4.0 está preparado, **ainda sem publicação**; npm 0.3.0 é a última versão cuja publicação foi confirmada.
+
+
+## Operações adicionais para consumidores (SDK fonte 0.5.0, não publicado)
+
+O SDK já inclui `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` e gestão de regras. Acrescenta agora:
+
+```ts
+const state = await sdk.ready(); // HTTP 503 devolve { ready: false, ... }
+const message = await sdk.getMessage(inbox, messageId);
+await sdk.deleteMessage(inbox, messageId);
+const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+if (replay.gap || replay.reset) {
+  // Tratar missingFrom/missingTo e runId antes de continuar.
+}
+```
+
+`logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. A versão fonte 0.5.0 **ainda não foi publicada** no npm.

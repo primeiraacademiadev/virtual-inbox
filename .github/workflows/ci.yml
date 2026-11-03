@@ -92,5 +92,8 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install backend
         run: npm ci --ignore-scripts --no-fund
+      - name: Isolate raw Node TCP reset behavior
+        continue-on-error: true # Diagnostic comparison; Virtual Inbox test below is the gate.
+        run: node testing/scripts/windows-reset-control.mjs
       - name: Reproduce reset and pre-handshake FIN
         run: node --import tsx --test test/socket-reset-resilience.test.ts

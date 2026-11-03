@@ -80,6 +80,7 @@ plugins:
             SMTP and POP3 test identities: Identités SMTP et POP3
             Docker: Docker
             Configuration: Configuration
+            Multiple instances: Instances multiples
             Identity generation: Génération des identités
             SMTP diagnostics: Diagnostics SMTP
             Internationalization: Internationalisation

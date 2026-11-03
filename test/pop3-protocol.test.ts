@@ -112,7 +112,7 @@ test("POP3 survives a client reset during greeting and accepts the next client",
     next.on("error", () => {});
     try {
       const [chunk] = await once(next, "data");
-      assert.match(String(chunk), /^\\+OK Virtual Inbox POP3 ready/);
+      assert.match(String(chunk), /^\+OK Virtual Inbox POP3 ready/);
     } finally { next.destroy(); }
   } finally {
     await new Promise<void>(done => server.close(() => done()));

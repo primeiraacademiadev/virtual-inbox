@@ -74,17 +74,22 @@ export type SmtpReplySelectors = {
   recipient?: string;
   clientId?: string;
   smtpSessionId?: string;
+  origin?: { ip: string };
+  credentialsId?: string;
 };
 export type SmtpRuleInput = {
-  phase: "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
+  phase: "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
   action: "reply" | "delay" | "drop" | "hang";
   remaining: number;
-  selectors: SmtpReplySelectors;
+  selectors?: SmtpReplySelectors;
+  priority?: number;
   code?: number;
   durationMs?: number;
   message?: string;
 };
-export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string };
+export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string; scope: "GLOBAL" | "SPECIFIC"; priority: number; selectors: SmtpReplySelectors };
+export type SmtpResolveInput = { credentials?: { username: string; password: string }; origin?: { ip: string } };
+export type SmtpResolveResult = { credentials?: { id: string }; origin?: { id: string; ip: string }; connections: Array<{ id: string; originId: string; credentialsId?: string; connected: boolean; connectedAt: string }> };
 export type LegacySimulationInput = {
   protocol: "SMTP" | "POP3";
   command: string;
@@ -312,6 +317,10 @@ export class VirtualInboxClient {
 
   smtpClients(): Promise<SmtpClient[]> {
     return this.request("/admin/smtp/clients", undefined, true);
+  }
+
+  resolveSmtp(input: SmtpResolveInput): Promise<SmtpResolveResult> {
+    return this.request("/admin/smtp/resolve", { method: "POST", body: JSON.stringify(input) }, true);
   }
 
   createSmtpRule(input: SmtpRuleInput): Promise<SmtpRule> {

@@ -78,7 +78,8 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
       await sleep(100);
     }
     assert.ok(ready, "Server did not become healthy: " + output);
-    for (const port of [smtpPort, smtpsPort, pop3Port]) {
+    // POP3 first: distinguishes direct POP3 failure from latent SMTPS TLS corruption.
+    for (const port of [pop3Port, smtpPort, smtpsPort]) {
       for (let i = 0; i < 6; i++) {
         await abruptReset(port);
         assert.equal(child.exitCode, null, "Server terminated after reset on " + port + ": " + output);

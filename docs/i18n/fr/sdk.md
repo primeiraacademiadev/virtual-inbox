@@ -66,3 +66,20 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
 ```
 
 Les règles **GLOBAL** omettent `selectors` (ou utilisent `{}`) ; les règles **SPECIFIC** contiennent au moins un sélecteur. Tous les sélecteurs présents sont combinés avec **AND** ; une dimension absente ne limite pas, et `"*"` n'est **pas pris en charge**. Les règles SPECIFIC éligibles ont priorité sur GLOBAL ; dans chaque portée, `priority` puis l'ordre d'insertion départagent les règles. Une seule règle est consommée par événement. AUTH admet les réponses 400–599 ; CONNECT/EHLO et inbox/SMS restent hors périmètre. Resolve et modification exigent HTTPS et token administratif ; aucun mot de passe dans les logs. [Spécification complète](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+
+## Simulation CONNECT et EHLO (SDK source v0.4.0)
+
+CONNECT est évalué **après acceptation TCP mais avant le message SMTP 220**. EHLO est évalué à la réception de HELO/EHLO. Actions : `reply` (4xx/5xx), `drop` (fermeture sans réponse), `hang` (attente bornée puis fermeture), `delay` (réponse/continuation différée).
+
+```ts
+await sdk.createSmtpRule({
+  phase:"CONNECT",action:"drop",remaining:1,
+  selectors:{connection:{port:2525},origin:{ip:"127.0.0.1"}}
+});
+await sdk.createSmtpRule({
+  phase:"EHLO",action:"reply",code:421,remaining:1,
+  selectors:{ehloName:"communication-test.example"}
+});
+```
+
+`connection.port` désigne le **port local d'écoute**, et non le port distant éphémère. Le nom EHLO est **déclaré par le client** sans vérification; inconnu à CONNECT. Les identifiants AUTH sont inconnus à CONNECT et EHLO. Les sélecteurs présents sont combinés avec AND; l'absence ne limite pas. SPECIFIC éligible précède GLOBAL, même avec une priorité inférieure. Le drop après accept n'est pas une erreur de refus TCP SYN. SDK 0.4.0 est préparé **sans publication npm à ce stade** (0.3.0 publiée).

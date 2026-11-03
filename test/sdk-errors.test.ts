@@ -109,7 +109,7 @@ test("SDK log replay forwards bounded cursors and returns gap metadata", async()
     assert.equal(url.searchParams.get("limit"),"100");
     assert.equal(url.searchParams.get("ruleId"),"rule/one");
     assert.equal(url.searchParams.get("includeAnomalies"),"false");
-    await assert.rejects(sdk.logs({after:-1}),
+    assert.throws(()=>sdk.logs({after:-1}),
       (error:unknown)=>error instanceof VirtualInboxError && error.errorCode==="INVALID_LOG_FILTER");
     assert.equal(calls.length,1,"bad cursor is rejected before making a network request");
   } finally {globalThis.fetch=old;}

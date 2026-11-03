@@ -63,6 +63,8 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
   } else if (input.durationMs !== undefined) {
     invalid("durationMs is only accepted for delay or hang");
   }
+  if (input.phase === "AUTH" && action !== "reply")
+    invalid("AUTH currently supports reply rules only");
   if (action === "reply" && input.code === undefined)
     invalid("Reply action requires an SMTP error code");
   if ((action === "drop" || action === "hang") && input.code !== undefined)

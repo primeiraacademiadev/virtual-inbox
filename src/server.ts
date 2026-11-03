@@ -50,7 +50,7 @@ const smtpAttempts = new SmtpAttemptStore();
 const activeAttempts = new WeakMap<object,string>();
 const smtpReplyRules = new SmtpReplyRuleStore(1000, config.smtpSimulationMaxDurationMs);
 const smtpRuleIdentities = new SmtpRuleIdentities();
-const smtpCredentialIds = new Map<string, string>();
+const smtpCredentialIds = new Map<string, string[]>();
 const protocolCounters = new ProtocolCounters();
 const pop3Connections = new Pop3ConnectionStore();
 let lastCleanupAt: string | null = null;
@@ -320,7 +320,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         for (const id of smtpCredentialIds.keys()) if (!retained.has(id)) smtpCredentialIds.delete(id);
         const sessions = smtpSessions.listSessions().map(s => ({
           id: s.id, remoteAddress: s.remoteAddress, connected: s.connected,
-          connectedAt: s.connectedAt, credentialsId: smtpCredentialIds.get(s.id),
+          connectedAt: s.connectedAt, credentialsIds: smtpCredentialIds.get(s.id),
         }));
         return json(res, 200, smtpRuleIdentities.resolve(await body(req), sessions));
       }
@@ -762,7 +762,8 @@ async function applySmtpFault(
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;
   const clientId = current?.authenticated ? current.clientId : undefined;
-  const credentialsId = smtpSessionId ? smtpCredentialIds.get(smtpSessionId) : undefined;
+  const seenCredentials = smtpSessionId ? smtpCredentialIds.get(smtpSessionId) : undefined;
+  const credentialsId = seenCredentials?.at(-1);
   const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
   const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId,
     originIp, credentialsId });
@@ -845,7 +846,9 @@ const smtpOptions: SMTPServerOptions = {
     const id = smtpSessionIds.get(session);
     if (!id) return callback(Object.assign(new Error("Unknown SMTP session"), { responseCode: 454 }));
     const credentialsId = smtpRuleIdentities.credentialsId(auth.username || "", auth.password || "");
-    smtpCredentialIds.set(id, credentialsId);
+    const seenCredentials = smtpCredentialIds.get(id) || [];
+    if (!seenCredentials.includes(credentialsId)) seenCredentials.push(credentialsId);
+    smtpCredentialIds.set(id, seenCredentials);
     const current = smtpSessions.getSession(id);
     const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
     const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp });

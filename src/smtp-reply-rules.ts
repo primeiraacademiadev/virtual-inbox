@@ -93,7 +93,7 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
       selectors.origin = { ip: value.ip.startsWith("::ffff:") ? value.ip.slice(7) : value.ip };
       continue;
     }
-    if (typeof value !== "string" || !value.trim() || value.length > 320 ||
+    if (typeof value !== "string" || !value.trim() || value === "*" || value.length > 320 ||
         (ADDRESS_FIELDS.has(key) && (!value.includes("@") || /\s/.test(value))))
       invalid("Invalid SMTP selector: " + key);
     if (key === "sender" || key === "recipient")

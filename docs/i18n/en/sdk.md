@@ -83,3 +83,20 @@ await sdk.createSmtpRule({
 ```
 
 `connection.port` is the **local listener port**; remotePort is ephemeral metadata. EHLO is a **client-declared** hostname, not an authenticated identity; CONNECT cannot select it. `credentialsId` cannot select either phase. All selectors are AND; absence means unrestricted. Eligible SPECIFIC rules precede GLOBAL regardless of priority. CONNECT drop is not the same as TCP SYN refusal. SDK 0.4.0 is prepared in source **but not yet published**; npm 0.3.0 is the last known published release.
+
+
+## Consumer coverage additions (SDK source 0.5.0, unpublished)
+
+The SDK includes the existing `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` and scoped rule operations. It additionally exposes:
+
+```ts
+const state = await sdk.ready(); // 503 during startup returns { ready: false, ... }
+const one = await sdk.getMessage(inbox, messageId);
+await sdk.deleteMessage(inbox, messageId);
+const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+if (replay.gap || replay.reset) {
+  // Handle the server's missingFrom/missingTo and runId before resuming.
+}
+```
+
+`logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. Source 0.5.0 is prepared but **has not been published**; verify the npm version independently before installing.

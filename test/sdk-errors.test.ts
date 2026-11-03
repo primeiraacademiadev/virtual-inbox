@@ -59,3 +59,58 @@ test("SDK uses bearer token only on administrative endpoint", async()=>{
     assert.ok(calls[2].url.startsWith("http://"));
   } finally {globalThis.fetch=old;}
 });
+
+test("SDK readiness returns 503 state instead of treating startup as a network error", async () => {
+  const old = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ready:false,runId:"run-one",listeners:[]},{status:503});
+  try {
+    assert.deepEqual(await new VirtualInboxClient().ready(),{
+      ready:false,runId:"run-one",listeners:[],
+    });
+  } finally { globalThis.fetch = old; }
+});
+
+test("SDK exact-message operations encode IDs and use the right HTTP methods", async () => {
+  const old = globalThis.fetch;
+  const calls:Array<{path:string;method:string}> = [];
+  globalThis.fetch = async (url,init) => {
+    calls.push({path:new URL(String(url)).pathname,method:init?.method??"GET"});
+    if (init?.method==="DELETE") return new Response(null,{status:204});
+    return Response.json({id:"id/one",sequence:4,channel:"email",destinationId:inbox.id,
+      from:"test@example.test",originalRecipient:inbox.address,body:"hello"});
+  };
+  try {
+    const sdk = new VirtualInboxClient();
+    assert.equal((await sdk.getMessage(inbox,"id/one")).id,"id/one");
+    await sdk.deleteMessage(inbox,"id/one");
+    assert.deepEqual(calls,[
+      {path:"/mailboxes/inbox-1/messages/id%2Fone",method:"GET"},
+      {path:"/mailboxes/inbox-1/messages/id%2Fone",method:"DELETE"},
+    ]);
+  } finally { globalThis.fetch=old; }
+});
+
+test("SDK log replay forwards bounded cursors and returns gap metadata", async()=>{
+  const old=globalThis.fetch;
+  const calls:string[]=[];
+  globalThis.fetch=async url=>{
+    calls.push(String(url));
+    return Response.json({events:[],gap:true,reset:false,runId:"run-one",
+      missingFrom:7,missingTo:10});
+  };
+  try {
+    const sdk=new VirtualInboxClient();
+    const replay=await sdk.logs({after:10,limit:100,ruleId:"rule/one",includeAnomalies:false});
+    assert.equal(replay.gap,true);
+    assert.equal(replay.missingFrom,7);
+    const url=new URL(calls[0]);
+    assert.equal(url.pathname,"/logs");
+    assert.equal(url.searchParams.get("after"),"10");
+    assert.equal(url.searchParams.get("limit"),"100");
+    assert.equal(url.searchParams.get("ruleId"),"rule/one");
+    assert.equal(url.searchParams.get("includeAnomalies"),"false");
+    assert.throws(()=>sdk.logs({after:-1}),
+      (error:unknown)=>error instanceof VirtualInboxError && error.errorCode==="INVALID_LOG_FILTER");
+    assert.equal(calls.length,1,"bad cursor is rejected before making a network request");
+  } finally {globalThis.fetch=old;}
+});

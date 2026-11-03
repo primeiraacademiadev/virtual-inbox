@@ -86,17 +86,19 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
       }
       await assertHealthy("resets on port " + port);
     }
-    // A clean FIN before an implicit TLS handshake was observed to crash native
-    // Node 26 on Windows; exercise both Windows 24 and 26 in dedicated CI.
-    for (let i = 0; i < 6; i++) {
-      const socket = connect(smtpsPort, "127.0.0.1");
-      socket.on("error", () => { /* Peer may discard bytes after FIN. */ });
-      const closed = new Promise<void>(done => socket.once("close", () => done()));
-      socket.once("connect", () => socket.end());
-      await closed;
-      assert.equal(child.exitCode, null, "SMTPS process exited after premature TLS FIN: " + output);
+    if (process.env.VI_TEST_EARLY_FIN === "1") {
+      // A clean FIN before an implicit TLS handshake was observed to crash native
+      // Node 26 on Windows; exercise both Windows 24 and 26 in dedicated CI.
+      for (let i = 0; i < 6; i++) {
+        const socket = connect(smtpsPort, "127.0.0.1");
+        socket.on("error", () => { /* Peer may discard bytes after FIN. */ });
+        const closed = new Promise<void>(done => socket.once("close", () => done()));
+        socket.once("connect", () => socket.end());
+        await closed;
+        assert.equal(child.exitCode, null, "SMTPS process exited after premature TLS FIN: " + output);
+      }
+      await assertHealthy("SMTPS early FIN");
     }
-    await assertHealthy("SMTPS early FIN");
     const smtp = connect(smtpPort, "127.0.0.1");
     try {
       const [data] = await once(smtp, "data");

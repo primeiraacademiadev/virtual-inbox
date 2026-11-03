@@ -835,7 +835,8 @@ async function applySmtpFault(
   const credentialsId = seenCredentials?.at(-1);
   const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
   const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId,
-    originIp, credentialsId });
+    originIp, credentialsId, localPort: session.localPort,
+    ehloName: typeof session.hostNameAppearsAs === "string" ? session.hostNameAppearsAs : undefined });
   if (!rule) return false;
   const responseCode = rule.code;
   const attemptId=activeAttempts.get(session);
@@ -847,7 +848,8 @@ async function applySmtpFault(
     ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
     phase, action: rule.action, responseCode, durationMs: rule.durationMs,
     originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
-    credentialsId,
+    localPort: session.localPort, remotePort: session.remotePort,
+    ehloName: session.hostNameAppearsAs, credentialsId,
     smtpSessionId, clientId, sender, recipients, persisted, outcome,
   });
   if (rule.action !== "delay" || responseCode !== undefined) {
@@ -940,14 +942,17 @@ const smtpOptions: SMTPServerOptions = {
     smtpCredentialIds.set(id, seenCredentials);
     const current = smtpSessions.getSession(id);
     const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
-    const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp });
+    const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp,
+      localPort: session.localPort,
+      ehloName: typeof session.hostNameAppearsAs === "string" ? session.hostNameAppearsAs : undefined });
     if (rule) {
       const responseCode = rule.code!;
       sandbox.log("smtp.simulation.applied", undefined, undefined, {
         ruleId: rule.id, scope: rule.scope, priority: rule.priority, phase: "AUTH",
         action: rule.action, responseCode, smtpSessionId: id,
         originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
-        credentialsId, selectors: rule.selectors,
+        localPort: session.localPort, remotePort: session.remotePort,
+        ehloName: session.hostNameAppearsAs, credentialsId, selectors: rule.selectors,
       });
       smtpSessions.recordError(id, responseCode, "SIMULATED_SMTP_AUTH");
       protocolCounters.error("SMTP", true);

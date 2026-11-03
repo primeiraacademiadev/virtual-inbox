@@ -8,7 +8,7 @@ export class SmtpRuleIdentities {
   private readonly origins = new Map<string, string>();
 
   credentialsId(username: string, password: string): string {
-    if (typeof username !== "string" || !username || typeof password !== "string")
+    if (typeof username !== "string" || typeof password !== "string")
       throw new Fault(400, "Invalid SMTP credentials", "INVALID_SMTP_CREDENTIALS");
     const key = createHmac("sha256", this.secret)
       .update(JSON.stringify([username, password]), "utf8").digest("hex");
@@ -64,15 +64,22 @@ export class SmtpRuleIdentities {
       (credentialsId === undefined || s.credentialsId === credentialsId) &&
       (ip === undefined || (s.remoteAddress.startsWith("::ffff:") ?
         s.remoteAddress.slice(7) : s.remoteAddress) === ip));
-    // Relational projection: credentials and origins are independent; connections are never fabricated.
-    return {
-      ...(credentialsId ? { credentials: { id: credentialsId } } : {}),
-      ...(originId && ip ? { origin: { id: originId, ip } } : {}),
-      connections: matched.map(s => ({
-        id: s.id, originId: this.originId(s.remoteAddress),
-        ...(s.credentialsId ? { credentialsId: s.credentialsId } : {}),
-        connected: s.connected, connectedAt: s.connectedAt,
-      })),
-    };
+    // A tree is a projection of independent dimensions, not their persisted ownership.
+    const groups = new Map<string, { id: string; ip: string; connections: Array<{
+      id: string; credentialsId?: string; connected: boolean; connectedAt: string;
+    }> }>();
+    for (const session of matched) {
+      const address = session.remoteAddress.replace(/^::ffff:/, "");
+      const id = this.originId(address);
+      let group = groups.get(id);
+      if (!group) { group = { id, ip: address, connections: [] }; groups.set(id, group); }
+      group.connections.push({ id: session.id,
+        ...(session.credentialsId ? { credentialsId: session.credentialsId } : {}),
+        connected: session.connected, connectedAt: session.connectedAt });
+    }
+    if (originId && ip && !groups.has(originId))
+      groups.set(originId, { id: originId, ip, connections: [] });
+    const origins = [...groups.values()];
+    return credentialsId ? { credentials: { id: credentialsId, origins } } : { origins };
   }
 }

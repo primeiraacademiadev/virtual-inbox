@@ -424,7 +424,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
             smtps: !!tlsIdentity, pop3: true, sms: true },
           smtpAuthPolicy, inbox: { idempotentCreate: true, ifExists: ["error", "return"],
             reservedDomain: "virtual.inbox" },
-          simulation: { phases: ["MAIL", "RCPT", "DATA", "AFTER_DATA"],
+          simulation: { phases: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"],
             actions: ["reply", "delay", "drop", "hang"] },
         });
       case "openapi":

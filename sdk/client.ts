@@ -112,7 +112,14 @@ export type ConnectionInfo = Record<string, unknown>;
 export type Readiness = { ready: boolean; runId: string; listeners: Array<{name:string; port:number; host:string}> };
 export type LogEvent = { id:string; log_id:number; type:string; at:string; resourceId?:string; inboxId?:string; messageId?:string; smtpSessionId?:string; attemptId?:string; data?:Record<string,unknown> };
 export type LogReplay = {events:LogEvent[];gap:boolean;reset:boolean;runId:string;oldest?:string;latest?:string;missingFrom?:number;missingTo?:number};
-export type LogFilters = { after?:number; limit?:number; before?:number; from?:number; to?:number; type?:string; inboxId?:string; messageId?:string; smtpSessionId?:string; attemptId?:string; sender?:string; recipient?:string; ruleId?:string; includeAnomalies?:boolean };
+export type LogBaseFilters = {type?:string; inboxId?:string; messageId?:string; smtpSessionId?:string; attemptId?:string; sender?:string; recipient?:string; ruleId?:string; includeAnomalies?:boolean};
+/** Replay after an SSE event ID, e.g. runId:log_id; not a message sequence or numeric cursor. */
+export type LogReplayFilters = LogBaseFilters & {after?:string; from?:number; to?:number; limit?:never; before?:never};
+/** Descending, bounded page; not compatible with replay/range cursors. */
+export type LogPageFilters = LogBaseFilters & {limit?:number; before?:number; after?:never; from?:never; to?:never};
+export type LogPage = {events:LogEvent[];nextBefore?:number;hasMore:boolean;oldest:{log_id:number;at:string}|null;latest:{log_id:number;at:string}|null;runId:string};
+/** @deprecated Prefer LogReplayFilters or LogPageFilters; modes cannot be mixed. */
+export type LogFilters = LogReplayFilters | LogPageFilters;
 
 /** HTTP failures retain the structured server error and the original cause. */
 export class VirtualInboxError extends Error {
@@ -249,17 +256,29 @@ export class VirtualInboxClient {
       {method:"DELETE"});
   }
 
-  /** Replay structured logs with explicit cursor and server-side filters. */
-  logs(filters: LogFilters = {}): Promise<LogReplay> {
+  /** Replay uses a run-scoped SSE event ID; page mode uses limit/before. */
+  logs(filters?: LogReplayFilters): Promise<LogReplay>;
+  logs(filters: LogPageFilters & ({limit:number}|{before:number})): Promise<LogPage>;
+  logs(filters: LogFilters = {}): Promise<LogReplay | LogPage> {
     const query = new URLSearchParams();
-    for (const [key,value] of Object.entries(filters)) {
+    const f = filters as Record<string, string | number | boolean | undefined>;
+    const paged = f.limit !== undefined || f.before !== undefined;
+    if (paged && (f.after !== undefined || f.from !== undefined || f.to !== undefined))
+      throw new VirtualInboxError("Cannot mix log page and replay cursors", 0, "INVALID_LOG_FILTER");
+    if ((f.from === undefined) !== (f.to === undefined) ||
+        (f.from !== undefined && f.after !== undefined))
+      throw new VirtualInboxError("Invalid log range combination", 0, "INVALID_LOG_FILTER");
+    if (f.after !== undefined &&
+        (typeof f.after !== "string" || !/^.+:[0-9]+$/.test(f.after)))
+      throw new VirtualInboxError("Log replay cursor must be runId:log_id", 0, "INVALID_LOG_FILTER");
+    for (const [key,value] of Object.entries(f)) {
       if (value === undefined) continue;
-      if (typeof value === "number" && (!Number.isSafeInteger(value) || value < 0))
+      if (typeof value === "number" && (!Number.isSafeInteger(value) ||
+          value < (key === "limit" || key === "before" || key === "from" || key === "to" ? 1 : 0)))
         throw new VirtualInboxError("Invalid log cursor or limit", 0, "INVALID_LOG_FILTER");
       query.set(key,String(value));
     }
-    const suffix = query.size ? "?" + query : "";
-    return this.request("/logs" + suffix);
+    return this.request("/logs" + (query.size ? "?" + query : ""));
   }
 
   messages(inbox: Inbox, after = 0): Promise<InboxMessage[]> {

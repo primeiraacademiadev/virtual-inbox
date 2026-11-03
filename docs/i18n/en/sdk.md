@@ -42,7 +42,7 @@ SMTP session and filtered attempt diagnostics are openly observable on HTTP or H
 
 ## Standalone SDK and typed errors
 
-`@virtual-inbox/client` is a compiled ESM package. npm currently has 0.2.1 published; this branch prepares 0.3.0 with SMTP AUTH rules and resolve, **not published yet**. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The SDK is published to npm; use the published release for consumer integration. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
+`@virtual-inbox/client` is a compiled ESM package. The repository SDK source is version 0.5.0; this is **not a statement about the latest npm release**. Check the npm registry before consuming a new release. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The SDK is published to npm; use the published release for consumer integration. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
 
 ## Negative assertions and SMTP attempt correlation (#39)
 
@@ -56,7 +56,7 @@ Duplicate explicit addresses continue to return `409` by default. Supply `ifExis
 
 `MAX_LOG_BUFFER_BYTES` limits the circular event history to 10485760 bytes (10 MiB) by default and requires a positive integer. Oversize events are not retained but still emitted to live subscribers. Each event exposes a per-run increasing `log_id`, while `id=runId:sequence` remains unchanged for SSE compatibility. On missing history `log.gap` includes `missingFrom` and `missingTo`; `log.reset` indicates a new process run. Console history depth is selectable (500, 2000, 5000, 10000) per browser session. Retained event count varies with serialized event size. Synthetic test data only. REST and SSE accept exact-match filters `type`, `inboxId`, `messageId`, `smtpSessionId`, `attemptId`, `sender`, `recipient`, `ruleId` with AND semantics; recipient matches any element of a recipient array. Filtered-out events are not gaps.
 
-## SMTP AUTH simulation and rule scopes (v0.3)
+## SMTP AUTH simulation and rule scopes
 
 The administrator can `resolveSmtp({credentials:{username,password}, origin:{ip}})` before connecting; either dimension can be omitted, but not both. It returns opaque credential/origin IDs and a tree of **observed** connections, without the password. Use `credentialsId` from the result in `createSmtpRule`, or select an IP without restricting credentials:
 
@@ -65,9 +65,9 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
   priority:1,selectors:{origin:{ip:"10.1.1.53"}}});
 ```
 
-**GLOBAL** rules omit `selectors` or set `{}`; **SPECIFIC** rules have at least one selector. All selectors are **AND**; absent means unrestricted and `"*"` is **not supported**. Eligible SPECIFIC rules always precede GLOBAL; within each scope higher `priority` wins, then earlier insertion. Only one rule is consumed per event. AUTH supports reply codes 400–599; CONNECT/EHLO and inbox/SMS selection are future work. The resolve and rule mutation APIs require administrative HTTPS and token; the SMTP runtime and logs never reveal passwords. [Full behavior and examples](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+**GLOBAL** rules omit `selectors` or set `{}`; **SPECIFIC** rules have at least one selector. All selectors are **AND**; absent means unrestricted and `"*"` is **not supported**. Eligible SPECIFIC rules always precede GLOBAL; within each scope higher `priority` wins, then earlier insertion. Only one rule is consumed per event. AUTH supports reply codes 400–599; CONNECT/EHLO/HELO reply/drop/hang/delay are already available. Inbox email/SMS selectors remain planned (#76). The resolve and rule mutation APIs require administrative HTTPS and token; the SMTP runtime and logs never reveal passwords. [Full behavior and examples](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
 
-## CONNECT and EHLO fault injection (SDK source v0.4.0)
+## CONNECT and EHLO fault injection
 
 A CONNECT rule is evaluated **after TCP accept but before SMTP 220**. An EHLO rule is evaluated only when the client sends HELO/EHLO. Supported actions are `reply` (SMTP 4xx/5xx), `drop` (no response), `hang` (bounded delay then disconnect) and `delay` (bounded deferred reply or normal continuation).
 
@@ -82,10 +82,10 @@ await sdk.createSmtpRule({
 });
 ```
 
-`connection.port` is the **local listener port**; remotePort is ephemeral metadata. EHLO is a **client-declared** hostname, not an authenticated identity; CONNECT cannot select it. `credentialsId` cannot select either phase. All selectors are AND; absence means unrestricted. Eligible SPECIFIC rules precede GLOBAL regardless of priority. CONNECT drop is not the same as TCP SYN refusal. SDK 0.4.0 is prepared in source **but not yet published**; npm 0.3.0 is the last known published release.
+`connection.port` is the **local listener port**; remotePort is ephemeral metadata. EHLO is a **client-declared** hostname, not an authenticated identity; CONNECT cannot select it. `credentialsId` cannot select either phase. All selectors are AND; absence means unrestricted. Eligible SPECIFIC rules precede GLOBAL regardless of priority. CONNECT drop is not the same as TCP SYN refusal. These CONNECT/EHLO capabilities are included in the repository source. Confirm the installed package version against the npm registry before relying on them.
 
 
-## Consumer coverage additions (SDK source 0.5.0, unpublished)
+## Consumer coverage additions (SDK source 0.5.0)
 
 The SDK includes the existing `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` and scoped rule operations. It additionally exposes:
 
@@ -93,10 +93,16 @@ The SDK includes the existing `create`, `delete`, `messages`, `wait`, `smtpAttem
 const state = await sdk.ready(); // 503 during startup returns { ready: false, ... }
 const one = await sdk.getMessage(inbox, messageId);
 await sdk.deleteMessage(inbox, messageId);
-const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+const page = await sdk.logs({ limit: 100, ruleId }); // página descendente
+const replay = await sdk.logs({ after: "runId:120", ruleId }); // replay por ID de evento
 if (replay.gap || replay.reset) {
   // Handle the server's missingFrom/missingTo and runId before resuming.
 }
 ```
 
-`logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. Source 0.5.0 is prepared but **has not been published**; verify the npm version independently before installing.
+`logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. The repository SDK source is 0.5.0; verify availability of this version in npm before installation.
+
+
+### Log cursor modes
+
+Log replay uses the exact `runId:log_id` event ID (the same cursor as SSE), **not a bare numeric log_id**. `limit`/`before` selects descending pagination and must never be mixed with `after` or `from`/`to`. The result shape differs: replay has `gap`/`reset`/`missingFrom`/`missingTo`, while pagination has `hasMore`/`nextBefore`. The example `runId:120` is illustrative; use an ID actually returned by your server.

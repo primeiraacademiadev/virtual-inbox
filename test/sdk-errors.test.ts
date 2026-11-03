@@ -90,7 +90,7 @@ test("SDK exact-message operations encode IDs and use the right HTTP methods", a
   } finally { globalThis.fetch=old; }
 });
 
-test("SDK log replay forwards bounded cursors and returns gap metadata", async()=>{
+test("SDK separates run-scoped replay from page cursors and preserves gap metadata", async()=>{
   const old=globalThis.fetch;
   const calls:string[]=[];
   globalThis.fetch=async url=>{
@@ -100,17 +100,27 @@ test("SDK log replay forwards bounded cursors and returns gap metadata", async()
   };
   try {
     const sdk=new VirtualInboxClient();
-    const replay=await sdk.logs({after:10,limit:100,ruleId:"rule/one",includeAnomalies:false});
+    const replay=await sdk.logs({after:"run-one:10",ruleId:"rule/one",includeAnomalies:false});
     assert.equal(replay.gap,true);
     assert.equal(replay.missingFrom,7);
     const url=new URL(calls[0]);
     assert.equal(url.pathname,"/logs");
-    assert.equal(url.searchParams.get("after"),"10");
-    assert.equal(url.searchParams.get("limit"),"100");
+    assert.equal(url.searchParams.get("after"),"run-one:10");
+    assert.equal(url.searchParams.get("limit"),null);
     assert.equal(url.searchParams.get("ruleId"),"rule/one");
     assert.equal(url.searchParams.get("includeAnomalies"),"false");
-    assert.throws(()=>sdk.logs({after:-1}),
-      (error:unknown)=>error instanceof VirtualInboxError && error.errorCode==="INVALID_LOG_FILTER");
-    assert.equal(calls.length,1,"bad cursor is rejected before making a network request");
+    await sdk.logs({limit:50,before:120,ruleId:"rule/one"});
+    const pageUrl=new URL(calls[1]);
+    assert.equal(pageUrl.searchParams.get("limit"),"50");
+    assert.equal(pageUrl.searchParams.get("before"),"120");
+    assert.equal(pageUrl.searchParams.has("after"),false);
+    for (const bad of [
+      {after:10}, {after:"not-a-run-scoped-cursor"}, {limit:0},
+      {limit:50,after:"run-one:10"}, {from:1}, {before:30,from:1,to:5},
+    ]) {
+      assert.throws(()=>sdk.logs(bad as any),
+        (error:unknown)=>error instanceof VirtualInboxError && error.errorCode==="INVALID_LOG_FILTER");
+    }
+    assert.equal(calls.length,2,"bad cursor is rejected before making a network request");
   } finally {globalThis.fetch=old;}
 });

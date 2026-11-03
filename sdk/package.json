@@ -4,9 +4,10 @@
   "private": false,
   "type": "module",
   "description": "Node.js SDK for disposable Virtual Inbox integration tests",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "main": "./dist/client.js",
   "types": "./dist/client.d.ts",

@@ -2,7 +2,7 @@
 
 An ephemeral email/SMS sandbox for demonstrations, application integration and automated tests. One Node.js process serves the React console, REST, SSE, SMTP, STARTTLS and SMTPS. No database, Kubernetes or external certificate executable is required.
 
-> Proprietary source: no licence for redistribution, modification or commercial reuse is granted. Message APIs are intentionally unauthenticated. Run on a trusted test network, never as a public production mailbox.
+> **Licensing:** The Virtual Inbox server, React console and all repository contents outside `sdk/` remain proprietary and are not licensed for redistribution, modification or commercial reuse. **Only the Node.js client SDK within `sdk/` is licensed under MIT**; see [`sdk/LICENSE`](sdk/LICENSE). Message APIs are intentionally unauthenticated. Run on a trusted test network, never as a public production mailbox.
 
 ## Start here
 

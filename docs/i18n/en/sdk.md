@@ -42,7 +42,7 @@ SMTP session and filtered attempt diagnostics are openly observable on HTTP or H
 
 ## Standalone SDK and typed errors
 
-`@virtual-inbox/client` is a compiled ESM package. The repository SDK source is version 0.5.0; this is **not a statement about the latest npm release**. Check the npm registry before consuming a new release. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The npm package may be behind the source SDK. The proposed 1.0 candidate must first be published under the npm `next` dist-tag, tested by consumers, and only then released as stable `1.0.0` under `latest`; never assume unreleased API methods are present on npm. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
+`@virtual-inbox/client` is a compiled ESM package. The repository SDK source is version 1.0.0-rc.1; this is **not a statement about the latest npm release**. Check the npm registry before consuming a new release. Produce an installable archive with `npm run build --prefix sdk` and `cd sdk && npm pack --dry-run`, then install the `.tgz` in another project without a Virtual Inbox checkout. The npm package may be behind the source SDK. The proposed 1.0 candidate must first be published under the npm `next` dist-tag, tested by consumers, and only then released as stable `1.0.0` under `latest`; never assume unreleased API methods are present on npm. Future releases follow the SDK release workflow. `VirtualInboxError` preserves HTTP `status`, `errorCode`, `errorParams` and `cause`; `waitOrThrow()` explicitly reports *not observed in the window*, not SMTP rejection. Timeout diagnostics contain only the last five message metadata items from the requested inbox, never global logs or other suites' anomaly inboxes. `wait()` remains non-throwing on HTTP 204. Available helpers include `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, SMTP sessions and simulation rules. Administrative **write and credential-verification** methods require an explicit HTTPS `adminUrl` and `adminToken`: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Never write the token into test logs.
 
 ## Negative assertions and SMTP attempt correlation (#39)
 
@@ -85,7 +85,7 @@ await sdk.createSmtpRule({
 `connection.port` is the **local listener port**; remotePort is ephemeral metadata. EHLO is a **client-declared** hostname, not an authenticated identity; CONNECT cannot select it. `credentialsId` cannot select either phase. All selectors are AND; absence means unrestricted. Eligible SPECIFIC rules precede GLOBAL regardless of priority. CONNECT drop is not the same as TCP SYN refusal. These CONNECT/EHLO capabilities are included in the repository source. Confirm the installed package version against the npm registry before relying on them.
 
 
-## Consumer coverage additions (SDK source 0.5.0)
+## Consumer coverage additions (SDK source 1.0.0-rc.1)
 
 The SDK includes the existing `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` and scoped rule operations. It additionally exposes:
 
@@ -100,7 +100,7 @@ if (replay.gap || replay.reset) {
 }
 ```
 
-`logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. The repository SDK source is 0.5.0; verify availability of this version in npm before installation.
+`logs()` uses the ordinary read-only HTTP API, not the administrative HTTPS token. It does not provide a continuous SSE stream. Cursors refer to **log sequence**, whereas `messages(inbox, after)` uses the separate per-inbox message sequence. All SDK methods use existing HTTP endpoints and need no server-side changes. The repository SDK source is 1.0.0-rc.1; verify availability of this version in npm before installation.
 
 
 ### Log cursor modes

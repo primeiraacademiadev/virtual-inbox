@@ -42,7 +42,7 @@ La lecture des sessions et tentatives SMTP est ouverte sans token, en HTTP ou HT
 
 ## SDK autonome et erreurs typées
 
-Le paquet ESM `@virtual-inbox/client` (version source du dépôt 0.5.0 ; vérifier séparément la version publiée sur npm) peut être créé avec `npm run build --prefix sdk` et `cd sdk && npm pack --dry-run`, puis installé dans un autre dépôt sans récupérer le code du serveur. Le SDK est publie sur npm; les prochaines versions suivront le workflow de publication. `VirtualInboxError` conserve `status`, `errorCode`, `errorParams` et `cause`. `waitOrThrow()` indique l'absence d'observation pendant le délai, sans la confondre avec un rejet SMTP. Le diagnostic ne contient que les métadonnées de cinq messages récents de la boîte demandée, jamais les journaux globaux ou les anomalies d'autres tests. `wait()` continue à retourner `null` pour HTTP 204. Les ecritures administratives et les simulations SMTP exigent `adminUrl` HTTPS et `adminToken` explicites. Ne jamais enregistrer le token dans les journaux de tests.
+Le paquet ESM `@virtual-inbox/client` (version source du dépôt 1.0.0-rc.1 ; vérifier séparément la version publiée sur npm) peut être créé avec `npm run build --prefix sdk` et `cd sdk && npm pack --dry-run`, puis installé dans un autre dépôt sans récupérer le code du serveur. Le SDK est publie sur npm; les prochaines versions suivront le workflow de publication. `VirtualInboxError` conserve `status`, `errorCode`, `errorParams` et `cause`. `waitOrThrow()` indique l'absence d'observation pendant le délai, sans la confondre avec un rejet SMTP. Le diagnostic ne contient que les métadonnées de cinq messages récents de la boîte demandée, jamais les journaux globaux ou les anomalies d'autres tests. `wait()` continue à retourner `null` pour HTTP 204. Les ecritures administratives et les simulations SMTP exigent `adminUrl` HTTPS et `adminToken` explicites. Ne jamais enregistrer le token dans les journaux de tests.
 
 ## Assertions negatives et suivi SMTP (#39)
 
@@ -85,7 +85,7 @@ await sdk.createSmtpRule({
 `connection.port` désigne le **port local d'écoute**, et non le port distant éphémère. Le nom EHLO est **déclaré par le client** sans vérification; inconnu à CONNECT. Les identifiants AUTH sont inconnus à CONNECT et EHLO. Les sélecteurs présents sont combinés avec AND; l'absence ne limite pas. SPECIFIC éligible précède GLOBAL, même avec une priorité inférieure. Le drop après accept n'est pas une erreur de refus TCP SYN. Ces capacités CONNECT/EHLO sont disponibles dans les sources du dépôt. Vérifier la version du paquet sur npm avant utilisation.
 
 
-## Opérations supplémentaires pour les consommateurs (SDK source 0.5.0)
+## Opérations supplémentaires pour les consommateurs (SDK source 1.0.0-rc.1)
 
 Le SDK dispose déjà de `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` et des règles SMTP. Les opérations suivantes sont ajoutées :
 
@@ -100,7 +100,7 @@ if (replay.gap || replay.reset) {
 }
 ```
 
-`logs()` utilise l'API HTTP de lecture ouverte sans jeton d'administration et **n'est pas** un flux SSE continu. Les curseurs du journal et des messages d'une inbox sont différents. Aucune modification du serveur n'est nécessaire. La version source du SDK est 0.5.0 ; vérifier sa disponibilité sur npm avant installation.
+`logs()` utilise l'API HTTP de lecture ouverte sans jeton d'administration et **n'est pas** un flux SSE continu. Les curseurs du journal et des messages d'une inbox sont différents. Aucune modification du serveur n'est nécessaire. La version source du SDK est 1.0.0-rc.1 ; vérifier sa disponibilité sur npm avant installation.
 
 
 ### Modes de consultation des journaux

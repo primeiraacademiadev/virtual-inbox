@@ -10,3 +10,8 @@ Single draft PR with thematic commits. Scope: split server.ts by responsibility;
 4. Fix release blockers with subsequent RCs if necessary, then publish 1.0.0 with latest tag.
 
 Virtual Inbox stays an ephemeral test sandbox without Kafka, DB or production RBAC. No release publication from this implementation PR.
+
+
+## Confirmed Windows RC limitation
+
+Mandatory Windows Node24/26 reset resilience now passes for SMTP, SMTPS and POP3. The separate Windows SMTPS *clean FIN before TLS ClientHello* causes native process exit `0xC0000005` on both tested Node versions; the bare TCP control survives. See [#83](https://github.com/primeiraacademiadev/virtual-inbox/issues/83). The Windows early-FIN CI diagnostic is advisory during RC validation, but must be resolved or explicitly assessed before GA. Release tags must not be created from this draft PR.

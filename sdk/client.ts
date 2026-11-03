@@ -75,10 +75,12 @@ export type SmtpReplySelectors = {
   clientId?: string;
   smtpSessionId?: string;
   origin?: { ip: string };
+  connection?: { port: number };
+  ehloName?: string;
   credentialsId?: string;
 };
 export type SmtpRuleInput = {
-  phase: "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
+  phase: "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
   action: "reply" | "delay" | "drop" | "hang";
   remaining: number;
   selectors?: SmtpReplySelectors;

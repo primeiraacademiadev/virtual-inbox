@@ -83,7 +83,7 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
     const pop3 = connect(pop3Port, "127.0.0.1");
     try {
       const [data] = await once(pop3, "data");
-      assert.match(String(data), /^\\+OK /);
+      assert.match(String(data), /^\+OK /);
     } finally { pop3.destroy(); }
     const smtps = connectTls({
       port: smtpsPort, host: "127.0.0.1", servername: "localhost",

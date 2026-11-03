@@ -1,0 +1,123 @@
+site_name: Virtual Inbox
+site_description: Ephemeral email and SMS sandbox for demonstrations, integration and automated tests
+site_url: https://primeiraacademiadev.github.io/virtual-inbox/
+repo_url: https://github.com/primeiraacademiadev/virtual-inbox
+repo_name: primeiraacademiadev/virtual-inbox
+edit_uri: edit/main/docs/
+# Generated only for the website. The canonical Markdown remains in docs/.
+docs_dir: .cache/docs-site/docs
+site_dir: site
+watch:
+  - docs
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.indexes
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+        - locale: pt
+          name: Português
+          nav_translations:
+            Getting started: Começar
+            Demo: Demonstração
+            Integration: Integração
+            API: API
+            Tests and SDK: Testes e SDK
+            TLS: TLS
+            Architecture: Arquitetura
+            Development: Desenvolvimento
+            Technical reference: Referência técnica
+            HTTP API: API HTTP
+            OpenAPI maintenance: Manutenção OpenAPI
+            SMTP and POP3 test identities: Identidades SMTP e POP3
+            Docker: Docker
+            Configuration: Configuração
+            Multiple instances: Múltiplas instâncias
+            Identity generation: Geração de identidades
+            SMTP diagnostics: Diagnósticos SMTP
+            SMTP rule scopes: Âmbitos das regras SMTP
+            Contract audit: Auditoria de contratos
+            Consumer regressions: Regressões de consumidores
+            Internationalization: Internacionalização
+            Integration notes: Notas de integração
+            Search: Pesquisa
+            SDK: SDK
+        - locale: fr
+          name: Français
+          nav_translations:
+            Getting started: Démarrer
+            Demo: Démonstration
+            Integration: Intégration
+            API: API
+            Tests and SDK: Tests et SDK
+            TLS: TLS
+            Architecture: Architecture
+            Development: Développement
+            Technical reference: Référence technique
+            HTTP API: API HTTP
+            OpenAPI maintenance: Maintenance OpenAPI
+            SMTP and POP3 test identities: Identités SMTP et POP3
+            Docker: Docker
+            Configuration: Configuration
+            Multiple instances: Instances multiples
+            Identity generation: Génération des identités
+            SMTP diagnostics: Diagnostics SMTP
+            SMTP rule scopes: Portées des règles SMTP
+            Contract audit: Audit des contrats
+            Consumer regressions: Régressions des consommateurs
+            Internationalization: Internationalisation
+            Integration notes: Notes d'intégration
+            Search: Recherche
+            SDK: SDK
+# Only the selected language appears in the sidebar; reference starts collapsed.
+nav:
+  - Getting started: index.md
+  - Demo: demo.md
+  - Integration: integration.md
+  - API: api.md
+  - Tests and SDK: sdk.md
+  - TLS: tls.md
+  - Architecture: architecture.md
+  - Development: development.md
+  - Technical reference:
+      - HTTP API: reference/api.md
+      - OpenAPI maintenance: reference/openapi.md
+      - SMTP and POP3 test identities: reference/test-identities-and-pop3.md
+      - Docker: reference/docker.md
+      - Configuration: reference/configuration.md
+      - Multiple instances: reference/multiple-instances.md
+      - Identity generation: reference/identity-generation.md
+      - SMTP diagnostics: reference/smtp-session-diagnostics.md
+      - SMTP rule scopes: reference/smtp-rule-scopes.md
+      - Contract audit: reference/contract-consistency-audit.md
+      - Consumer regressions: reference/consumer-regressions.md
+      - Internationalization: reference/i18n.md
+      - Integration notes: reference/integration.md
+      - Search: reference/search.md
+      - SDK: reference/sdk.md
+      - Architecture: reference/architecture.md
+      - TLS: reference/tls.md

@@ -1,0 +1,59 @@
+{
+  "locale": "en-US",
+  "firstNames": [
+    "Olivia",
+    "Emma",
+    "Charlotte",
+    "Amelia",
+    "Sophia",
+    "Isabella",
+    "Mia",
+    "Evelyn",
+    "Liam",
+    "Noah",
+    "Oliver",
+    "Elijah",
+    "James",
+    "William",
+    "Benjamin",
+    "Lucas",
+    "Henry",
+    "Alexander",
+    "Ava",
+    "Harper"
+  ],
+  "lastNames": [
+    "Smith",
+    "Johnson",
+    "Williams",
+    "Brown",
+    "Jones",
+    "Garcia",
+    "Miller",
+    "Davis",
+    "Rodriguez",
+    "Martinez",
+    "Hernandez",
+    "Lopez",
+    "Gonzalez",
+    "Wilson",
+    "Anderson",
+    "Thomas",
+    "Taylor",
+    "Moore",
+    "Jackson",
+    "Martin"
+  ],
+  "phone": {
+    "countryCode": "1",
+    "nationalLength": 10,
+    "mobilePrefixes": [
+      "202555",
+      "212555",
+      "415555",
+      "312555"
+    ],
+    "trunk": "",
+    "pattern": "401"
+  }
+}

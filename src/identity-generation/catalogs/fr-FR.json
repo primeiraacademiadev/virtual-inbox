@@ -1,0 +1,57 @@
+{
+  "locale": "fr-FR",
+  "firstNames": [
+    "Emma",
+    "Louise",
+    "Jade",
+    "Alice",
+    "Chloé",
+    "Léa",
+    "Camille",
+    "Manon",
+    "Inès",
+    "Ambre",
+    "Gabriel",
+    "Raphaël",
+    "Louis",
+    "Arthur",
+    "Jules",
+    "Adam",
+    "Hugo",
+    "Lucas",
+    "Nathan",
+    "Léo"
+  ],
+  "lastNames": [
+    "Martin",
+    "Bernard",
+    "Thomas",
+    "Petit",
+    "Robert",
+    "Richard",
+    "Durand",
+    "Dubois",
+    "Moreau",
+    "Laurent",
+    "Simon",
+    "Michel",
+    "Lefebvre",
+    "Leroy",
+    "Roux",
+    "David",
+    "Bertrand",
+    "Morel",
+    "Fournier",
+    "Girard"
+  ],
+  "phone": {
+    "countryCode": "33",
+    "nationalLength": 10,
+    "mobilePrefixes": [
+      "06",
+      "07"
+    ],
+    "trunk": "0",
+    "pattern": "401"
+  }
+}

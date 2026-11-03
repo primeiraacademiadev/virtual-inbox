@@ -1,0 +1,19 @@
+{
+  "name": "virtual-inbox-testing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:protocols": "playwright test --project=protocols",
+    "test:e2e": "playwright test --project=chromium",
+    "test:all": "playwright test",
+    "test:report": "playwright show-report reports/html",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.19.2",
+    "nodemailer": "^10.2.0",
+    "@types/nodemailer": "^7.0.5",
+    "typescript": "^6.0.0"
+  }
+}

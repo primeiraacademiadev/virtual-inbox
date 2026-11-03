@@ -122,3 +122,27 @@ test("VI-R05: independent instances share neither in-memory messages nor correla
   assert.ok(matchesLog(left.events.at(-1)!,expected));
   assert.equal(right.replay(undefined,expected).events.length,0);
 });
+
+test("VI-R06: live log subscriptions, filtered replay and observers preserve event IDs", () => {
+  const box = new Sandbox();
+  const mine = box.create("email","consumer@example.test",120);
+  const observer = box.newObserver();
+  const watched = box.watch(observer.observerId,mine.id);
+  assert.equal(watched.recipient.id,mine.id);
+  const pushed: string[] = [];
+  const listener = (event: {id:string}) => pushed.push(event.id);
+  box.emitter.on("event",listener);
+  const first = box.log("smtp.simulation.applied",mine.id,undefined,
+    {ruleId:"rule-a",smtpSessionId:"session-a"});
+  const second = box.log("smtp.simulation.applied",mine.id,undefined,
+    {ruleId:"rule-b",smtpSessionId:"session-b"});
+  box.emitter.off("event",listener);
+  assert.deepEqual(pushed,[first.id,second.id],"no missed or reordered live events");
+  const afterFirst = box.replay(first.id,{ruleId:"rule-b",includeAnomalies:false});
+  assert.equal(afterFirst.reset,false);
+  assert.equal(afterFirst.gap,false);
+  assert.deepEqual(afterFirst.events.map(event=>event.id),[second.id]);
+  assert.equal(box.snapshot(observer.observerId).inboxes[0].id,mine.id);
+  const remote = new Sandbox();
+  assert.equal(remote.replay(second.id).reset,true,"another instance is a different log run");
+});

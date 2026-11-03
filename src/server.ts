@@ -326,7 +326,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
           smtpAuthPolicy, inbox: { idempotentCreate: true, ifExists: ["error", "return"],
             reservedDomain: "virtual.inbox" },
           simulation: { phases: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"],
-            actions: ["reply", "delay", "drop", "hang"] },
+            actions: ["reply", "delay", "drop", "hang", "reset"] },
         });
       case "openapi":
         return json(res, 200, createOpenApiDocument());
@@ -617,7 +617,7 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
 // Keep this version-specific adapter isolated and verify it with an actual SMTP test.
 type TransportConnection = {
   session?: { id?: string };
-  _socket?: { destroyed?: boolean; destroy(): void; once(event: "close", cb: () => void): void };
+  _socket?: { destroyed?: boolean; destroy(): void; resetAndDestroy?(): void; once(event: "close", cb: () => void): void };
   close(): void;
   send?(code: number, message: string, command?: boolean | string): void;
   handler_EHLO?: (command: Buffer | string, callback: () => void) => void;
@@ -643,6 +643,7 @@ function earlyFaultApplied(rule: SmtpReplyRule, session: {
   const originIp = session.remoteAddress?.replace(/^::ffff:/, "");
   const outcome = rule.action === "reply" ? "rejected"
     : rule.action === "drop" ? "disconnected"
+    : rule.action === "reset" ? "reset"
     : rule.action === "hang" ? "timeout-then-disconnect" : "delayed-response";
   sandbox.log("smtp.simulation.applied", undefined, undefined, {
     ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
@@ -675,6 +676,7 @@ function installGreetingRules(session: object): void {
       if (!rule) return original(command, callback);
       earlyFaultApplied(rule, info, "EHLO", ehloName);
       if (rule.action === "drop") return connection._socket?.destroy();
+      if (rule.action === "reset") return resetSmtpTransport(session);
       if (rule.action === "hang") {
         scheduleEarlyFault(connection, rule.durationMs!, () => connection._socket?.destroy());
         return;
@@ -687,6 +689,13 @@ function installGreetingRules(session: object): void {
       else reply();
     };
   }
+}
+
+function resetSmtpTransport(session: object): void {
+  const socket = transportFor(session)?._socket;
+  if (!socket || socket.destroyed || typeof socket.resetAndDestroy !== "function")
+    throw new Fault(503, "TCP reset is not available on this SMTP transport", "SMTP_RESET_UNAVAILABLE");
+  socket.resetAndDestroy();
 }
 
 function dropSmtpTransport(session: { id?: string }): void {
@@ -744,7 +753,8 @@ async function applySmtpFault(
   if(attemptId)smtpAttempts.update(attemptId,{phase,ruleId:rule.id});
   const outcome = rule.action === "reply" ? "rejected"
     : rule.action === "delay" ? (responseCode ? "delayed-rejection" : "delayed-response")
-    : rule.action === "drop" ? "disconnected" : "timeout-then-disconnect";
+    : rule.action === "drop" ? "disconnected"
+    : rule.action === "reset" ? "reset" : "timeout-then-disconnect";
   sandbox.log("smtp.simulation.applied", undefined, undefined, {
     ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
     phase, action: rule.action, responseCode, durationMs: rule.durationMs,
@@ -758,8 +768,9 @@ async function applySmtpFault(
     if (smtpSessionId) smtpSessions.recordError(smtpSessionId, responseCode ?? 0,
       "SIMULATED_SMTP_" + rule.action.toUpperCase());
   }
-  if (rule.action === "drop") {
-    dropSmtpTransport(session);
+  if (rule.action === "drop" || rule.action === "reset") {
+    if (rule.action === "reset") resetSmtpTransport(session);
+    else dropSmtpTransport(session);
     return true; // Deliberately suppress the SMTP callback and any final acknowledgement.
   }
   if (rule.action === "hang" || rule.action === "delay") {
@@ -792,6 +803,7 @@ const smtpOptions: SMTPServerOptions = {
       if (!rule) return callback();
       earlyFaultApplied(rule, session, "CONNECT");
       if (rule.action === "drop") { dropSmtpTransport(session); return; }
+      if (rule.action === "reset") { resetSmtpTransport(session); return; }
       if (rule.action === "hang") {
         const connection = transportFor(session);
         if (connection) scheduleEarlyFault(connection, rule.durationMs!, () => dropSmtpTransport(session));

@@ -66,3 +66,20 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
 ```
 
 As regras **GLOBAL** não têm `selectors` (ou usam `{}`); as **SPECIFIC** têm pelo menos um. Todos os seletores presentes são combinados por **AND**. Se não estiverem presentes, não restringem; **não existe wildcard `"*"`**. Primeiro procura-se uma regra SPECIFIC elegível, depois GLOBAL; dentro de cada âmbito decide a maior `priority` e, em empate, a regra inserida primeiro. Consome-se apenas uma regra por evento. AUTH aceita respostas 400–599; CONNECT/EHLO e inbox/SMS ficam para outras evoluções. O resolve e a configuração exigem HTTPS e token administrativo; passwords nunca entram nos logs. [Especificação completa](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+
+## Simulação de CONNECT e EHLO (código SDK v0.4.0)
+
+As regras CONNECT são avaliadas **após aceitar a ligação TCP, antes da saudação SMTP 220**. As regras EHLO são avaliadas quando o cliente envia HELO/EHLO. As ações são `reply` (4xx/5xx), `drop` (corte sem resposta), `hang` (espera limitada e corte) e `delay` (atraso limitado de resposta ou continuação normal).
+
+```ts
+await sdk.createSmtpRule({
+  phase:"CONNECT",action:"drop",remaining:1,
+  selectors:{connection:{port:2525},origin:{ip:"127.0.0.1"}}
+});
+await sdk.createSmtpRule({
+  phase:"EHLO",action:"reply",code:421,remaining:1,
+  selectors:{ehloName:"communication-test.example"}
+});
+```
+
+`connection.port` é a **porta local do listener**; `remotePort` é metadado efémero. O nome EHLO é **declarado pelo cliente**, sem autenticação, e não é conhecido em CONNECT; as credenciais não são conhecidas nem em CONNECT nem em EHLO. Seletores presentes usam AND; ausentes não restringem. Regras SPECIFIC elegíveis têm precedência sobre GLOBAL, independentemente da prioridade numérica. `drop` após accept não equivale a recusa da ligação TCP. O código do SDK 0.4.0 está preparado, **ainda sem publicação**; npm 0.3.0 é a última versão cuja publicação foi confirmada.

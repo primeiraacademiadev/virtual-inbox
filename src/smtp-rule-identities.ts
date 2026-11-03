@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
 /** Ephemeral correlators, not authenticated client identities. No secret or raw password leaves this store. */
@@ -18,7 +19,7 @@ export class SmtpRuleIdentities {
   }
 
   originId(ip: string): string {
-    if (typeof ip !== "string" || !ip.trim() || ip.length > 128)
+    if (typeof ip !== "string" || !isIP(ip.startsWith("::ffff:") ? ip.slice(7) : ip))
       throw new Fault(400, "Invalid SMTP origin", "INVALID_SMTP_ORIGIN");
     const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
     let id = this.origins.get(normalized);

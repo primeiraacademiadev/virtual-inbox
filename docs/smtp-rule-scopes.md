@@ -106,7 +106,7 @@ A rule application emits a structured `smtp.simulation.applied` log record with 
 - **AUTH** knows the presented credentials even if authentication will fail. The simulated error is checked **before normal credential validation**, so it is suitable for repeatable consumer retry tests.
 - **CONNECT** cannot know a username/password, EHLO or recipient. **EHLO** knows a claimed hostname but not credentials. Rules specifying information unavailable in their phase are rejected with HTTP 400.
 - **Inbox email** becomes available during RCPT; **SMS** has a distinct HTTP processing model. Those selectors belong to #76.
-- An IP is not a verified logical client identity; multiple test processes may share it. Distinguish suites using synthetic credentials or separate Virtual Inbox instances when needed.
+- An IP is not a verified logical client identity; multiple test processes may share it. **CONNECT** rules using origin/port cannot distinguish concurrent suites behind that address: use a dedicated VI instance. **EHLO** rules can distinguish a configured, synthetic `ehloName`; otherwise use a dedicated VI instance. Later phases can use credentials, sender or recipient when available.
 
 ## CONNECT and EHLO/HELO — real transport failure semantics
 

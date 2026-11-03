@@ -19,7 +19,8 @@ Only synthetic test data must be used. The SDK is an API client, not a Virtual I
 ```bash
 npm install --prefix sdk --no-package-lock
 npm run build --prefix sdk
-npm pack --dry-run --prefix sdk
+cd sdk
+npm pack --dry-run
 ```
 
 For API usage and configuration see the repository documentation.

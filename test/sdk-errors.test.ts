@@ -32,9 +32,10 @@ test("waitOrThrow distinguishes non-observation and inspects only its inbox", as
   } finally {globalThis.fetch=old;}
 });
 
-test("SDK rejects administration without explicit HTTPS and token", async()=>{
+test("SDK still rejects administrative writes without HTTPS and token", async()=>{
   const sdk=new VirtualInboxClient();
-  await assert.rejects(sdk.smtpSessions(),(e:unknown)=>e instanceof VirtualInboxError && e.errorCode==="ADMIN_CONFIGURATION_REQUIRED");
+  await assert.rejects(sdk.createSmtpRule({phase:"MAIL",action:"reply",remaining:1,selectors:{sender:"test@example.test"},code:451}),
+    (e:unknown)=>e instanceof VirtualInboxError && e.errorCode==="ADMIN_CONFIGURATION_REQUIRED");
 });
 
 test("SDK uses bearer token only on administrative endpoint", async()=>{
@@ -49,8 +50,12 @@ test("SDK uses bearer token only on administrative endpoint", async()=>{
     const sdk=new VirtualInboxClient("http://127.0.0.1:3000",{adminUrl:"https://localhost:3443",adminToken:"secret"});
     await sdk.findInbox("email","suite@example.test");
     await sdk.smtpSessions();
-    assert.equal(calls[0].authorization,null);
-    assert.equal(calls[1].authorization,"Bearer secret");
-    assert.ok(calls[1].url.startsWith("https://"));
+    await sdk.smtpAttempts({sender:"test@example.test"});
+    await sdk.smtpRules();
+    assert.ok(calls.slice(0,3).every((call) => call.authorization === null));
+    assert.equal(calls[3].authorization,"Bearer secret");
+    assert.ok(calls[3].url.startsWith("https://"));
+    assert.ok(calls[1].url.startsWith("http://"));
+    assert.ok(calls[2].url.startsWith("http://"));
   } finally {globalThis.fetch=old;}
 });

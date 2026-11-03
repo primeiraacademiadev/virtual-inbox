@@ -155,6 +155,10 @@ export const schemas: Record<string, Schema> = {
   ]),
   Event: object({ id: string, log_id: integer, type: string, at: string, resourceId: uuid, inboxId: uuid, messageId: uuid, smtpSessionId: string, attemptId: string, data: { type: "object" } }, ["id", "log_id", "type", "at"]),
   Replay: object({ events: array(reference("Event")), gap: boolean, reset: boolean, runId: uuid, oldest: string, latest: string, missingFrom: integer, missingTo: integer }, ["events", "gap", "reset", "runId"]),
+  LogPage: object({ events: array(reference("Event")), nextBefore: integer, hasMore: boolean,
+    oldest: {type:["object","null"]}, latest: {type:["object","null"]}, runId: uuid },
+    ["events","hasMore","oldest","latest","runId"]),
+  LogResponse: { oneOf: [reference("Replay"),reference("LogPage")] },
   Identity: object({ source: { enum: ["automatic", "external", "uploaded"] }, subject: string,
     issuer: string, validTo: string, fingerprint256: string, subjectAltName: string }, [
     "source", "subject", "issuer", "validTo", "fingerprint256", "subjectAltName",
@@ -228,7 +232,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "networkSettings", method: "PUT", path: "/admin/network", tag: "Administration", admin: true, status: 202, request: "NetworkSettings", response: "NetworkResult", summary: "Persist network settings. Restart is required for listeners." }),
   management({ id: "importTls", method: "PUT", path: "/admin/tls", tag: "Administration", admin: true, status: 200, request: "ImportIdentity", response: "ImportResult", summary: "Validate, persist and activate a PEM identity without restarting." }),
   management({ id: "tlsNames", method: "PUT", path: "/admin/tls/names", tag: "Administration", admin: true, status: 200, request: "TlsNames", response: "NamesResult", summary: "Replace console-managed SAN additions and regenerate in auto mode." }),
-  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,limit,before,from,to,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies", response: "Replay", summary: "Read retained events and replay gap/reset metadata." }),
+  management({ id: "logs", method: "GET", path: "/logs", tag: "Events", status: 200, query: "after,limit,before,from,to,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies", response: "LogResponse", summary: "Read retained events and replay gap/reset metadata." }),
   ...streams,
   management({ id: "observerSnapshot", method: "GET", path: "/observers/{observerId}", tag: "Events", status: 200, response: "Observer", summary: "Read subscriptions and renew the observer session." }),
   management({ id: "watchInbox", method: "POST", path: "/observers/{observerId}/inboxes", tag: "Events", status: 200, request: "Watch", response: "WatchResult", summary: "Subscribe an observer; returns the inbox and existing messages." }),
@@ -279,7 +283,8 @@ export function createOpenApiDocument(audience: ApiAudience = "management") {
     for (const segment of operation.path.split("/")) {
       if (segment.startsWith("{")) parameters.push({ name: segment.slice(1, -1), in: "path", required: true, schema: uuid });
     }
-    if (operation.query) parameters.push({ name: operation.query, in: "query", schema: string });
+    if (operation.query) for (const name of operation.query.split(","))
+      parameters.push({ name, in: "query", schema: string });
     if (operation.mediaType === "text/event-stream") parameters.push({ name: "Last-Event-ID", in: "header", schema: string });
     const success: Record<string, unknown> = { description: operation.status === 204 ? "No content." : "Success." };
     if (operation.status !== 204) success.content = {
@@ -287,6 +292,8 @@ export function createOpenApiDocument(audience: ApiAudience = "management") {
     };
     const responses: Record<string, unknown> = { [operation.status]: success };
     if (operation.noContent) responses[204] = { description: "No matching message before timeout, or the inbox was removed." };
+    if (operation.id === "ready") responses[503] = { description: "Listeners not yet ready.",
+      content: { "application/json": { schema: reference("Readiness") } } };
     for (const status of [400, 403, 404, 409, 413, 421, 500, 507]) responses[status] = { description: `Request failed (${status}); inspect errorCode.`, content: { "application/json": { schema: reference("Error") } } };
     const value: Record<string, unknown> = {
       operationId: operation.id, summary: operation.summary, tags: [operation.tag], parameters,

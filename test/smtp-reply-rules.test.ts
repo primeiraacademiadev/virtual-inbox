@@ -116,3 +116,36 @@ test("AUTH rejects impossible phase selectors and invalid wildcard/priority", ()
   assert.equal(store.create({...base,selectors:{}}).scope,"GLOBAL");
   assert.equal(store.create(base).scope,"GLOBAL");
 });
+
+test("CONNECT/EHLO use only available selectors, and scope precedence is unchanged", () => {
+  const store = new SmtpReplyRuleStore();
+  const base = {action:"reply",code:421,remaining:2};
+  for (const input of [
+    {phase:"CONNECT",selectors:{ehloName:"client.example.test"}},
+    {phase:"CONNECT",selectors:{credentialsId:"credentials-1"}},
+    {phase:"EHLO",selectors:{credentialsId:"credentials-1"}},
+    {phase:"EHLO",selectors:{recipient:"rcpt@example.test"}},
+    {phase:"CONNECT",selectors:{connection:{port:0}}},
+    {phase:"CONNECT",selectors:{connection:{port:65536}}},
+    {phase:"EHLO",selectors:{connection:{port:"2525"}}},
+  ]) assert.throws(()=>store.create({...base,...input}),(error:unknown)=>
+    error instanceof Fault && error.status===400);
+  const global = store.create({...base,phase:"EHLO",priority:99});
+  const specific = store.create({...base,phase:"EHLO",priority:1,
+    selectors:{origin:{ip:"10.1.1.53"},ehloName:"MiXeD.Example.Test",connection:{port:2525}}});
+  assert.equal(specific.selectors.ehloName,"mixed.example.test");
+  assert.equal(store.consume("EHLO",{originIp:"10.1.1.53",ehloName:"mixed.example.test",localPort:2526})?.id,global.id);
+  assert.equal(store.consume("EHLO",{originIp:"10.1.1.53",ehloName:"MIXED.EXAMPLE.TEST",localPort:2525})?.id,specific.id);
+  assert.equal(store.consume("EHLO",{originIp:"10.1.1.53",ehloName:"mixed.example.test",localPort:2525})?.id,specific.id);
+  assert.equal(store.consume("EHLO",{originIp:"10.1.1.53",ehloName:"mixed.example.test",localPort:2525})?.id,global.id);
+});
+
+test("CONNECT accepts bounded drop, hang and delayed reply rules", () => {
+  const store = new SmtpReplyRuleStore(10, 250);
+  assert.equal(store.create({phase:"CONNECT",action:"drop",remaining:1,
+    selectors:{connection:{port:2525}}}).scope,"SPECIFIC");
+  assert.equal(store.create({phase:"CONNECT",action:"hang",durationMs:100,remaining:1}).scope,"GLOBAL");
+  assert.equal(store.create({phase:"EHLO",action:"delay",code:451,durationMs:100,
+    remaining:1,selectors:{ehloName:"test.example"}}).scope,"SPECIFIC");
+  assert.throws(()=>store.create({phase:"CONNECT",action:"hang",remaining:1,durationMs:251}),Fault);
+});

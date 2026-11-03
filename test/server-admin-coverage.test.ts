@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createServer } from "node:net";
+import { createServer, createConnection } from "node:net";
 import nodemailer from "nodemailer";
 import { request as httpsRequest } from "node:https";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -154,6 +154,81 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     const metrics = await api("GET", "/admin/test/metrics");
     assert.equal(metrics.status, 200);
     assert.equal(metrics.data.POP3.connectionsActive, 0);
+
+    // Real TCP transport checks: distinguish rejection before 220 from EHLO rejection after 220.
+    const earlyRules = async (phase: "CONNECT" | "EHLO", action: "reply" | "drop" | "hang",
+      selectors: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
+      const response = await api("POST", "/admin/smtp/reply-rules", {
+        phase, action, remaining: 1, selectors, ...(action === "reply" ? {code:421} : {}),
+        ...(action === "hang" ? {durationMs:120} : {}), ...extra,
+      });
+      assert.equal(response.status,201,JSON.stringify(response.data));
+      return response.data.id as string;
+    };
+    const observeSocket = (command?: string) => new Promise<{reply:string; closed:boolean; elapsed:number}>(
+      (finish,reject) => {
+        const socket = createConnection({host:"127.0.0.1",port:smtpPort});
+        const start = Date.now();
+        let reply = "";
+        let sent = false;
+        let completed = false;
+        const timer = setTimeout(() => {
+          if (!completed) { completed = true; socket.destroy(); reject(Error("SMTP socket timeout")); }
+        },3000);
+        socket.on("data", chunk => {
+          reply += chunk.toString();
+          if (command && !sent && reply.startsWith("220")) {
+            sent = true;
+            socket.write(command + "\r\n");
+          }
+        });
+        socket.on("error", error => { if (!completed) { completed=true;clearTimeout(timer);reject(error); } });
+        socket.on("close", () => {
+          if (!completed) { completed=true;clearTimeout(timer);finish({reply,closed:true,elapsed:Date.now()-start}); }
+        });
+      });
+    const connectReject = await earlyRules("CONNECT","reply",{origin:{ip:"127.0.0.1"}});
+    const connectResult = await observeSocket();
+    assert.match(connectResult.reply,/^421 /);
+    assert.ok(!connectResult.reply.includes("220"),"CONNECT fails before SMTP banner");
+    const ehloReject = await earlyRules("EHLO","reply",{ehloName:"failure.example.test"});
+    const ehloResult = await observeSocket("EHLO failure.example.test");
+    assert.match(ehloResult.reply,/^220 /);
+    assert.match(ehloResult.reply,/421 /);
+    const connectDrop = await earlyRules("CONNECT","drop",{connection:{port:smtpPort}});
+    const dropResult = await observeSocket();
+    assert.equal(dropResult.reply,"","transport drop must not send a SMTP code");
+    const connectHang = await earlyRules("CONNECT","hang",{connection:{port:smtpPort}});
+    const hangResult = await observeSocket();
+    assert.equal(hangResult.reply,"","hang must not send a SMTP code");
+    assert.ok(hangResult.elapsed >= 90,"hang waited before disconnect");
+    const connectDelayResponse = await api("POST", "/admin/smtp/reply-rules", {
+      phase:"CONNECT",action:"delay",code:421,durationMs:120,remaining:1,
+      selectors:{connection:{port:smtpPort}},
+    });
+    assert.equal(connectDelayResponse.status,201);
+    const delayedConnect = await observeSocket();
+    assert.match(delayedConnect.reply,/^421 /);
+    assert.ok(delayedConnect.elapsed>=90,"delayed CONNECT reply");
+    const ehloDelayResponse = await api("POST", "/admin/smtp/reply-rules", {
+      phase:"EHLO",action:"delay",code:421,durationMs:120,remaining:1,
+      selectors:{ehloName:"delay.example.test"},
+    });
+    assert.equal(ehloDelayResponse.status,201);
+    const delayedEhlo = await observeSocket("EHLO delay.example.test");
+    assert.match(delayedEhlo.reply,/^220 /);
+    assert.match(delayedEhlo.reply,/421 /);
+    assert.ok(delayedEhlo.elapsed>=90,"delayed EHLO reply");
+    const earlyLogResponse = await fetch("http://127.0.0.1:" + port +
+      "/api/logs?type=smtp.simulation.applied");
+    assert.equal(earlyLogResponse.status,200);
+    const earlyLogs = await earlyLogResponse.json() as {events:Array<{data?:Record<string,unknown>}>};
+    for (const id of [connectReject,ehloReject,connectDrop,connectHang]) {
+      assert.ok(earlyLogs.events.some(e => e.data?.ruleId === id), "Missing simulation log " + id);
+    }
+    assert.equal((await api("POST","/admin/smtp/reply-rules", {
+      phase:"CONNECT",action:"reply",code:421,remaining:1,selectors:{credentialsId:"not-allowed"},
+    })).status,400);
 
     // SMTP AUTH must use a real inbox. Unlike the transport-only E2E suite,
     // this child server inherits NODE_V8_COVERAGE so the auth branches in

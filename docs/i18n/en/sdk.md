@@ -66,3 +66,20 @@ await sdk.createSmtpRule({phase:"AUTH",action:"reply",code:454,remaining:3,
 ```
 
 **GLOBAL** rules omit `selectors` or set `{}`; **SPECIFIC** rules have at least one selector. All selectors are **AND**; absent means unrestricted and `"*"` is **not supported**. Eligible SPECIFIC rules always precede GLOBAL; within each scope higher `priority` wins, then earlier insertion. Only one rule is consumed per event. AUTH supports reply codes 400–599; CONNECT/EHLO and inbox/SMS selection are future work. The resolve and rule mutation APIs require administrative HTTPS and token; the SMTP runtime and logs never reveal passwords. [Full behavior and examples](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/smtp-rule-scopes.md).
+
+## CONNECT and EHLO fault injection (SDK source v0.4.0)
+
+A CONNECT rule is evaluated **after TCP accept but before SMTP 220**. An EHLO rule is evaluated only when the client sends HELO/EHLO. Supported actions are `reply` (SMTP 4xx/5xx), `drop` (no response), `hang` (bounded delay then disconnect) and `delay` (bounded deferred reply or normal continuation).
+
+```ts
+await sdk.createSmtpRule({
+  phase:"CONNECT",action:"drop",remaining:1,
+  selectors:{connection:{port:2525},origin:{ip:"127.0.0.1"}}
+});
+await sdk.createSmtpRule({
+  phase:"EHLO",action:"reply",code:421,remaining:1,
+  selectors:{ehloName:"communication-test.example"}
+});
+```
+
+`connection.port` is the **local listener port**; remotePort is ephemeral metadata. EHLO is a **client-declared** hostname, not an authenticated identity; CONNECT cannot select it. `credentialsId` cannot select either phase. All selectors are AND; absence means unrestricted. Eligible SPECIFIC rules precede GLOBAL regardless of priority. CONNECT drop is not the same as TCP SYN refusal. SDK 0.4.0 is prepared in source **but not yet published**; npm 0.3.0 is the last known published release.

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
-export type SmtpReplyPhase = "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
+export type SmtpReplyPhase = "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
 export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang";
 export type SmtpReplySelectors = {
   sender?: string;
@@ -11,6 +11,8 @@ export type SmtpReplySelectors = {
   smtpSessionId?: string;
   origin?: { ip: string };
   credentialsId?: string;
+  connection?: { port: number };
+  ehloName?: string;
 };
 export type SmtpReplyRule = {
   id: string;
@@ -31,13 +33,15 @@ export type SmtpReplyContext = {
   clientId?: string;
   smtpSessionId?: string;
   originIp?: string;
+  localPort?: number;
+  ehloName?: string;
   credentialsId?: string;
 };
 
-const PHASES = new Set(["AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"]);
+const PHASES = new Set(["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"]);
 const ACTIONS = new Set(["reply", "delay", "drop", "hang"]);
 const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors", "durationMs", "priority"]);
-const SELECTORS = new Set(["sender", "recipient", "clientId", "smtpSessionId", "origin", "credentialsId"]);
+const SELECTORS = new Set(["sender", "recipient", "clientId", "smtpSessionId", "origin", "credentialsId", "connection", "ehloName"]);
 const ADDRESS_FIELDS = new Set(["sender", "recipient"]);
 
 function invalid(message: string): never {
@@ -52,7 +56,7 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
   if (!record(input) || Object.keys(input).some((key) => !FIELDS.has(key)))
     invalid("Unsupported SMTP simulation fields");
   if (typeof input.phase !== "string" || !PHASES.has(input.phase))
-    invalid("Only AUTH, MAIL, RCPT, DATA and AFTER_DATA phases are supported");
+    invalid("Only CONNECT, EHLO, AUTH, MAIL, RCPT, DATA and AFTER_DATA phases are supported");
   if (typeof input.action !== "string" || !ACTIONS.has(input.action))
     invalid("Unsupported SMTP simulation action");
   const action = input.action as SmtpFaultAction;
@@ -87,6 +91,13 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
     invalid("priority must be an integer between -10000 and 10000");
   const selectors: SmtpReplySelectors = {};
   for (const [key, value] of Object.entries((input.selectors as Record<string, unknown>) || {})) {
+    if (key === "connection") {
+      if (!record(value) || Object.keys(value).length !== 1 ||
+          !Number.isInteger(value.port) || (value.port as number) < 1 || (value.port as number) > 65535)
+        invalid("Invalid SMTP connection port selector");
+      selectors.connection = { port: value.port as number };
+      continue;
+    }
     if (key === "origin") {
       if (!record(value) || Object.keys(value).length !== 1 || typeof value.ip !== "string" ||
           !isIP(value.ip.startsWith("::ffff:") ? value.ip.slice(7) : value.ip)) invalid("Invalid SMTP origin selector");
@@ -98,9 +109,16 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
       invalid("Invalid SMTP selector: " + key);
     if (key === "sender" || key === "recipient")
       selectors[key] = value.toLowerCase();
+    else if (key === "ehloName") selectors.ehloName = value.toLowerCase();
     else if (key === "clientId" || key === "smtpSessionId" || key === "credentialsId")
       selectors[key] = value;
   }
+  const preAuth = input.phase === "CONNECT" || input.phase === "EHLO";
+  if (preAuth && (selectors.sender !== undefined || selectors.recipient !== undefined ||
+      selectors.credentialsId !== undefined || selectors.clientId !== undefined))
+    invalid("SMTP selector is not available before AUTH");
+  if (input.phase === "CONNECT" && selectors.ehloName !== undefined)
+    invalid("EHLO name is not available during CONNECT");
   if ((input.phase === "AUTH" &&
       (selectors.sender !== undefined || selectors.recipient !== undefined || selectors.clientId !== undefined)) ||
       (input.phase === "MAIL" && selectors.recipient !== undefined))
@@ -126,7 +144,9 @@ function matches(rule: SmtpReplyRule, context: SmtpReplyContext): boolean {
     (s.clientId === undefined || s.clientId === context.clientId) &&
     (s.smtpSessionId === undefined || s.smtpSessionId === context.smtpSessionId) &&
     (s.credentialsId === undefined || s.credentialsId === context.credentialsId) &&
-    (s.origin === undefined || s.origin.ip === context.originIp);
+    (s.origin === undefined || s.origin.ip === context.originIp) &&
+    (s.connection === undefined || s.connection.port === context.localPort) &&
+    (s.ehloName === undefined || s.ehloName === context.ehloName?.toLowerCase());
 }
 
 

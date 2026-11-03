@@ -19,7 +19,7 @@ import { SimulationStore } from "./simulation-store.js";
 import { resolveNetworkSetting, shadowedNetworkKeys, environmentControlledKeys, assertWritableNetworkSettings } from "./network-settings.js";
 import { SmtpAttemptStore } from "./smtp-attempts.js";
 import { startFixedListeners, type ListenerSpec } from "./listener-readiness.js";
-import { SmtpReplyRuleStore, type SmtpReplyPhase } from "./smtp-reply-rules.js";
+import { SmtpReplyRuleStore, type SmtpReplyPhase, type SmtpReplyRule } from "./smtp-reply-rules.js";
 import { SmtpRuleIdentities } from "./smtp-rule-identities.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress, validateConnectionProbeMessage, deliverConnectionProbe, waitForConnectionProbeMessage } from "./connection-probe.js";
 import { ProtocolCounters } from "./protocol-metrics.js";
@@ -716,9 +716,78 @@ function smtpFailure(error: unknown): Error & { responseCode: number } {
 // Keep this version-specific adapter isolated and verify it with an actual SMTP test.
 type TransportConnection = {
   session?: { id?: string };
-  _socket?: { destroyed?: boolean; destroy(): void };
+  _socket?: { destroyed?: boolean; destroy(): void; once(event: "close", cb: () => void): void };
   close(): void;
+  send?(code: number, message: string, command?: boolean | string): void;
+  handler_EHLO?: (command: Buffer | string, callback: () => void) => void;
+  handler_HELO?: (command: Buffer | string, callback: () => void) => void;
 };
+function transportFor(session: object): TransportConnection | undefined {
+  for (const service of [smtp, smtps]) {
+    const connections = (service as unknown as { connections?: Set<TransportConnection> } | null)?.connections;
+    for (const connection of connections || []) if (connection.session === session) return connection;
+  }
+  return undefined;
+}
+function scheduleEarlyFault(connection: TransportConnection, milliseconds: number, action: () => void): void {
+  const timer = setTimeout(() => {
+    if (!connection._socket?.destroyed) action();
+  }, milliseconds);
+  connection._socket?.once("close", () => clearTimeout(timer));
+}
+function earlyFaultApplied(rule: SmtpReplyRule, session: {
+  remoteAddress?: string; localPort?: number; remotePort?: number; id?: string;
+}, phase: "CONNECT" | "EHLO", name?: string): void {
+  const smtpSessionId = smtpSessionIds.get(session);
+  const originIp = session.remoteAddress?.replace(/^::ffff:/, "");
+  const outcome = rule.action === "reply" ? "rejected"
+    : rule.action === "drop" ? "disconnected"
+    : rule.action === "hang" ? "timeout-then-disconnect" : "delayed-response";
+  sandbox.log("smtp.simulation.applied", undefined, undefined, {
+    ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
+    phase, action: rule.action, responseCode: rule.code, durationMs: rule.durationMs,
+    smtpSessionId, originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
+    localPort: session.localPort, remotePort: session.remotePort,
+    ...(name ? { ehloName: name } : {}), outcome,
+  });
+  if (smtpSessionId) smtpSessions.recordError(smtpSessionId, rule.code ?? 0,
+    "SIMULATED_SMTP_" + phase + "_" + rule.action.toUpperCase());
+  protocolCounters.error("SMTP", true);
+}
+/** Version-specific hook: smtp-server does not expose an onEHLO callback. */
+function installGreetingRules(session: object): void {
+  const connection = transportFor(session);
+  if (!connection || !connection.handler_EHLO || !connection.handler_HELO || !connection.send)
+    throw new Error("SMTP greeting interception unavailable");
+  for (const commandName of ["EHLO", "HELO"] as const) {
+    const method = commandName === "EHLO" ? "handler_EHLO" : "handler_HELO";
+    const original = connection[method]!.bind(connection);
+    connection[method] = (command, callback) => {
+      const value = command.toString().trim().split(/\s+/);
+      const ehloName = value.length === 2 ? value[1].toLowerCase() : undefined;
+      const info = session as { remoteAddress?: string; localPort?: number; remotePort?: number };
+      const rule = smtpReplyRules.consume("EHLO", {
+        smtpSessionId: smtpSessionIds.get(session),
+        originIp: info.remoteAddress?.replace(/^::ffff:/, ""), localPort: info.localPort,
+        ehloName,
+      });
+      if (!rule) return original(command, callback);
+      earlyFaultApplied(rule, info, "EHLO", ehloName);
+      if (rule.action === "drop") return connection._socket?.destroy();
+      if (rule.action === "hang") {
+        scheduleEarlyFault(connection, rule.durationMs!, () => connection._socket?.destroy());
+        return;
+      }
+      const reply = () => {
+        if (rule.code !== undefined) { connection.send!(rule.code, rule.message, false); callback(); }
+        else original(command, callback);
+      };
+      if (rule.action === "delay") scheduleEarlyFault(connection, rule.durationMs!, reply);
+      else reply();
+    };
+  }
+}
+
 function dropSmtpTransport(session: { id?: string }): void {
   for (const service of [smtp, smtps]) {
     const connections = (service as unknown as { connections?: Set<TransportConnection> } | null)?.connections;
@@ -757,7 +826,7 @@ function waitForFault(sessionId: string, durationMs: number): Promise<boolean> {
   });
 }
 async function applySmtpFault(
-  phase: Exclude<SmtpReplyPhase, "AUTH">, session: any, sender?: string, recipients?: string[], persisted = false,
+  phase: Exclude<SmtpReplyPhase, "AUTH" | "CONNECT" | "EHLO">, session: any, sender?: string, recipients?: string[], persisted = false,
 ): Promise<boolean> {
   const smtpSessionId = smtpSessionIds.get(session);
   const current = smtpSessionId ? smtpSessions.getSession(smtpSessionId) : undefined;
@@ -766,7 +835,8 @@ async function applySmtpFault(
   const credentialsId = seenCredentials?.at(-1);
   const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
   const rule = smtpReplyRules.consume(phase, { sender, recipients, smtpSessionId, clientId,
-    originIp, credentialsId });
+    originIp, credentialsId, localPort: session.localPort,
+    ehloName: typeof session.hostNameAppearsAs === "string" ? session.hostNameAppearsAs : undefined });
   if (!rule) return false;
   const responseCode = rule.code;
   const attemptId=activeAttempts.get(session);
@@ -778,7 +848,8 @@ async function applySmtpFault(
     ruleId: rule.id, scope: rule.scope, priority: rule.priority, selectors: rule.selectors,
     phase, action: rule.action, responseCode, durationMs: rule.durationMs,
     originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
-    credentialsId,
+    localPort: session.localPort, remotePort: session.remotePort,
+    ehloName: session.hostNameAppearsAs, credentialsId,
     smtpSessionId, clientId, sender, recipients, persisted, outcome,
   });
   if (rule.action !== "delay" || responseCode !== undefined) {
@@ -812,9 +883,28 @@ const smtpOptions: SMTPServerOptions = {
       smtpSessionIds.set(session, id);
       protocolCounters.connect("SMTP");
       sandbox.log("smtp.session.connected", undefined, undefined, { sessionId: id });
-      callback();
-    } catch {
-      callback(Object.assign(new Error("SMTP session capacity reached"), { responseCode: 421 }));
+      installGreetingRules(session);
+      const rule = smtpReplyRules.consume("CONNECT", {
+        smtpSessionId: id, originIp: session.remoteAddress?.replace(/^::ffff:/, ""),
+        localPort: session.localPort,
+      });
+      if (!rule) return callback();
+      earlyFaultApplied(rule, session, "CONNECT");
+      if (rule.action === "drop") { dropSmtpTransport(session); return; }
+      if (rule.action === "hang") {
+        const connection = transportFor(session);
+        if (connection) scheduleEarlyFault(connection, rule.durationMs!, () => dropSmtpTransport(session));
+        return;
+      }
+      const finish = () => callback(rule.code === undefined ? undefined :
+        Object.assign(new Error(rule.message), { responseCode: rule.code }));
+      if (rule.action === "delay") {
+        const connection = transportFor(session);
+        if (connection) scheduleEarlyFault(connection, rule.durationMs!, finish);
+      } else finish();
+    } catch (error) {
+      callback(Object.assign(new Error(error instanceof Error ? error.message : "SMTP session unavailable"),
+        { responseCode: 421 }));
     }
   },
   onClose(session) {
@@ -852,14 +942,17 @@ const smtpOptions: SMTPServerOptions = {
     smtpCredentialIds.set(id, seenCredentials);
     const current = smtpSessions.getSession(id);
     const originIp = current?.remoteAddress?.replace(/^::ffff:/, "");
-    const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp });
+    const rule = smtpReplyRules.consume("AUTH", { smtpSessionId: id, credentialsId, originIp,
+      localPort: session.localPort,
+      ehloName: typeof session.hostNameAppearsAs === "string" ? session.hostNameAppearsAs : undefined });
     if (rule) {
       const responseCode = rule.code!;
       sandbox.log("smtp.simulation.applied", undefined, undefined, {
         ruleId: rule.id, scope: rule.scope, priority: rule.priority, phase: "AUTH",
         action: rule.action, responseCode, smtpSessionId: id,
         originIp, originId: originIp ? smtpRuleIdentities.originId(originIp) : undefined,
-        credentialsId, selectors: rule.selectors,
+        localPort: session.localPort, remotePort: session.remotePort,
+        ehloName: session.hostNameAppearsAs, credentialsId, selectors: rule.selectors,
       });
       smtpSessions.recordError(id, responseCode, "SIMULATED_SMTP_AUTH");
       protocolCounters.error("SMTP", true);

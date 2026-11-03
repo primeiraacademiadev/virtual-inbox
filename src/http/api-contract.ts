@@ -115,7 +115,8 @@ export const schemas: Record<string, Schema> = {
     cleanup: object({ lastAt: { type: ["string", "null"] } }),
   }),
   SmtpReplySelectors: object({ sender: string, recipient: string, clientId: uuid, smtpSessionId: uuid,
-    origin: object({ ip: string }, ["ip"]), credentialsId: uuid }),
+    origin: object({ ip: string }, ["ip"]), credentialsId: uuid,
+    connection: object({ port: { type: "integer", minimum: 1, maximum: 65535 } }, ["port"]), ehloName: string }),
   SmtpResolveInput: object({
     credentials: object({ username: string, password: { type: "string", format: "password", writeOnly: true } }, ["username", "password"]),
     origin: object({ ip: string }, ["ip"]),
@@ -128,7 +129,7 @@ export const schemas: Record<string, Schema> = {
     id: uuid, credentialsIds: array(uuid), connected: boolean, connectedAt: string,
   }, ["id", "connected", "connectedAt"])) }, ["id", "ip", "connections"]),
   SmtpReplyRuleInput: object({
-    phase: { enum: ["AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
+    phase: { enum: ["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"] }, action: { enum: ["reply", "delay", "drop", "hang"] },
     code: { type: "integer", minimum: 400, maximum: 599 },
     message: string, durationMs: { type: "integer", minimum: 1 }, remaining: { type: "integer", minimum: 1, maximum: 10000 },
     priority: { type: "integer", minimum: -10000, maximum: 10000 }, selectors: reference("SmtpReplySelectors"),
@@ -198,7 +199,7 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "smtpRuleResolve", method: "POST", path: "/admin/smtp/resolve", tag: "SMTP simulations",
     status: 200, admin: true, request: "SmtpResolveInput", response: "SmtpResolveResult",
     summary: "Resolve credentials and/or origin before SMTP AUTH; observed connections are never fabricated." }),
-  management({ id: "smtpReplyRuleCreate", method: "POST", path: "/admin/smtp/reply-rules", tag: "SMTP simulations", status: 201, admin: true, request: "SmtpReplyRuleInput", response: "SmtpReplyRule", summary: "Create an SMTP reply rule scoped by sender, recipient, client or connection." }),
+  management({ id: "smtpReplyRuleCreate", method: "POST", path: "/admin/smtp/reply-rules", tag: "SMTP simulations", status: 201, admin: true, request: "SmtpReplyRuleInput", response: "SmtpReplyRule", summary: "Create a scoped SMTP rule for CONNECT, EHLO, AUTH or mail phases. Missing selectors mean GLOBAL; present selectors use AND." }),
   management({ id: "smtpReplyRuleList", method: "GET", path: "/admin/smtp/reply-rules", tag: "SMTP simulations", status: 200, admin: true, response: "SmtpReplyRules", summary: "List SMTP reply rules." }),
   management({ id: "smtpReplyRuleDelete", method: "DELETE", path: "/admin/smtp/reply-rules/{ruleId}", tag: "SMTP simulations", status: 204, admin: true, summary: "Remove an SMTP reply rule." }),
   management({ id: "smtpConnectionSimulationCreate", method: "POST", path: "/admin/smtp/sessions/{sessionId}/simulations", tag: "SMTP diagnostics", status: 201, admin: true, summary: "Inject a DATA failure on an active SMTP connection." }),

@@ -93,10 +93,16 @@ Le SDK dispose déjà de `create`, `delete`, `messages`, `wait`, `smtpAttempts`,
 const state = await sdk.ready(); // HTTP 503 retourne { ready: false, ... }
 const message = await sdk.getMessage(inbox, messageId);
 await sdk.deleteMessage(inbox, messageId);
-const replay = await sdk.logs({ after: 120, limit: 100, ruleId });
+const page = await sdk.logs({ limit: 100, ruleId }); // página descendente
+const replay = await sdk.logs({ after: "runId:120", ruleId }); // replay por ID de evento
 if (replay.gap || replay.reset) {
   // Vérifier missingFrom/missingTo et runId avant de reprendre.
 }
 ```
 
 `logs()` utilise l'API HTTP de lecture ouverte sans jeton d'administration et **n'est pas** un flux SSE continu. Les curseurs du journal et des messages d'une inbox sont différents. Aucune modification du serveur n'est nécessaire. La version source du SDK est 0.5.0 ; vérifier sa disponibilité sur npm avant installation.
+
+
+### Modes de consultation des journaux
+
+Le replay des journaux utilise l'identifiant événementiel `runId:log_id` (identique au curseur SSE), **pas seulement log_id numérique**. `limit`/`before` effectuent une pagination descendante et ne peuvent pas être combinés avec `after` ou `from`/`to`. Les réponses diffèrent : replay fournit `gap`/`reset`/`missingFrom`/`missingTo`, pagination fournit `hasMore`/`nextBefore`. `runId:120` est un exemple : utiliser un ID retourné par le serveur.

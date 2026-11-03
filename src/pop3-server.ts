@@ -9,6 +9,8 @@ import type { ProtocolCounters } from "./protocol-metrics.js";
 /** Test-only POP3 mailbox access, sharing the SMTP inbox/password identity. */
 export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialStore, simulations: SimulationStore, counters: ProtocolCounters, connections = new Pop3ConnectionStore()): Server {
   return createServer((socket: Socket) => {
+    // Client resets are normal for a protocol test server. Handle errors before the greeting.
+    socket.on("error", () => { /* The close handler owns connection cleanup. */ });
     let connectionId: string;
     try { connectionId = connections.connect(socket.remoteAddress || "unknown"); }
     catch { socket.end("-ERR too many POP3 connections\r\n"); return; }
@@ -19,7 +21,9 @@ export function createPop3Server(sandbox: Sandbox, credentials: InboxCredentialS
     let queue = Promise.resolve();
     const deleted = new Set<string>();
     let snapshot: ReturnType<Sandbox["listMessages"]> = [];
-    const send = (line: string) => socket.write(line + "\r\n");
+    const send = (line: string) => {
+      if (!socket.destroyed && socket.writable) socket.write(line + "\r\n");
+    };
     const messages = () => snapshot.map((message, i) => ({ number: i + 1, message }))
       .filter(entry => !deleted.has(entry.message.id));
     const multiline = (lines: string[]) => { for (const line of lines) send(line.startsWith(".") ? "." + line : line); send("."); };

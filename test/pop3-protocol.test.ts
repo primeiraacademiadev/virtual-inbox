@@ -90,3 +90,31 @@ test("POP3 USER/PASS resolves shared GUID; RETR returns the captured MIME and se
     socket.destroy();server.close();
   }
 });
+
+
+test("POP3 survives a client reset during greeting and accepts the next client", { timeout: 15_000 }, async () => {
+  const server = createPop3Server(new Sandbox(), new InboxCredentialStore(),
+    new SimulationStore(), new ProtocolCounters(), new Pop3ConnectionStore());
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw Error("Expected TCP listener");
+    for (let i = 0; i < 6; i++) {
+      const socket = connect(address.port, "127.0.0.1");
+      socket.on("error", () => { /* Expected when aborting the connection. */ });
+      await once(socket, "connect");
+      const closed = new Promise<void>(done => socket.once("close", () => done()));
+      socket.resetAndDestroy();
+      await closed;
+    }
+    const next = connect(address.port, "127.0.0.1");
+    next.on("error", () => {});
+    try {
+      const [chunk] = await once(next, "data");
+      assert.match(String(chunk), /^\\+OK Virtual Inbox POP3 ready/);
+    } finally { next.destroy(); }
+  } finally {
+    await new Promise<void>(done => server.close(() => done()));
+  }
+});

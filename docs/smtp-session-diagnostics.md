@@ -3,7 +3,7 @@
 Status: V1-V4 merged. V7-V9 proposed in a separate PR following real Communication E2E feedback (20/23 cases passed; three findings). Do not deploy automatically.
 
 ## V1 SMTP authentication and sessions
-Accept arbitrary SMTP test credentials with onAuth. Each SMTP connection has a UUID and records remote address, TLS, authentication attempt metadata, timestamps, messages and errors. Client grouping by IP and authenticated username is observational, not proof of application identity.
+SMTP AUTH accepts synthetic credentials according to `SMTP_AUTH_POLICY`: `INBOX` (default) requires an existing inbox and valid credentials, while `OPEN` accepts arbitrary test credentials. Each SMTP connection has a UUID and records remote address, TLS, authentication attempt metadata, timestamps, messages and errors. Legacy client grouping is observational, not proof of application identity.
 
 Username and password are independently derived with scrypt using random per-value 16-byte salts. Digest and salt remain only in the bounded ephemeral server store, never in REST, SSE or logs. POST /api/admin/smtp/sessions/{sessionId}/verify accepts user and password over HTTPS with ADMIN_TOKEN, checks a recorded attempt and returns match booleans. The console offers an SMTP clients view, history and verification. GET /api/admin/smtp/sessions and filtered GET /api/admin/smtp/attempts are public diagnostic reads over HTTP or HTTPS without an admin token (ADR-0001). GET /api/admin/smtp/clients remains an authenticated HTTPS operation in this change.
 

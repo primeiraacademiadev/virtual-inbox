@@ -110,3 +110,43 @@ test("SDK create, SMS path and attachment downloads use the current routes", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("SDK scoped SMTP rules clean up and completed-attempt polling waits for a terminal outcome", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  let polls = 0;
+  const rule = { id:"rule-1",phase:"MAIL",action:"reply",code:451,remaining:1,
+    scope:"SPECIFIC",priority:0,selectors:{sender:"sender@example.test"},createdAt:"2026-11-03T00:00:00Z" };
+  globalThis.fetch = async (url, init) => {
+    const method = init?.method ?? "GET";
+    const path = new URL(String(url)).pathname;
+    requests.push(method + " " + path);
+    if (path.endsWith("/reply-rules") && method === "POST") return Response.json(rule, {status:201});
+    if (path.endsWith("/rule-1") && method === "DELETE") return new Response(null,{status:204});
+    if (path.endsWith("/attempts")) {
+      polls++;
+      return Response.json([{id:"attempt-1",smtpSessionId:"session-1",startedAt:"2026-11-03T00:00:00Z",
+        updatedAt:"2026-11-03T00:00:00Z",recipients:[],messageIds:[],ruleIds:["rule-1"],
+        outcome:polls===1?"in_progress":"rejected",phase:"MAIL",persisted:false,responseCode:451}]);
+    }
+    throw Error("Unexpected request: " + String(url));
+  };
+  try {
+    const sdk = new VirtualInboxClient("http://127.0.0.1:3000",
+      {adminUrl:"https://localhost:3443",adminToken:"test-token"});
+    const input = {phase:"MAIL" as const,action:"reply" as const,code:451,remaining:1,
+      ttlMs:5000,selectors:{sender:"sender@example.test"}};
+    const attempt = await sdk.withSmtpRule(input, async created => {
+      assert.equal(created.id,"rule-1");
+      return sdk.waitForCompletedSmtpAttempt({ruleId:created.id},
+        {attemptId:"attempt-1",timeoutMs:1000,pollIntervalMs:1});
+    });
+    assert.equal(attempt.outcome,"rejected");
+    assert.equal(polls,2);
+    await assert.rejects(sdk.withSmtpRule(input, async () => {
+      throw Error("consumer test failed");
+    }),/consumer test failed/);
+    assert.deepEqual(requests.filter(x=>x==="DELETE /admin/smtp/reply-rules/rule-1").length,2);
+  } finally { globalThis.fetch = originalFetch; }
+});

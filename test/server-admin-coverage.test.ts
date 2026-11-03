@@ -127,6 +127,24 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal((await api("GET", "/admin/test/metrics", undefined, false)).status, 403);
     assert.equal((await api("GET","/admin/pop3/connections",undefined,false)).status,403);
     assert.equal((await api("GET","/admin/footprint",undefined,false)).status,403);
+    // ADR-0001: read-only SMTP observations are open on HTTP and HTTPS.
+    const openSessionsHttp = await fetch("http://127.0.0.1:" + port + "/api/admin/smtp/sessions");
+    assert.equal(openSessionsHttp.status, 200);
+    assert.deepEqual(await openSessionsHttp.json(), []);
+    assert.deepEqual((await api("GET", "/admin/smtp/sessions", undefined, false)).data, []);
+    const openAttempts = await fetch("http://127.0.0.1:" + port +
+      "/api/admin/smtp/attempts?sender=synthetic@example.test");
+    assert.equal(openAttempts.status, 200);
+    assert.deepEqual(await openAttempts.json(), []);
+    assert.deepEqual((await api("GET", "/admin/smtp/attempts?sender=synthetic@example.test",
+      undefined, false)).data, []);
+    assert.equal((await fetch("http://127.0.0.1:" + port +
+      "/api/admin/smtp/attempts")).status, 400, "a correlation filter is still required");
+    assert.equal((await api("POST", "/admin/smtp/sessions/not-a-session/verify",
+      {username:"synthetic",password:"synthetic"}, false)).status, 403);
+    assert.equal((await api("POST", "/admin/smtp/reply-rules",
+      {phase:"MAIL",action:"reply",remaining:1,selectors:{}}, false)).status, 403);
+
     const emptyPop3 = await api("GET","/admin/pop3/connections");
     assert.deepEqual(emptyPop3.data,[]);
     const footprint = await api("GET","/admin/footprint");
@@ -177,8 +195,10 @@ test("real HTTPS admin API isolates sessions, verifies credentials and manages p
     assert.equal(inboxResponse.status, 201);
     const inbox = await inboxResponse.json() as { id: string };
     await smtpAuth(credentials.username, credentials.password);
-    const smtpSessions = await api("GET", "/admin/smtp/sessions");
+    const smtpSessions = await api("GET", "/admin/smtp/sessions", undefined, false);
     assert.equal(smtpSessions.status, 200);
+    assert.ok(!JSON.stringify(smtpSessions.data).includes(credentials.password));
+    assert.ok(!JSON.stringify(smtpSessions.data).includes("digest"));
     assert.ok(smtpSessions.data.some((session: { authenticated: boolean; authUser?: string }) =>
       session.authenticated && session.authUser === credentials.username));
     assert.equal((await api("GET","/admin/footprint")).data.resources.emailInboxes,1);

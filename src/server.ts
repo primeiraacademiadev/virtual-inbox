@@ -383,7 +383,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         return json(res, 200, { matches: await credentialStore.verify(input.username, input.password, params.sessionId) });
       }
       case "smtpAttempts": {
-        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpAttempts.list({
           smtpSessionId:url.searchParams.get("smtpSessionId")||undefined,
           sender:url.searchParams.get("sender")||undefined,
@@ -396,7 +395,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpSessions.listClients());
       case "smtpSessions":
-        if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, smtpSessions.listSessions(url.searchParams.get("clientId") || undefined));
       case "smtpVerify": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");

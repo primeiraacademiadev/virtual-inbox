@@ -235,7 +235,7 @@ export class VirtualInboxClient {
     );
   }
 
-  /** Filtered, administrative correlation data. No unscoped global history. */
+  /** Public, filtered SMTP correlation data. No unscoped global history. */
   smtpAttempts(filter: { smtpSessionId?: string; sender?: string; recipient?: string; messageId?: string; ruleId?: string }, limit = 100): Promise<Array<{
     id: string; smtpSessionId: string; sender?: string; recipients: string[];
     messageIds: string[]; ruleIds: string[]; outcome: string; phase: string; persisted: boolean;
@@ -246,7 +246,7 @@ export class VirtualInboxClient {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(filter)) if (value) params.set(key, value);
     params.set("limit", String(limit));
-    return this.request("/admin/smtp/attempts?" + params, undefined, true);
+    return this.request("/admin/smtp/attempts?" + params);
   }
 
   clearMessages(inbox: Inbox): Promise<void> {
@@ -307,7 +307,7 @@ export class VirtualInboxClient {
 
   smtpSessions(clientId?: string): Promise<SmtpSession[]> {
     return this.request("/admin/smtp/sessions" +
-      (clientId ? "?clientId=" + encodeURIComponent(clientId) : ""), undefined, true);
+      (clientId ? "?clientId=" + encodeURIComponent(clientId) : ""));
   }
 
   smtpClients(): Promise<SmtpClient[]> {

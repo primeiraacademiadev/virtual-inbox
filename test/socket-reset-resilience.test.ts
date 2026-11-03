@@ -60,6 +60,16 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
   child.stdout.on("data", chunk => { output += String(chunk); });
   child.stderr.on("data", chunk => { output += String(chunk); });
   const readyUrl = "http://127.0.0.1:" + httpPort + "/api/health";
+  const assertHealthy = async (stage: string) => {
+    try {
+      const response = await fetch(readyUrl);
+      assert.equal(response.status, 200, "Unexpected health status at " + stage);
+    } catch (cause) {
+      await sleep(100); // Let child process exit events settle before printing diagnostics.
+      throw new Error("Health failed after " + stage + "; exitCode=" + child.exitCode +
+        "; signal=" + child.signalCode + "; output=" + output, {cause});
+    }
+  };
   try {
     let ready = false;
     for (let i = 0; i < 150; i++) {
@@ -73,7 +83,7 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
         await abruptReset(port);
         assert.equal(child.exitCode, null, "Server terminated after reset on " + port + ": " + output);
       }
-      assert.equal((await fetch(readyUrl)).status, 200);
+      await assertHealthy("resets on port " + port);
     }
     // A clean FIN before an implicit TLS handshake was observed to crash native
     // Node 26 on Windows; exercise both Windows 24 and 26 in dedicated CI.
@@ -85,7 +95,7 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
       await closed;
       assert.equal(child.exitCode, null, "SMTPS process exited after premature TLS FIN: " + output);
     }
-    assert.equal((await fetch(readyUrl)).status, 200);
+    await assertHealthy("SMTPS early FIN");
     const smtp = connect(smtpPort, "127.0.0.1");
     try {
       const [data] = await once(smtp, "data");

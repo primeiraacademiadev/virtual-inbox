@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { createOpenApiDocument, matchApiOperation, operations, schemas } from "../src/http/api-contract.js";
 
 test("every documented operation has exactly one route and a server handler", () => {
-  const source = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/http/request-router.ts", import.meta.url), "utf8");
   const handlers = new Set([...source.matchAll(/^\s*case "([a-zA-Z]+)":/gm)].map((match) => match[1]));
   const identifiers = new Set(operations.map((operation) => operation.id));
   assert.equal(identifiers.size, operations.length);

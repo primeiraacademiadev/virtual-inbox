@@ -47,7 +47,7 @@ Supported locales: `pt-PT`, `en-US`, `fr-FR`. Email strategies: `FIRST_LAST`, `L
 
 ## Multiple instances and fixed ports
 
-Virtual Inbox is designed for a single shared instance with concurrent SMTP clients and logically isolated tests. Running a second instance is **not recommended**. If an independent instance is unavoidable, explicitly configure all listener ports (`PORT`, `HTTPS_PORT`, `SMTP_PORT`, `SMTPS_PORT`, `POP3_PORT`, `DEMO_PORT`, `DEMO_HTTPS_PORT`) and separate its configuration/TLS files to prevent collisions and interference. Do not rely on automatic/dynamic port discovery: it is not part of the supported operating model.
+A single shared instance is the recommended operational default, **not a technical restriction**: independent instances can run concurrently with different fixed listener ports and separate TLS/configuration paths. See the [reproducible two-instance guide](multiple-instances.md), including all seven ports, certificates, readiness, data isolation and cleanup. Automatic/dynamic port discovery is not the normal standalone operating model.
 
 ## SMTP client identities and retention
 

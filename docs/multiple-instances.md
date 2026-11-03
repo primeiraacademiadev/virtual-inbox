@@ -113,3 +113,8 @@ Press **Ctrl+C** in **both** terminals. Runtime messages, sessions, logs and fau
 | Captured data, logs, attempts, sessions, simulations | Automatically independent | In-memory per process, not persisted or shared |
 
 For three or four instances, repeat the same pattern with unique fixed listener ports and paths. **Port `0`** is used by certain managed test harnesses to allocate ephemeral listeners. It is **not** the example for normal standalone use: configure explicit fixed ports, check `/api/ready`, and terminate the subprocess on completion. Do not use this guide to place a synthetic-data sandbox on a public network.
+
+
+## Windows implicit TLS early-FIN limitation
+
+In the Windows Node 24.22.2 and 26.12.1 test matrix, an abrupt TCP **RST** does not terminate the SMTP, SMTPS or POP3 process after the transport fixes. A separate **clean FIN before the implicit SMTPS TLS handshake** still causes native exit `0xC0000005` in both runtimes. This is tracked in [LVI-1b (#83)](https://github.com/primeiraacademiadev/virtual-inbox/issues/83). Do not use a pre-handshake FIN as a readiness probe on Windows until the fault is resolved; use `/api/ready` or an actual TLS connection instead. This is a known limitation of the release candidate, not proof of a Node-only defect.

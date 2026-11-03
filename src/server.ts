@@ -463,9 +463,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, demoOnly
       }
       case "logEvents":
       case "newObserverEvents":
-        return observe(sandbox, req, res));
+        return observe(sandbox, req, res);
       case "observerEvents":
-        return observe(sandbox, req, res), params.observerId);
+        return observe(sandbox, req, res, params.observerId);
       case "observerSnapshot":
         return json(res, 200, sandbox.snapshot(params.observerId));
       case "watchInbox": {

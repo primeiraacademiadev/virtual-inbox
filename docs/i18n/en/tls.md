@@ -28,6 +28,6 @@ To return from upload to automatic mode, use SAN regeneration in auto mode. To r
 
 ## Configuration precedence and diagnosis
 
-Persisted network settings override environment values, then defaults. Startup warns about overridden keys. Back up/edit `network-settings.json` with the process stopped to restore environment control. Volume persistence includes configuration and certificates, not message data.
+Explicit environment settings override persisted network settings, then defaults apply. Startup warns when the environment shadows persisted keys. To use a persisted value, remove its environment override and restart; to reset saved settings, edit `network-settings.json` with the process stopped. Volume persistence includes configuration and certificates, not message data.
 
 Name mismatch: correct SAN/servername. Unknown CA: supply the correct public CA. SSL protocol error: check that the port speaks TLS (3443/3444/2465), not plain HTTP/SMTP. `403` on admin: check HTTPS and token. `409` on SAN regeneration: requires auto mode. Do not solve these failures by disabling certificate verification.

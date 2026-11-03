@@ -59,6 +59,7 @@ plugins:
             Multiple instances: Múltiplas instâncias
             Identity generation: Geração de identidades
             SMTP diagnostics: Diagnósticos SMTP
+            SMTP rule scopes: Âmbitos das regras SMTP
             Internationalization: Internacionalização
             Integration notes: Notas de integração
             Search: Pesquisa
@@ -83,6 +84,7 @@ plugins:
             Multiple instances: Instances multiples
             Identity generation: Génération des identités
             SMTP diagnostics: Diagnostics SMTP
+            SMTP rule scopes: Portées des règles SMTP
             Internationalization: Internationalisation
             Integration notes: Notes d'intégration
             Search: Recherche
@@ -106,6 +108,7 @@ nav:
       - Multiple instances: reference/multiple-instances.md
       - Identity generation: reference/identity-generation.md
       - SMTP diagnostics: reference/smtp-session-diagnostics.md
+      - SMTP rule scopes: reference/smtp-rule-scopes.md
       - Internationalization: reference/i18n.md
       - Integration notes: reference/integration.md
       - Search: reference/search.md

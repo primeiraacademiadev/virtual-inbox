@@ -12,6 +12,8 @@ Single draft PR with thematic commits. Scope: split server.ts by responsibility;
 Virtual Inbox stays an ephemeral test sandbox without Kafka, DB or production RBAC. No release publication from this implementation PR.
 
 
-## Confirmed Windows RC limitation
+## Confirmed cross-platform upstream SMTPS issue
 
-Mandatory Windows Node24/26 reset resilience now passes for SMTP, SMTPS and POP3. The separate Windows SMTPS *clean FIN before TLS ClientHello* causes native process exit `0xC0000005` on both tested Node versions; the bare TCP control survives. See [#83](https://github.com/primeiraacademiadev/virtual-inbox/issues/83). The Windows early-FIN CI diagnostic is advisory during RC validation, but must be resolved or explicitly assessed before GA. Release tags must not be created from this draft PR.
+An independent investigation traced both premature SMTPS FIN and RST to `smtp-server` 3.21.1 socket lifecycle handling, with an additional Node.js native `getProtocol()` defect reproducible on Windows and Linux (Node 24 and 26). The candidate three-guard `smtp-server` patch survived 12/12 FIN/RST trials against a real Virtual Inbox process in an **external laboratory copy**, but has not yet been incorporated into or validated by this PR. See [known issues](../known-issues.md) and [#83](https://github.com/primeiraacademiadev/virtual-inbox/issues/83).
+
+Before RC publication, deliver and verify the mitigation within the actual packaged VI, including `npm ci --ignore-scripts` in CI and Docker, and enforce FIN/RST survival tests. Fix POP3 and plain SMTP resets separately. Maintain #83 open to track later replacement by an official upstream release; upstream PR/Node issue contribution is deferred until after stabilizing VI.

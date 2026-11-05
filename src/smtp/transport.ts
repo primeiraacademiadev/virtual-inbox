@@ -8,7 +8,7 @@ import PostalMime from "postal-mime";
 import { recordSecuredConnection } from "../smtp-session-lifecycle.js";
 import { isConnectionProbeAddress, validateConnectionProbeAddress,
   validateConnectionProbeMessage, deliverConnectionProbe } from "../connection-probe.js";
-import { protectSmtpSocketErrors } from "../network/socket-errors.js";
+import { protectSmtpSocketErrors, refuseUpgradeOfClosedSockets } from "../network/socket-errors.js";
 import type { SmtpProtocolContext } from "../server.js";
 
 export function createSmtpProtocol(ctx: SmtpProtocolContext) {
@@ -416,6 +416,7 @@ const smtpOptions: SMTPServerOptions = {
 const smtp = new SMTPServer(smtpOptions);
 const smtps = tlsIdentity ? new SMTPServer({ ...smtpOptions, secure: true }) : null;
 for (const listener of [smtp, smtps]) if (listener) protectSmtpSocketErrors(listener);
+if (smtps) refuseUpgradeOfClosedSockets(smtps);
 for (const listener of [smtp, smtps]) listener?.on("error", (error: Error) => {
   if ((error as Error & { code?: string }).code === "SocketError" &&
     error.message === "Socket closed while initiating TLS") return;

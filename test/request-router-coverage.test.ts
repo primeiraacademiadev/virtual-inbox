@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer, type Server } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -237,7 +237,17 @@ test("router handles observer subscriptions, invalid hosts, CORS and unsupported
     assert.equal((await f.request("/api/health", "OPTIONS")).status, 204);
     assert.equal((await f.request("/api/health", "GET", undefined,
       { "Origin": "https://untrusted.example.test" })).status, 403);
-    assert.equal((await f.request("/api/health", "GET", undefined,
-      { "Host": "not-allowed.example.test" })).status, 421);
+    // Fetch may normalize/override Host depending on the runtime. Use a real
+    // HTTP/1.1 client to prove the router receives the supplied Host header.
+    const hostStatus = await new Promise<number>((resolve, reject) => {
+      const url = new URL(f.base + "/api/health");
+      const request = httpRequest(url, { headers: { Host: "not-allowed.example.test" } }, response => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode ?? 0));
+      });
+      request.on("error", reject);
+      request.end();
+    });
+    assert.equal(hostStatus, 421);
   } finally { await f.close(); }
 });

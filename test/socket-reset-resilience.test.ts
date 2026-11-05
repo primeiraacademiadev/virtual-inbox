@@ -29,7 +29,11 @@ async function freePorts(count: number): Promise<number[]> {
 async function abruptReset(port: number): Promise<void> {
   await new Promise<void>((done, reject) => {
     const socket = connect({ host: "127.0.0.1", port });
-    socket.on("error", () => { /* A local RST may produce an error on some systems. */ });
+    // A local TCP RST is expected to surface ECONNRESET on Windows. The test
+    // verifies the child server survives it, not that this client reads EOF.
+    socket.on("error", error => {
+      if ((error as NodeJS.ErrnoException).code !== "ECONNRESET") reject(error);
+    });
     socket.once("connect", () => socket.resetAndDestroy());
     socket.once("close", () => done());
     socket.setTimeout(3000, () => { socket.destroy(); reject(Error("Reset did not finish")); });
@@ -79,12 +83,13 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
     }
     assert.ok(ready, "Server did not become healthy: " + output);
     // POP3 first: distinguishes direct POP3 failure from latent SMTPS TLS corruption.
-    for (const port of [pop3Port, smtpPort, smtpsPort]) {
+    for (const [name, port] of [["POP3", pop3Port], ["SMTP", smtpPort], ["SMTPS", smtpsPort]] as const) {
       for (let i = 0; i < 6; i++) {
-        await abruptReset(port);
-        assert.equal(child.exitCode, null, "Server terminated after reset on " + port + ": " + output);
+        try { await abruptReset(port); }
+        catch (error) { throw new Error(name + " reset attempt " + (i + 1) + " failed", { cause: error }); }
+        assert.equal(child.exitCode, null, "Server terminated after " + name + " reset " + (i + 1) + ": " + output);
       }
-      await assertHealthy("resets on port " + port);
+      await assertHealthy("resets on " + name + " port " + port);
     }
     if (process.env.VI_TEST_EARLY_FIN === "1") {
       // A clean FIN before an implicit TLS handshake was observed to crash native
@@ -101,12 +106,16 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
     }
     const smtp = connect(smtpPort, "127.0.0.1");
     try {
-      const [data] = await once(smtp, "data");
+      const [data] = await once(smtp, "data").catch(error => {
+        throw new Error("SMTP greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
+      });
       assert.match(String(data), /^220 /);
     } finally { smtp.destroy(); }
     const pop3 = connect(pop3Port, "127.0.0.1");
     try {
-      const [data] = await once(pop3, "data");
+      const [data] = await once(pop3, "data").catch(error => {
+        throw new Error("POP3 greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
+      });
       assert.match(String(data), /^\+OK /);
     } finally { pop3.destroy(); }
     const smtps = connectTls({
@@ -114,8 +123,12 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
       ca: readFileSync(join(temp, "certs", "ca.pem")),
     });
     try {
-      await once(smtps, "secureConnect");
-      const [data] = await once(smtps, "data");
+      await once(smtps, "secureConnect").catch(error => {
+        throw new Error("SMTPS handshake after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
+      });
+      const [data] = await once(smtps, "data").catch(error => {
+        throw new Error("SMTPS greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
+      });
       assert.match(String(data), /^220 /);
     } finally { smtps.destroy(); }
     assert.equal(child.exitCode, null);

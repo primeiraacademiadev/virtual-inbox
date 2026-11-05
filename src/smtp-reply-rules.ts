@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import { Fault } from "./domain-types.js";
 
 export type SmtpReplyPhase = "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
-export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang";
+export type SmtpFaultAction = "reply" | "delay" | "drop" | "hang" | "reset";
 export type SmtpReplySelectors = {
   sender?: string;
   recipient?: string;
@@ -20,6 +20,8 @@ export type SmtpReplyRule = {
   action: SmtpFaultAction;
   code?: number;
   durationMs?: number;
+  ttlMs?: number;
+  expiresAt?: string;
   message: string;
   remaining: number;
   priority: number;
@@ -39,8 +41,8 @@ export type SmtpReplyContext = {
 };
 
 const PHASES = new Set(["CONNECT", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "AFTER_DATA"]);
-const ACTIONS = new Set(["reply", "delay", "drop", "hang"]);
-const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors", "durationMs", "priority"]);
+const ACTIONS = new Set(["reply", "delay", "drop", "hang", "reset"]);
+const FIELDS = new Set(["phase", "action", "code", "message", "remaining", "selectors", "durationMs", "priority", "ttlMs"]);
 const SELECTORS = new Set(["sender", "recipient", "clientId", "smtpSessionId", "origin", "credentialsId", "connection", "ehloName"]);
 const ADDRESS_FIELDS = new Set(["sender", "recipient"]);
 
@@ -52,7 +54,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit<SmtpReplyRule, "id" | "createdAt"> {
+export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit<SmtpReplyRule, "id" | "createdAt" | "expiresAt"> {
   if (!record(input) || Object.keys(input).some((key) => !FIELDS.has(key)))
     invalid("Unsupported SMTP simulation fields");
   if (typeof input.phase !== "string" || !PHASES.has(input.phase))
@@ -68,12 +70,15 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
   } else if (input.durationMs !== undefined) {
     invalid("durationMs is only accepted for delay or hang");
   }
+  if (input.ttlMs !== undefined && (!Number.isSafeInteger(input.ttlMs) ||
+      (input.ttlMs as number) < 1 || (input.ttlMs as number) > 86_400_000))
+    invalid("ttlMs must be an integer between 1 and 86400000");
   if (input.phase === "AUTH" && action !== "reply")
     invalid("AUTH currently supports reply rules only");
   if (action === "reply" && input.code === undefined)
     invalid("Reply action requires an SMTP error code");
-  if ((action === "drop" || action === "hang") && input.code !== undefined)
-    invalid("Drop and hang actions cannot specify an SMTP reply code");
+  if ((action === "drop" || action === "hang" || action === "reset") && input.code !== undefined)
+    invalid("Drop, reset and hang actions cannot specify an SMTP reply code");
   if (input.code !== undefined &&
       (!Number.isInteger(input.code) || (input.code as number) < 400 || (input.code as number) > 599))
     invalid("SMTP reply code must be an integer from 400 to 599");
@@ -128,6 +133,7 @@ export function parseSmtpReplyRule(input: unknown, maxDurationMs = 10_000): Omit
     action,
     ...(input.code === undefined ? {} : { code: input.code as number }),
     ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs as number }),
+    ...(input.ttlMs === undefined ? {} : { ttlMs: input.ttlMs as number }),
     message: (input.message as string | undefined) || "Simulated SMTP failure",
     remaining: input.remaining as number,
     priority: (input.priority as number | undefined) ?? 0,
@@ -158,18 +164,32 @@ function matches(rule: SmtpReplyRule, context: SmtpReplyContext): boolean {
 export class SmtpReplyRuleStore {
   private readonly specificRules = new Map<string, SmtpReplyRule>();
   private readonly globalRules = new Map<string, SmtpReplyRule>();
-  constructor(private readonly maxRules = 1000, private readonly maxDurationMs = 10_000) {}
+  constructor(private readonly maxRules = 1000, private readonly maxDurationMs = 10_000,
+    private readonly now: () => number = Date.now) {}
+
+  private pruneExpired(): void {
+    const now = this.now();
+    for (const collection of [this.specificRules, this.globalRules]) {
+      for (const rule of collection.values()) {
+        if (rule.expiresAt && Date.parse(rule.expiresAt) <= now) collection.delete(rule.id);
+      }
+    }
+  }
 
   create(input: unknown): SmtpReplyRule {
     const parsed = parseSmtpReplyRule(input, this.maxDurationMs);
+    this.pruneExpired();
     if (this.specificRules.size + this.globalRules.size >= this.maxRules)
       throw new Fault(507, "SMTP simulation rule capacity reached", "CAPACITY_EXCEEDED");
-    const rule = { ...parsed, id: randomUUID(), createdAt: new Date().toISOString() };
+    const timestamp = this.now();
+    const rule = { ...parsed, id: randomUUID(), createdAt: new Date(timestamp).toISOString(),
+      ...(parsed.ttlMs === undefined ? {} : { expiresAt: new Date(timestamp + parsed.ttlMs).toISOString() }) };
     (rule.scope === "GLOBAL" ? this.globalRules : this.specificRules).set(rule.id, rule);
     return { ...rule, selectors: { ...rule.selectors } };
   }
 
   list(): SmtpReplyRule[] {
+    this.pruneExpired();
     return [...this.specificRules.values(), ...this.globalRules.values()]
       .sort((a,b) => a.createdAt.localeCompare(b.createdAt))
       .map((rule) => ({ ...rule, selectors: { ...rule.selectors } }));
@@ -180,6 +200,7 @@ export class SmtpReplyRuleStore {
   }
 
   consume(phase: SmtpReplyPhase, context: SmtpReplyContext): SmtpReplyRule | undefined {
+    this.pruneExpired();
     // A matching specific rule always wins over a global rule, regardless of numeric priority.
     for (const collection of [this.specificRules, this.globalRules]) {
       let selected: SmtpReplyRule | undefined;

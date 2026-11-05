@@ -63,7 +63,7 @@ These two rules do not conflict: AUTH from `10.1.1.53` receives `454` three time
 | `sender` | MAIL FROM envelope address | MAIL, RCPT, DATA, AFTER_DATA |
 | `recipient` | RCPT TO envelope address | RCPT, DATA, AFTER_DATA |
 
-This release supports **CONNECT** and **EHLO/HELO** reply, delay, drop and hang rules, alongside AUTH reply rules (SMTP codes 400–599) and existing MAIL/RCPT/DATA/AFTER_DATA actions. `connection.port` is the **local SMTP listener port**; `remotePort` is diagnostic only. Inbox/SMS selectors remain separate work in #76.
+This release supports **CONNECT** and **EHLO/HELO** reply, delay, drop, reset and hang rules, alongside AUTH reply rules (SMTP codes 400–599) and existing MAIL/RCPT/DATA/AFTER_DATA actions. `connection.port` is the **local SMTP listener port**; `remotePort` is diagnostic only. Inbox/SMS selectors remain separate work in #76.
 
 ### Resolve before AUTH
 
@@ -106,7 +106,13 @@ A rule application emits a structured `smtp.simulation.applied` log record with 
 - **AUTH** knows the presented credentials even if authentication will fail. The simulated error is checked **before normal credential validation**, so it is suitable for repeatable consumer retry tests.
 - **CONNECT** cannot know a username/password, EHLO or recipient. **EHLO** knows a claimed hostname but not credentials. Rules specifying information unavailable in their phase are rejected with HTTP 400.
 - **Inbox email** becomes available during RCPT; **SMS** has a distinct HTTP processing model. Those selectors belong to #76.
-- An IP is not a verified logical client identity; multiple test processes may share it. Distinguish suites using synthetic credentials or separate Virtual Inbox instances when needed.
+- An IP is not a verified logical client identity; multiple test processes may share it. **CONNECT** rules using origin/port cannot distinguish concurrent suites behind that address: use a dedicated VI instance. **EHLO** rules can distinguish a configured, synthetic `ehloName`; otherwise use a dedicated VI instance. Later phases can use credentials, sender or recipient when available.
+
+## Connection reset and optional rule expiry
+
+The `reset` action requests a **TCP RST** using the accepted raw socket, unlike `drop`, which destroys the connection without explicitly requesting a RST (the observed FIN/RST for `drop` can depend on the operating system). Neither action returns an SMTP status code, and both are distinct from `reply`. `reset` requires TCP transport support; if it is unavailable at the selected protocol phase, the fault cannot be applied. Transport-level reset behavior should be tested using real SMTP clients.
+
+Rules optionally accept `ttlMs` between **1 and 86,400,000** milliseconds. The server returns an `expiresAt` timestamp for such rules; expired rules are excluded from selection and deleted lazily during rule creation, listing or selection. A rule with no TTL persists until deletion, exhaustion or process restart. TTL and `remaining` are independent: time expiry can happen before the last use, and an exhausted rule remains visible until deleted or expired. Use `withSmtpRule()` in the SDK for cleanup in a test's `finally` path.
 
 ## CONNECT and EHLO/HELO — real transport failure semantics
 

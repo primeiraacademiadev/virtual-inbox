@@ -51,6 +51,7 @@ The volume preserves configuration and certificates, **not** inboxes or messages
 | Demo HTTP / HTTPS | 3001 / 3444 | External test sender clients: `/sms/messages`, `/mailboxes/{id}/demo-send` |
 | SMTP | 2525 | Plain or STARTTLS |
 | SMTPS | 2465 | TLS from connection establishment |
+| POP3 | 2110 | Test inbox retrieval (USER/PASS) |
 
 Ports are configurable. `GET /api/connection-info` reports the running values. `Host` accepts literal IPs and single-label container names; other domains require the configured hosts or `HTTP_ALLOWED_HOSTS`. Browser origins must be same-origin or explicitly allowed by `HTTP_ALLOWED_ORIGINS` (plus the configured local development origins). These controls do not authenticate clients.
 

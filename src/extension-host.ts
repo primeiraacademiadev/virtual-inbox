@@ -112,8 +112,16 @@ export class ExtensionHost {
     }
     for (const [index, route] of routes.entries()) {
       validRoute(route);
+      // Explicit one-time ownership transfer of the existing demo sender route.
+      // Its OpenAPI catalogue entry stays published, while the built-in
+      // extension becomes the only runtime handler. Third-party extensions
+      // never receive this exemption.
+      const nativeSmsTransfer = definition.id === "sms-native" &&
+        route.audience === "demo" && route.method === "POST" &&
+        route.path === "/sms/messages";
       const conflicting = [
-        ...operations.filter((r) => r.audience === route.audience && r.method === route.method),
+        ...operations.filter((r) => r.audience === route.audience && r.method === route.method &&
+          !(nativeSmsTransfer && r.id === "sendSms")),
         ...this.active.flatMap((ext) => ext.routes).filter((r) =>
           r.audience === route.audience && r.method === route.method),
         ...routes.slice(0, index).filter((r) =>

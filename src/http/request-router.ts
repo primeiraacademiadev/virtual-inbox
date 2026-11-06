@@ -45,10 +45,10 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
     const match = matchApiOperation(method, path, demoOnly || sameOriginDemo ? "demo" : "management");
     if (!match) {
       // Extension routes run after the existing security checks and core catalogue.
-      // On the main listener, only /demo/ routes have demo audience; on the
-      // dedicated demo listener, the entire root maps to demo audience.
+      // On the main listener /api/ resolves management and /demo/ resolves demo;
+      // on dedicated demo listeners the root maps to demo.
       const audience = demoOnly || sameOriginDemo ? "demo" : "management";
-      const isPublicExtensionPath = demoOnly || sameOriginDemo;
+      const isPublicExtensionPath = demoOnly || sameOriginDemo || rawPath[0] === "api";
       if (isPublicExtensionPath && await tryExtensionRequest(
         req, res, ctx.extensionHost, audience,
         "/" + path.join("/") + url.search,

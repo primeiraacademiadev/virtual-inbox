@@ -149,4 +149,6 @@ To inspect requests without exposing payloads, open **View this extension's logs
 
 The generated VI OpenAPI is authoritative for **core and retained compatibility** operations (including the legacy native SMS sender route and public SMS ingestion). It does **not** automatically ingest third-party provider specifications. Extensions may maintain their own OpenAPI files, but the V1 Host does not serve or combine them automatically. The registry's optional `documentation` field is a relative pointer; the console only navigates known, already-published guides.
 
+The [conformance suite](extension-conformance.md) adds a reusable Host/SDK contract harness and a separate HTTP provider adapter example that consumes the public SMS ingestion API. It is run by CI on Node 24 and 26; the console and native SMS retain their existing E2E regression tests.
+
 Out of scope for the current runtime: untrusted plugins, installation catalogs, generic root mounts on the main listener, arbitrary HTTP middleware packages, IPC/child-process supervision, streaming, WebSockets, provider m-it! adapter and batch SMS. The reusable conformance suite and external provider sample are planned separately in [#105](https://github.com/primeiraacademiadev/virtual-inbox/issues/105).

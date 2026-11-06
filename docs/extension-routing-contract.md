@@ -1,8 +1,8 @@
-# Extension HTTP endpoint and routing contract — V1 proposal
+# Extension HTTP endpoint and routing contract — implemented V1 and deferred design
 
-- **Status:** Proposed; documentation-only specification for #97, subject to acceptance with ADR-0002 (#96).
+- **Status:** Accepted as design baseline for #97; implementation differences and deferred capabilities are noted below.
 - **Related:** #95, #96, #97, #98, #99, #100, #101, #102, #103, #104, #105.
-- **Current implementation:** `src/http/api-contract.ts` owns the core route catalogue; `src/http/request-router.ts` selects the `management` or `demo` audience and dispatches via `operation.id`. This document specifies future behavior; **none of these extension interfaces are implemented yet**.
+- **Current implementation:** `src/http/api-contract.ts` owns the core route catalogue; `src/http/request-router.ts` selects the `management` or `demo` audience; `src/extension-host.ts` registers extensions and dispatches to `extension-sdk/src/index.ts`. See [author guide](extension-author-guide.md) for the exact shipped contract. Some sections below describe deliberately deferred design.
 
 ## 1. Public address, audience and ownership
 
@@ -18,9 +18,9 @@ The first two examples refer to **one logical operation and one logical route re
 
 An optional provider extension might publish `/WebAPI/message/send` on a configured delivery surface. **That external root-path mapping is an explicit host configuration**, not an implicit mapping under `/demo` or `/api`. The registry must display the effective externally accessible paths, listener(s), and audience. No extension may claim VI's built-in `/api`, `/demo`, console/static or diagnostic route space by wildcard.
 
-> **Migration exception:** The current core `sendSms` demo operation will move to the bundled `sms-native` extension under #101, following #100. It is a controlled ownership transfer: core registration is removed as the extension acquires the exact logical route, never a general `override: true` switch.
+> **Migration exception:** The core-catalogue `sendSms` demo operation is retained for compatibility/OpenAPI, but the runtime handler has moved to bundled `sms-native` (#101). Its route is transferred only through `registerNativeSms()`; there is no general `override: true` switch.
 
-## 2. Proposed descriptors (illustrative, not code shipped)
+## 2. Design descriptors (illustrative; **not** the shipped manifest)
 
 ```ts
 type Audience = "management" | "demo"; // existing V1 audiences
@@ -43,7 +43,7 @@ interface RouteDescriptor {
 }
 ```
 
-The final types, validation details and discovery/config schema belong to #98/#99. The manifest declares only the surface exposed; it does not grant access to VI core internals. An extension may register middleware and handlers through `app.use` and `app.post`, and the SDK/Host must be able to associate them with each route's audience.
+The shipped manifest is `default { id, version, app, displayName?, capabilities?, documentation? }` (#98/#99). **`sdkCompatibility` version negotiation and nested OpenAPI references are not implemented.** The manifest declares only the surface exposed; it does not grant access to VI core internals. An extension may register middleware and handlers through `app.use` and `app.post`, and the SDK/Host must be able to associate them with each route's audience.
 
 For arbitrary root paths such as `/WebAPI/*`, a publication binding must explicitly connect the extension's logical route to a listener/external mount. Whether the binding belongs to the manifest or VI instance configuration will be decided with #99; **no automatic takeover of the management or console origin**.
 
@@ -87,13 +87,13 @@ app.post("/sms/messages", async (ctx) => {
 });
 ```
 
-This is **illustrative**, not an implemented SDK. `await next()` invokes downstream middleware/handler at most once; middleware runs back out in reverse order. Short-circuit without calling `next()` is permitted. The Host does not emit the HTTP response until the complete middleware chain returns successfully. Errors in pre-, handler, or post-middleware stages are caught by Host boundaries and converted to controlled, observable failures, unless an explicit response already exists under a documented error policy.
+This example is illustrative but uses the **implemented** SDK API. `await next()` invokes downstream middleware/handler at most once; middleware runs back out in reverse order. Short-circuit without calling `next()` is permitted. The Host does not emit the HTTP response until the complete middleware chain returns successfully. Errors in pre-, handler, or post-middleware stages are caught by Host boundaries and converted to controlled, observable failures, unless an explicit response already exists under a documented error policy.
 
 The initial payload is bounded and JSON-compatible: request ID, method, logical path, effective public path/audience, path/query parameters, normalized headers, optional correlation ID and parsed body; response has status, bounded headers, JSON-compatible body, or no body. Node `IncomingMessage`, `ServerResponse`, functions, streams, raw sockets and WebSockets are out of scope. If a client needs non-JSON media, its acceptance must be designed in a later contract version rather than silently assumed.
 
 ## 5. Functional API boundary and recursion
 
-The extension does **not** invoke `Sandbox.capture()` or any private VI method. It calls the same external public ingestion API, via `@virtual-inbox/client` or HTTP. A public ingestion operation must be identifiable separately from the extension's published sender endpoint: e.g. the extension **must not POST back to its own `/sms/messages` route**. #100 identifies or evolves that shared operation before #101 switches ownership.
+The extension does **not** invoke `Sandbox.capture()` or any private VI method. It calls the same external public ingestion API, via `@virtual-inbox/client` or HTTP. The shared ingestion operation is `POST /api/sms/ingestions` (#100); the extension **must not POST back to its own `/sms/messages` route**. The native sender already uses this public API (#101).
 
 Headers for origin/correlation (`User-Agent`, proposed `X-VI-Correlation-ID`, extension ID) must be bounded, validated and treated as diagnostics, not authentication. The extension owns the provider-visible response; a provider failure response after a successful capture does not roll back the core message.
 
@@ -110,8 +110,8 @@ Headers for origin/correlation (`User-Agent`, proposed `X-VI-Correlation-ID`, ex
 ## 7. OpenAPI, registry and console
 
 - VI's existing generated management and demo OpenAPI files describe core operations and maintain backward-compatible published surfaces. The migration must keep the native SMS operation documented with its established response.
-- Each extension may publish its own OpenAPI for **its** contract; it must not replace or silently merge into the authoritative VI OpenAPI. The core/extension ownership transition needs explicit OpenAPI provenance under #101/#102.
-- Public registry (#102) reports extension ID, version, enabled/active/failed state, logical routes, physical listener bindings, public paths and optional docs; the console (#103) renders these generically.
+- Each extension may publish its own OpenAPI for **its** contract; it must not replace or silently merge into the authoritative VI OpenAPI. The legacy native sender remains in the core demo OpenAPI for compatibility; third-party extension OpenAPI publication is not implemented.
+- The implemented public registry (#102) reports extension ID, version, enabled/active/failed state, logical routes, physical listener bindings, public paths and optional docs; the console (#103) renders these generically.
 - No provider-specific UI code or provider schema parsing is required in the console.
 
 ## 8. Contract tests for #97 and downstream gates
@@ -126,7 +126,7 @@ Headers for origin/correlation (`User-Agent`, proposed `X-VI-Correlation-ID`, ex
 8. The native SMS extension can retain exactly the original request/status/response/headers across demo and same-origin paths (#101).
 9. Another extension's independent routes appear in the public registry and console without a VI-specific provider code change (#102/#103/#105).
 
-## Deferred decisions
+## Explicitly deferred decisions
 
 - Final package/type names and schema-version negotiation (#98).
 - Which user-facing configuration maps extension logical paths to arbitrary root-level mounts and how those mounts coexist with console static assets (#99).

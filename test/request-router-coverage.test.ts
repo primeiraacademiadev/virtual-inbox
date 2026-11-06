@@ -9,6 +9,9 @@ import { Sandbox } from "../src/core.js";
 import { SmtpReplyRuleStore } from "../src/smtp-reply-rules.js";
 import { handleRequest } from "../src/http/request-router.js";
 import type { RequestContext } from "../src/server.js";
+import { createApp } from "../extension-sdk/src/index.js";
+import { ExtensionHost } from "../src/extension-host.js";
+import { VirtualInboxClient } from "../sdk/client.js";
 
 type Fixture = {
   sandbox: Sandbox;
@@ -249,5 +252,71 @@ test("router handles observer subscriptions, invalid hosts, CORS and unsupported
       request.end();
     });
     assert.equal(hostStatus, 421);
+  } finally { await f.close(); }
+});
+
+
+test("public SMS ingestion and demo sender share capture semantics without breaking legacy URLs", async () => {
+  const f = await fixture();
+  try {
+    const target = f.sandbox.create("sms", "+351912345678");
+    const input = { from: "synthetic-provider", to: target.address, body: "hello" };
+    const common = await f.request("/api/sms/ingestions", "POST", input,
+      { "X-VI-Correlation-ID": "provider-test-123" });
+    assert.equal(common.headers.get("x-vi-correlation-id"), "provider-test-123");
+    const demo = await f.request("/demo/sms/messages", "POST", input);
+    assert.equal(common.status, 201);
+    assert.equal(demo.status, 201);
+    const a = await common.json() as Record<string, unknown>;
+    const b = await demo.json() as Record<string, unknown>;
+    for (const message of [a, b]) {
+      assert.equal(message.channel, "sms");
+      assert.equal(message.from, input.from);
+      assert.equal(message.body, input.body);
+      assert.equal(message.originalRecipient, input.to);
+      assert.equal(message.destinationId, target.id);
+    }
+    const captures = f.sandbox.listMessages(target.id);
+    assert.equal(captures.length, 2);
+    assert.deepEqual(captures.map((m) => m.id), [a.id, b.id]);
+    const unknown = await f.request("/api/sms/ingestions", "POST",
+      { ...input, to: "+351999888777" });
+    assert.equal(unknown.status, 201);
+    const anomaly = await unknown.json() as Record<string, unknown>;
+    assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
+    assert.equal(anomaly.originalRecipient, "+351999888777");
+    assert.equal((await f.request("/api/sms/ingestions", "GET")).status, 404);
+    const invalid = await f.request("/api/sms/ingestions", "POST", input,
+      { "X-VI-Correlation-ID": "invalid value with spaces" });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).errorCode, "INVALID_CORRELATION_ID");
+  } finally { await f.close(); }
+});
+
+
+test("embedded extension uses exactly the same public SMS ingestion API as external clients", async () => {
+  const f = await fixture();
+  try {
+    const target = f.sandbox.create("sms", "+351912345679");
+    const host = new ExtensionHost();
+    const app = createApp();
+    const client = new VirtualInboxClient(f.base);
+    app.post("/provider/send", async ctx => {
+      const value = ctx.request.body as { from: string; to: string; body: string };
+      const captured = await client.ingestSms(value);
+      ctx.response.status = 200;
+      ctx.response.body = { capturedMessageId: captured.id };
+    });
+    host.register({ id: "test-provider", version: "1.0.0", app });
+    f.context.extensionHost = host;
+    const input = { from: "provider-adapter", to: target.address, body: "via-public-api" };
+    const response = await f.request("/demo/provider/send", "POST", input);
+    assert.equal(response.status, 200);
+    const result = await response.json() as { capturedMessageId: string };
+    const captured = f.sandbox.listMessages(target.id);
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].id, result.capturedMessageId);
+    assert.equal(captured[0].body, input.body);
+    assert.equal(captured[0].from, input.from);
   } finally { await f.close(); }
 });

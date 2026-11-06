@@ -257,6 +257,7 @@ export const operations: readonly ApiOperation[] = [
     ];
   }),
   { id: "sendDemoEmail", method: "POST", path: "/mailboxes/{inboxId}/demo-send", audience: "demo", tag: "Demo", status: 202, request: "DemoEmail", response: "Accepted", summary: "Send a test email through the application's SMTP listener." },
+  management({ id: "ingestSms", method: "POST", path: "/sms/ingestions", tag: "SMS", status: 201, request: "SmsInput", response: "Message", summary: "Capture a simulated SMS through the common public functional API; available to every client including extensions." }),
   { id: "sendSms", method: "POST", path: "/sms/messages", audience: "demo", tag: "Demo", status: 201, request: "SmsInput", response: "Message", summary: "Capture a simulated SMS. No external carrier is contacted." },
 ];
 
@@ -288,6 +289,7 @@ export function createOpenApiDocument(audience: ApiAudience = "management") {
     if (operation.query) for (const name of operation.query.split(","))
       parameters.push({ name, in: "query", schema: string });
     if (operation.mediaType === "text/event-stream") parameters.push({ name: "Last-Event-ID", in: "header", schema: string });
+    if (operation.id === "ingestSms") parameters.push({ name: "X-VI-Correlation-ID", in: "header", required: false, description: "Optional untrusted diagnostic token (1-128 safe ASCII characters); echoed on successful ingestion.", schema: string });
     const success: Record<string, unknown> = { description: operation.status === 204 ? "No content." : "Success." };
     if (operation.status !== 204) success.content = {
       [operation.mediaType || "application/json"]: { schema: operation.response ? reference(operation.response) : { type: "string", ...(operation.mediaType === "application/octet-stream" ? { format: "binary" } : {}) } },

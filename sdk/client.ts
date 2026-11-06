@@ -31,6 +31,8 @@ export type InboxMessage = {
   receivedAt?: string;
   captureReason?: "UNKNOWN_RECIPIENT" | "EXPIRED_RECIPIENT";
 };
+/** Common public SMS ingestion contract, shared by external clients and extensions. */
+export type SmsIngestion = { from: string; to: string; body: string };
 export type MessageMatch = {
   from?: string;
   subjectContains?: string;
@@ -227,6 +229,16 @@ export class VirtualInboxClient {
         [channel === "email" ? "address" : "phoneNumber"]: address,
         ttlSeconds, ...(ifExists === "return" ? { ifExists } : {}),
       }),
+    });
+  }
+
+  /** Capture a synthetic SMS via the same public functional API as every other client.
+   *  This is not a provider-facing/demo endpoint; extensions may invoke it without recursion.
+   */
+  ingestSms(input: SmsIngestion, options: { correlationId?: string } = {}): Promise<InboxMessage> {
+    return this.request("/api/sms/ingestions", {
+      method: "POST", body: JSON.stringify(input),
+      ...(options.correlationId === undefined ? {} : { headers: { "X-VI-Correlation-ID": options.correlationId } }),
     });
   }
 

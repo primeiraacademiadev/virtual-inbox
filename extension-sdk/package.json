@@ -1,0 +1,29 @@
+{
+  "name": "@virtual-inbox/extension-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Application and middleware SDK for trusted Virtual Inbox HTTP extensions",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

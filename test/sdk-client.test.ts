@@ -154,10 +154,10 @@ test("SDK scoped SMTP rules clean up and completed-attempt polling waits for a t
 
 test("SDK ingestSms calls only the common public ingestion endpoint", async () => {
   const previous = globalThis.fetch;
-  const calls: Array<{ path: string; method: string; body: unknown }> = [];
+  const calls: Array<{ path: string; method: string; body: unknown; correlationId: string | null }> = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ path: new URL(String(url)).pathname, method: init?.method ?? "GET",
-      body: JSON.parse(String(init?.body)) });
+      body: JSON.parse(String(init?.body)), correlationId: new Headers(init?.headers).get("X-VI-Correlation-ID") });
     return Response.json({ id: "captured", channel: "sms", destinationId: "inbox",
       sequence: 1, from: "tester", originalRecipient: "+351912345678", body: "Hello" },
       { status: 201 });
@@ -165,8 +165,8 @@ test("SDK ingestSms calls only the common public ingestion endpoint", async () =
   try {
     const sdk = new VirtualInboxClient("http://127.0.0.1:3000/api/");
     const input = { from: "tester", to: "+351912345678", body: "Hello" };
-    const result = await sdk.ingestSms(input);
+    const result = await sdk.ingestSms(input, { correlationId: "sdk-correlation-42" });
     assert.equal(result.id, "captured");
-    assert.deepEqual(calls, [{ path: "/api/sms/ingestions", method: "POST", body: input }]);
+    assert.deepEqual(calls, [{ path: "/api/sms/ingestions", method: "POST", body: input, correlationId: "sdk-correlation-42" }]);
   } finally { globalThis.fetch = previous; }
 });

@@ -12,6 +12,7 @@ const { ProtocolConnections, filteredConnections } = await import(modulePath("pr
 const { NavigationIcon } = await import(modulePath("NavigationIcon"));
 const { AttachmentIndicator } = await import(modulePath("AttachmentIndicator"));
 const { FootprintView, FootprintSummary } = await import(modulePath("FootprintView"));
+const { ExtensionInventorySummary, extensionDocumentId, extensionLabels } = await import(modulePath("ExtensionInventory"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.
@@ -144,4 +145,98 @@ test("footprint summary renders resource counts, retention and process memory", 
   assert.match(html, /Connection retention/);
   assert.match(html, /Last cleanup:/);
   assert.match(html, /POP3/);
+});
+
+test("extensions inventory renders active and disabled extensions with accessible endpoints", () => {
+  const records = [
+    {
+      id: "sms-native", displayName: "Native SMS sender", version: "1.0.0",
+      state: "active", capabilities: ["sms-sender"],
+      documentation: "/docs/embedded-extension-host",
+      routes: [{ method: "POST", audience: "demo", path: "/sms/messages",
+        publicPaths: ["/demo/sms/messages", "/sms/messages (dedicated demo listener)"] }],
+      metrics: { count: 3, errors: 1, totalDurationMs: 71, lastStatus: 201 },
+    },
+    { id: "failed-1", displayName: "failed-1", version: "",
+      state: "failed", capabilities: [], routes: [], diagnosticCode: "EXTENSION_LOAD_FAILED",
+      metrics: { count: 0, errors: 0, totalDurationMs: 0 } },
+  ];
+  const html = render(ExtensionInventorySummary, {
+    locale: "en", entries: records, onLogs: () => {}, onDocumentation: () => {},
+  });
+  assert.match(html, /Native SMS sender/);
+  assert.match(html, /<table/);
+  assert.match(html, /POST/);
+  assert.match(html, /\/demo\/sms\/messages/);
+  assert.match(html, /View this extension&#x27;s logs/);
+  assert.match(html, /Open guide/);
+  assert.match(html, /EXTENSION_LOAD_FAILED/);
+  assert.match(html, /This extension has no active endpoints/);
+  assert.doesNotMatch(html, /<iframe|<script|Bearer secret/);
+  assert.match(render(ExtensionInventorySummary, {
+    locale: "pt-PT", entries: [], onLogs: () => {}, onDocumentation: () => {},
+  }), /Não existem extensões registadas/);
+});
+
+test("extension docs resolve only console-published pages, never arbitrary or external URLs", () => {
+  assert.equal(extensionDocumentId("/docs/embedded-extension-host"), "extensions");
+  assert.equal(extensionDocumentId("/wiki/fr/sdk.md"), "sdk");
+  assert.equal(extensionDocumentId("/wiki/en/extensions.md"), "extensions");
+  assert.equal(extensionDocumentId("/wiki/fr/unknown.md"), null);
+  assert.equal(extensionDocumentId("https://provider.example/credentials"), null);
+  assert.equal(extensionDocumentId("//evil.example/test"), null);
+  assert.equal(extensionDocumentId(undefined), null);
+});
+
+test("system navigation includes extensions and its own active link", () => {
+  const markup = render(ContextSidebar, {
+    page: "extensions", docPage: "overview", docText: "",
+    extensionsLabel: "Extensões", onPage: () => {}, onDocument: () => {},
+  });
+  assert.match(markup, /Extensões/);
+  assert.match(markup, /aria-current="page"/);
+  assert.match(render(NavigationIcon, { name: "extensions" }), /<svg/);
+});
+
+test("extension locale keys stay aligned, including status labels and error states", () => {
+  const languages = ["pt-PT", "en", "fr"] as const;
+  const keys = Object.keys(extensionLabels("en"));
+  assert.equal(keys.length, 26);
+  for (const locale of languages) {
+    const labels = extensionLabels(locale);
+    assert.deepEqual(Object.keys(labels), keys);
+    assert.equal(Object.values(labels).every((value: unknown) =>
+      typeof value === "string" && value.length > 0), true);
+  }
+  assert.equal(extensionLabels("pt-PT").disabled, "Desativada");
+  assert.equal(extensionLabels("fr").failed, "Échec");
+});
+
+test("extension console renders inactive records, unavailable documentation and all supported locales", () => {
+  const inactive = [{
+    id: "disabled-provider", displayName: "External provider", version: "",
+    state: "disabled", capabilities: [], routes: [],
+    documentation: "/docs/unknown-provider", diagnosticCode: "DISABLED_BY_CONFIGURATION",
+    metrics: { count: 0, errors: 0, totalDurationMs: 0 },
+  }];
+  for (const locale of ["pt-PT", "en", "fr"] as const) {
+    const html = render(ExtensionInventorySummary, { locale, entries: inactive,
+      onLogs: () => {}, onDocumentation: () => {} });
+    assert.match(html, /DISABLED_BY_CONFIGURATION/);
+    assert.match(html, /\/docs\/unknown-provider/);
+    assert.doesNotMatch(html, /Open guide|Abrir guia|Ouvrir le guide/);
+    assert.doesNotMatch(html, /<table/);
+  }
+  const withoutDocs = render(ExtensionInventorySummary, {
+    locale: "en", entries: [{ ...inactive[0], state: "active",
+      capabilities: ["sms-sender"], documentation: undefined,
+      routes: [{ method: "GET", audience: "management", path: "/provider/status",
+        publicPaths: ["/api/provider/status"] }],
+      metrics: { count: 12, errors: 2, totalDurationMs: 123, lastStatus: 200 },
+    }], onLogs: () => {}, onDocumentation: () => {},
+  });
+  assert.match(withoutDocs, /sms-sender/);
+  assert.match(withoutDocs, /\/api\/provider\/status/);
+  assert.match(withoutDocs, /<table/);
+  assert.doesNotMatch(withoutDocs, /Open guide/);
 });

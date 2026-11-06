@@ -15,6 +15,7 @@ import { NavigationIcon } from "./components/NavigationIcon";
 import { AttachmentIndicator } from "./components/AttachmentIndicator";
 import { ProtocolConnections } from "./components/protocols/ProtocolConnections";
 import { FootprintView } from "./components/FootprintView";
+import { ExtensionInventory } from "./components/ExtensionInventory";
 import { ProtocolTesting } from "./components/protocols/ProtocolTesting";
 import { ProtocolMetricsView } from "./components/protocols/ProtocolMetricsView";
 import { eventLabel, captureReasonLabel } from "./i18n/domain";
@@ -44,7 +45,7 @@ const MarkdownView = lazy(() => import("./components/documentation/MarkdownView"
   .then(({ MarkdownView }) => ({ default: MarkdownView })));
 
 type View = "split" | "inbox" | "logs";
-type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
+type Page = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint" | "extensions";
 type Client = { id: string; remoteAddress: string; authUser?: string; activeSessions: number; totalSessions: number; authenticatedSessions: number };
 type SmtpSession = { id: string; clientId: string; remoteAddress: string; connectedAt: string; lastActivityAt: string; disconnectedAt?: string; connected: boolean; secure: boolean; authenticated: boolean; authUser?: string; authAttempts: Array<{ id: string; at: string; method: string; authUser: string; accepted: boolean }>; messageIds: string[]; errors: Array<{ at: string; responseCode: number; code: string }> };
 async function postDemo(path: string, data: unknown) {
@@ -262,6 +263,13 @@ export default function App() {
     }, 130);
     return () => clearTimeout(timeout);
   }, [jump, docText, apiText, page]);
+  function showExtensionLogs(extensionId: string) {
+    setLogField("extensionId");
+    setServerLogFilter(extensionId);
+    setIncludeAnomalies(false);
+    setView("logs");
+    setPage("workspace");
+  }
   function openPage(next: Page) {
     setPage(next);
     setMenuOpen(false);
@@ -572,7 +580,7 @@ export default function App() {
         </span>
         <CopyButton value={observer} label={t("copySession")} />
       </header>
-      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} docText={docText} onPage={openPage} onDocument={openDocument} />}
+      {page !== "workspace" && <ContextSidebar page={page} docPage={docPage} docText={docText} onPage={openPage} onDocument={openDocument} extensionsLabel={t("extensions")} />}
       {page === "workspace" && (
         <div className="workspace">
           <aside className={"sidebar" + (collapsed ? " closed" : "")}>
@@ -972,6 +980,7 @@ export default function App() {
       {(page === "pop3" || page === "simulations") && <ProtocolTesting adminToken={adminToken} mode={page} onAdminTokenChange={setAdminToken}
         onNavigate={next => openPage(next)} />}
       {page === "footprint" && <FootprintView adminToken={adminToken} onAdminTokenChange={setAdminToken} />}
+      {page === "extensions" && <ExtensionInventory onLogs={showExtensionLogs} onDocumentation={openDocument} />}
       {page === "connections" && (
         <main className="information">
           <h2>{t("connectionTitle")}</h2>

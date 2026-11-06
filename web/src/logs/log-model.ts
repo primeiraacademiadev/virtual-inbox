@@ -1,7 +1,7 @@
 import type { EventEntry } from "../api.js";
 
 export const LOG_DEPTHS = [500, 2000, 5000, 10000] as const;
-export const LOG_FILTER_FIELDS = ["type","inboxId","messageId","smtpSessionId","attemptId","sender","recipient","ruleId"] as const;
+export const LOG_FILTER_FIELDS = ["type","inboxId","messageId","smtpSessionId","attemptId","sender","recipient","ruleId","extensionId"] as const;
 export function appendLog(entries: EventEntry[], entry: EventEntry, depth: number): EventEntry[] {
   if (entries.some((x) => x.id === entry.id)) return entries;
   return [...entries.slice(-(depth - 1)), entry];

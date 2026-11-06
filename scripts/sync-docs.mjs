@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const documents = ["overview", "demo", "integration", "sdk", "api", "tls", "architecture", "development"];
+const documents = ["overview", "demo", "integration", "sdk", "api", "tls", "architecture", "development", "extensions"];
 for (const locale of ["pt-PT", "en", "fr"]) {
   const destination = join(root, "web/public/wiki", locale);
   mkdirSync(destination, { recursive: true });

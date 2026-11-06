@@ -12,6 +12,7 @@ const { ProtocolConnections, filteredConnections } = await import(modulePath("pr
 const { NavigationIcon } = await import(modulePath("NavigationIcon"));
 const { AttachmentIndicator } = await import(modulePath("AttachmentIndicator"));
 const { FootprintView, FootprintSummary } = await import(modulePath("FootprintView"));
+const { ExtensionInventorySummary, extensionDocumentId } = await import(modulePath("ExtensionInventory"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.
@@ -144,4 +145,55 @@ test("footprint summary renders resource counts, retention and process memory", 
   assert.match(html, /Connection retention/);
   assert.match(html, /Last cleanup:/);
   assert.match(html, /POP3/);
+});
+
+test("extensions inventory renders active and disabled extensions with accessible endpoints", () => {
+  const records = [
+    {
+      id: "sms-native", displayName: "Native SMS sender", version: "1.0.0",
+      state: "active", capabilities: ["sms-sender"],
+      documentation: "/docs/embedded-extension-host",
+      routes: [{ method: "POST", audience: "demo", path: "/sms/messages",
+        publicPaths: ["/demo/sms/messages", "/sms/messages (dedicated demo listener)"] }],
+      metrics: { count: 3, errors: 1, totalDurationMs: 71, lastStatus: 201 },
+    },
+    { id: "failed-1", displayName: "failed-1", version: "",
+      state: "failed", capabilities: [], routes: [], diagnosticCode: "EXTENSION_LOAD_FAILED",
+      metrics: { count: 0, errors: 0, totalDurationMs: 0 } },
+  ];
+  const html = render(ExtensionInventorySummary, {
+    locale: "en", entries: records, onLogs: () => {}, onDocumentation: () => {},
+  });
+  assert.match(html, /Native SMS sender/);
+  assert.match(html, /<table/);
+  assert.match(html, /POST/);
+  assert.match(html, /\/demo\/sms\/messages/);
+  assert.match(html, /View this extension&#x27;s logs/);
+  assert.match(html, /Open guide/);
+  assert.match(html, /EXTENSION_LOAD_FAILED/);
+  assert.match(html, /This extension has no active endpoints/);
+  assert.doesNotMatch(html, /<iframe|<script|Bearer secret/);
+  assert.match(render(ExtensionInventorySummary, {
+    locale: "pt-PT", entries: [], onLogs: () => {}, onDocumentation: () => {},
+  }), /Não existem extensões registadas/);
+});
+
+test("extension docs resolve only console-published pages, never arbitrary or external URLs", () => {
+  assert.equal(extensionDocumentId("/docs/embedded-extension-host"), "extensions");
+  assert.equal(extensionDocumentId("/wiki/fr/sdk.md"), "sdk");
+  assert.equal(extensionDocumentId("/wiki/en/extensions.md"), "extensions");
+  assert.equal(extensionDocumentId("/wiki/fr/unknown.md"), null);
+  assert.equal(extensionDocumentId("https://provider.example/credentials"), null);
+  assert.equal(extensionDocumentId("//evil.example/test"), null);
+  assert.equal(extensionDocumentId(undefined), null);
+});
+
+test("system navigation includes extensions and its own active link", () => {
+  const markup = render(ContextSidebar, {
+    page: "extensions", docPage: "overview", docText: "",
+    extensionsLabel: "Extensões", onPage: () => {}, onDocument: () => {},
+  });
+  assert.match(markup, /Extensões/);
+  assert.match(markup, /aria-current="page"/);
+  assert.match(render(NavigationIcon, { name: "extensions" }), /<svg/);
 });

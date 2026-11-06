@@ -9,6 +9,9 @@ import { Sandbox } from "../src/core.js";
 import { SmtpReplyRuleStore } from "../src/smtp-reply-rules.js";
 import { handleRequest } from "../src/http/request-router.js";
 import type { RequestContext } from "../src/server.js";
+import { createApp } from "../extension-sdk/src/index.js";
+import { ExtensionHost } from "../src/extension-host.js";
+import { VirtualInboxClient } from "../sdk/client.js";
 
 type Fixture = {
   sandbox: Sandbox;
@@ -281,5 +284,33 @@ test("public SMS ingestion and demo sender share capture semantics without break
     assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
     assert.equal(anomaly.originalRecipient, "+351999888777");
     assert.equal((await f.request("/api/sms/ingestions", "GET")).status, 404);
+  } finally { await f.close(); }
+});
+
+
+test("embedded extension uses exactly the same public SMS ingestion API as external clients", async () => {
+  const f = await fixture();
+  try {
+    const target = f.sandbox.create("sms", "+351912345679");
+    const host = new ExtensionHost();
+    const app = createApp();
+    const client = new VirtualInboxClient(f.base);
+    app.post("/provider/send", async ctx => {
+      const value = ctx.request.body as { from: string; to: string; body: string };
+      const captured = await client.ingestSms(value);
+      ctx.response.status = 200;
+      ctx.response.body = { capturedMessageId: captured.id };
+    });
+    host.register({ id: "test-provider", version: "1.0.0", app });
+    f.context.extensionHost = host;
+    const input = { from: "provider-adapter", to: target.address, body: "via-public-api" };
+    const response = await f.request("/demo/provider/send", "POST", input);
+    assert.equal(response.status, 200);
+    const result = await response.json() as { capturedMessageId: string };
+    const captured = f.sandbox.listMessages(target.id);
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].id, result.capturedMessageId);
+    assert.equal(captured[0].body, input.body);
+    assert.equal(captured[0].from, input.from);
   } finally { await f.close(); }
 });

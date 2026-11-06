@@ -28,6 +28,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 600s npm test
       - name: Integrated backend and console build
         run: npm run build
+      - name: Verify embedded Extension Host and ESM example
+        run: node testing/scripts/extension-smoke.mjs
       - name: Compile and pack SDK candidate
         run: |
           npm install --prefix sdk --ignore-scripts --no-package-lock --no-audit --no-fund

@@ -17,6 +17,7 @@ import { isConnectionProbeAddress, waitForConnectionProbeMessage } from "../conn
 import { sanitizeDownloadName } from "../mime/attachments.js";
 import { serveFrontend, errorCode, json, body } from "./server-helpers.js";
 import { observe } from "./event-stream.js";
+import { tryExtensionRequest } from "./extension-request.js";
 import type { RequestContext } from "../server.js";
 
 const channels: Record<string, Channel> = { mailboxes: "email", "phone-numbers": "sms" };
@@ -43,6 +44,15 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
     if (method === "OPTIONS") return json(res, 204, {});
     const match = matchApiOperation(method, path, demoOnly || sameOriginDemo ? "demo" : "management");
     if (!match) {
+      // Extension routes run after the existing security checks and core catalogue.
+      // On the main listener /api/ resolves management and /demo/ resolves demo;
+      // on dedicated demo listeners the root maps to demo.
+      const audience = demoOnly || sameOriginDemo ? "demo" : "management";
+      const isPublicExtensionPath = demoOnly || sameOriginDemo || rawPath[0] === "api";
+      if (isPublicExtensionPath && ctx.extensionHost && await tryExtensionRequest(
+        req, res, ctx.extensionHost, audience,
+        "/" + path.join("/") + url.search,
+      )) return;
       if (!demoOnly && method === "GET" && !["api", "demo"].includes(rawPath[0]) &&
         serveFrontend(req, res, rawPath)) return;
       throw new Fault(404, "Route not available on this listener");

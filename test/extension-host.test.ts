@@ -105,3 +105,71 @@ test("only explicit bundled registration may claim the existing SMS sender route
   assert.throws(() => host.registerNativeSms(createModule("other", "/other")), /Expected bundled/);
   assert.equal(host.list().length, 1);
 });
+
+
+test("registry exposes only safe route metadata and increments request metrics", async () => {
+  const host = new ExtensionHost();
+  const app = createApp();
+  app.post("/vendor/send", ctx => {
+    ctx.response.status = 201;
+    ctx.response.body = { accepted: true };
+  });
+  host.register({ id: "vendor-a", version: "1.2.3", displayName: "Vendor A",
+    capabilities: ["sms-sender"], documentation: "/docs/vendor-a", app });
+  const outcomes: unknown[] = [];
+  host.observeOutcomes(outcome => outcomes.push(outcome));
+  const entry = host.registry()[0];
+  assert.deepEqual(entry.routes, [{
+    method: "POST", audience: "demo", path: "/vendor/send",
+    publicPaths: ["/demo/vendor/send", "/vendor/send (dedicated demo listener)"],
+  }]);
+  assert.equal(entry.metrics.count, 0);
+  const result = await host.dispatch({
+    method: "POST", audience: "demo", path: "/vendor/send",
+    correlationId: "trace-test-123",
+  });
+  assert.equal(result?.response.status, 201);
+  const updated = host.registry()[0];
+  assert.equal(updated.metrics.count, 1);
+  assert.equal(updated.metrics.errors, 0);
+  assert.equal(updated.metrics.lastStatus, 201);
+  assert.deepEqual(outcomes.map(v => (v as { correlationId: string }).correlationId), ["trace-test-123"]);
+  assert.doesNotMatch(JSON.stringify(host.registry()), /password|\/tmp\/|Bearer /);
+});
+
+test("registry records bounded failures and disabled native extension state", async () => {
+  const host = new ExtensionHost();
+  host.markDisabled("sms-native");
+  await host.loadFiles(["./definitely-missing-test-module.mjs"]);
+  const registry = host.registry();
+  assert.equal(registry.some(entry => entry.id === "sms-native" && entry.state === "disabled"), true);
+  assert.equal(registry.some(entry => entry.state === "failed" &&
+    entry.diagnosticCode === "EXTENSION_LOAD_FAILED"), true);
+  assert.equal(JSON.stringify(registry).includes("definitely-missing-test-module"), false);
+  assert.equal(host.errors.length, 1);
+});
+
+test("handler failures count as extension errors without propagating secrets into registry", async () => {
+  const host = new ExtensionHost();
+  const app = createApp();
+  app.get("/fail", () => { throw new Error("Bearer secret-token"); });
+  host.register({ id: "failure-count", version: "1", app });
+  await assert.rejects(host.dispatch({
+    audience: "demo", method: "GET", path: "/fail", correlationId: "trace",
+  }), /Bearer secret-token/);
+  const entry = host.registry()[0];
+  assert.equal(entry.metrics.count, 1);
+  assert.equal(entry.metrics.errors, 1);
+  assert.equal(entry.metrics.lastStatus, 502);
+  assert.doesNotMatch(JSON.stringify(entry), /secret-token/);
+});
+
+test("registry rejects unsafe metadata without publishing any routes", () => {
+  const host = new ExtensionHost();
+  const app = createApp();
+  app.get("/valid", ctx => { ctx.response.status = 200; });
+  assert.throws(() => host.register({
+    id: "unsafe", version: "1", app, documentation: "https://external.test/secret",
+  }), /Invalid extension module export/);
+  assert.equal(host.registry().length, 0);
+});

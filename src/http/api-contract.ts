@@ -34,6 +34,18 @@ export const schemas: Record<string, Schema> = {
   Error: object({ error: string, errorCode: string, errorParams: { type: "object" } }, [
     "error", "errorCode", "errorParams",
   ]),
+  ExtensionMetrics: object({ count: integer, errors: integer, totalDurationMs: integer, lastStatus: integer },
+    ["count", "errors", "totalDurationMs"]),
+  ExtensionRoute: object({ method: string, audience: { enum: ["management", "demo"] },
+    path: string, publicPaths: array(string) }, ["method", "audience", "path", "publicPaths"]),
+  ExtensionRegistryEntry: object({
+    id: string, displayName: string, version: string,
+    state: { enum: ["active", "failed", "disabled"] },
+    capabilities: array(string), documentation: string,
+    routes: array(reference("ExtensionRoute")), metrics: reference("ExtensionMetrics"),
+    diagnosticCode: string,
+  }, ["id", "displayName", "version", "state", "capabilities", "routes", "metrics"]),
+  ExtensionRegistry: array(reference("ExtensionRegistryEntry")),
   Health: object({ status: { const: "ok" }, runId: uuid }, ["status", "runId"]),
   Readiness: object({ ready: boolean, runId: uuid, listeners: array(object({ name: string, port: integer, host: string })) }, ["ready", "runId", "listeners"]),
   Capabilities: object({ version: string, schemaVersion: integer, protocols: { type: "object" }, smtpAuthPolicy: { enum: ["INBOX", "OPEN"] }, inbox: { type: "object" }, simulation: { type: "object" } }, ["version", "schemaVersion", "protocols", "smtpAuthPolicy", "inbox", "simulation"]),
@@ -187,7 +199,7 @@ const management = (operation: Omit<ApiOperation, "audience">): ApiOperation => 
 });
 const streams = ["logs/events", "observers/events", "observers/{observerId}/events"].map(
   (path, index) => management({ id: ["logEvents", "newObserverEvents", "observerEvents"][index],
-    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies",
+    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,extensionId,includeAnomalies",
     summary: "Open an SSE stream; use Last-Event-ID or after for replay.", mediaType: "text/event-stream" }),
 );
 
@@ -227,6 +239,8 @@ export const operations: readonly ApiOperation[] = [
   management({ id: "openapi", method: "GET", path: "/openapi.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the current management API contract." }),
   management({ id: "demoOpenapi", method: "GET", path: "/openapi-demo.json", tag: "Service", status: 200, response: "OpenApiDocument", summary: "Download the separate demo sender contract." }),
   management({ id: "generationOptions", method: "GET", path: "/identity-generation/options", tag: "Inboxes", status: 200, response: "GenerationOptions", summary: "Read supported identity strategies, locales and defaults." }),
+  management({ id: "extensionRegistry", method: "GET", path: "/extensions", tag: "Extensions",
+    status: 200, response: "ExtensionRegistry", summary: "Discover installed and failed extensions, their published endpoints and bounded metrics." }),
   management({ id: "connectionInfo", method: "GET", path: "/connection-info", tag: "Service", status: 200, response: "ConnectionInfo", summary: "Discover listener ports and public TLS metadata." }),
   management({ id: "tlsStatus", method: "GET", path: "/tls/status", tag: "TLS", status: 200, response: "TlsStatus", summary: "Read the active TLS identity; never returns private keys." }),
   management({ id: "tlsCa", method: "GET", path: "/tls/ca.pem", tag: "TLS", status: 200, mediaType: "application/x-pem-file", summary: "Download the local CA public certificate (auto mode only)." }),

@@ -8,6 +8,9 @@ interface ModuleDefinition {
   id: string;
   version: string;
   app: ExtensionApp;
+  displayName?: string;
+  capabilities?: string[];
+  documentation?: string;
 }
 interface HostedExtension extends ModuleDefinition {
   routes: readonly RouteDescriptor[];
@@ -17,6 +20,40 @@ export interface ExtensionDiagnostic {
   id?: string;
   error: string;
 }
+export type ExtensionState = "active" | "failed" | "disabled";
+export interface ExtensionRoutePublication {
+  method: HttpMethod;
+  audience: Audience;
+  path: string;
+  publicPaths: string[];
+}
+export interface ExtensionRequestMetric {
+  count: number;
+  errors: number;
+  totalDurationMs: number;
+  lastStatus?: number;
+}
+export interface ExtensionRegistryEntry {
+  id: string;
+  displayName: string;
+  version: string;
+  state: ExtensionState;
+  capabilities: string[];
+  documentation?: string;
+  routes: ExtensionRoutePublication[];
+  metrics: ExtensionRequestMetric;
+  diagnosticCode?: string;
+}
+export interface ExtensionOutcome {
+  extensionId: string;
+  method: HttpMethod;
+  audience: Audience;
+  route: string;
+  correlationId: string;
+  status: number;
+  durationMs: number;
+}
+
 export interface ExtensionDispatchResult {
   extensionId: string;
   response: ExtensionResponse;
@@ -95,6 +132,41 @@ function safeResponse(response: ExtensionResponse): ExtensionResponse {
 export class ExtensionHost {
   private active: readonly HostedExtension[] = [];
   readonly errors: ExtensionDiagnostic[] = [];
+  private readonly states = new Map<string, { state: "failed" | "disabled"; code: string }>();
+  private readonly metrics = new Map<string, ExtensionRequestMetric>();
+  private outcomeObserver?: (outcome: ExtensionOutcome) => void;
+
+  /** Runtime events contain only route templates and correlation IDs, never payloads. */
+  observeOutcomes(observer: (outcome: ExtensionOutcome) => void): void {
+    this.outcomeObserver = observer;
+  }
+  markDisabled(id: string): void {
+    if (!ID.test(id) || this.active.some(ext => ext.id === id)) throw new Error("Invalid disabled extension ID");
+    this.states.set(id, { state: "disabled", code: "DISABLED_BY_CONFIGURATION" });
+  }
+  /** Registry is safe for public test-sandbox inspection: no file paths, stack traces or secrets. */
+  registry(): ExtensionRegistryEntry[] {
+    const active = this.active.map(ext => ({
+      id: ext.id, displayName: ext.displayName ?? ext.id, version: ext.version,
+      state: "active" as const,
+      capabilities: [...(ext.capabilities ?? [])],
+      ...(ext.documentation ? { documentation: ext.documentation } : {}),
+      routes: ext.routes.map(route => ({
+        method: route.method, audience: route.audience, path: route.path,
+        publicPaths: route.audience === "demo"
+          ? ["/demo" + route.path, route.path + " (dedicated demo listener)"]
+          : ["/api" + route.path],
+      })),
+      metrics: { ...(this.metrics.get(ext.id) ?? { count: 0, errors: 0, totalDurationMs: 0 }) },
+    }));
+    const inactive = [...this.states].filter(([id]) => !this.active.some(ext => ext.id === id))
+      .map(([id, value]) => ({
+        id, displayName: id, version: "", state: value.state, capabilities: [],
+        routes: [], metrics: { count: 0, errors: 0, totalDurationMs: 0 },
+        diagnosticCode: value.code,
+      }));
+    return [...active, ...inactive].sort((a, b) => a.id.localeCompare(b.id));
+  }
 
   list(): ReadonlyArray<{ id: string; version: string; routes: readonly RouteDescriptor[] }> {
     return this.active.map(({ id, version, routes }) => ({ id, version, routes }));
@@ -110,6 +182,14 @@ export class ExtensionHost {
   private registerInternal(definition: ModuleDefinition, legacySmsTransfer: boolean): void {
     if (!definition || !ID.test(definition.id) || typeof definition.version !== "string" ||
         !definition.version || !definition.app ||
+        (definition.displayName !== undefined &&
+          (typeof definition.displayName !== "string" || definition.displayName.length > 100)) ||
+        (definition.documentation !== undefined &&
+          (typeof definition.documentation !== "string" || !/^\/[a-zA-Z0-9/_#.-]{1,250}$/.test(definition.documentation))) ||
+        (definition.capabilities !== undefined &&
+          (!Array.isArray(definition.capabilities) || definition.capabilities.length > 20 ||
+            definition.capabilities.some(value => typeof value !== "string" ||
+              !/^[a-z][a-z0-9-]{0,39}$/.test(value)))) ||
         typeof definition.app.routes !== "function" || typeof definition.app.dispatch !== "function") {
       throw new Error("Invalid extension module export");
     }
@@ -139,6 +219,7 @@ export class ExtensionHost {
     }
     // The public route table is changed only after *all* route checks succeed.
     this.active = [...this.active, { ...definition, routes: routes.map((route) => ({ ...route })) }];
+    this.states.delete(definition.id);
   }
   async loadFiles(paths: readonly string[]): Promise<void> {
     for (const path of paths) {
@@ -150,6 +231,10 @@ export class ExtensionHost {
         const module = await import(pathToFileURL(file).href) as { default?: ModuleDefinition };
         this.register(module.default!);
       } catch (error) {
+        // Only a generated key and a non-sensitive error code are exposed.
+        // Local filesystem paths and exception text stay in startup diagnostics.
+        const id = "failed-" + (this.states.size + 1);
+        this.states.set(id, { state: "failed", code: "EXTENSION_LOAD_FAILED" });
         this.errors.push({ source: String(path), error: error instanceof Error ? error.message : String(error) });
       }
     }
@@ -166,6 +251,10 @@ export class ExtensionHost {
       route.audience === request.audience && route.method === request.method &&
       matchesPattern(route.path, pathname)));
     if (!found) return null;
+    const route = found.routes.find(item => item.method === request.method &&
+      item.audience === request.audience && matchesPattern(item.path, pathname));
+    const startTime = performance.now();
+    let status = 502;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       const response = await Promise.race([
@@ -176,8 +265,32 @@ export class ExtensionHost {
         }),
       ]);
       if (!response) throw new Error("Registered extension did not dispatch the request");
-      return { extensionId: found.id, response: safeResponse(response) };
-    } finally { if (timeout) clearTimeout(timeout); }
+      const safe = safeResponse(response);
+      status = safe.status;
+      return { extensionId: found.id, response: safe };
+    } catch (error) {
+      if (error instanceof Error && error.message === "Extension request timeout") status = 504;
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      const durationMs = Math.max(0, Math.round(performance.now() - startTime));
+      const previous = this.metrics.get(found.id) ?? { count: 0, errors: 0, totalDurationMs: 0 };
+      this.metrics.set(found.id, {
+        count: previous.count + 1, errors: previous.errors + (status >= 400 ? 1 : 0),
+        totalDurationMs: previous.totalDurationMs + durationMs, lastStatus: status,
+      });
+      if (this.outcomeObserver && route) {
+        try {
+          this.outcomeObserver({
+            extensionId: found.id, method: request.method, audience: request.audience,
+            route: route.path, correlationId: request.correlationId ?? "",
+            status, durationMs,
+          });
+        } catch {
+          // Telemetry observers must never change a provider response.
+        }
+      }
+    }
   }
 }
 

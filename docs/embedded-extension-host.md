@@ -1,6 +1,6 @@
 # Embedded Extension Host (experimental)
 
-This document describes the **initial runtime** implemented for #99. See [ADR-0002](adr/0002-http-extensions.md) and [routing contract](extension-routing-contract.md). This is an HTTP test sandbox, **not** a runtime for untrusted plugins.
+This document describes the **initial runtime** implemented for #99. See [ADR-0002](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/adr/0002-http-extensions.md) and [routing contract](extension-routing-contract.md). This is an HTTP test sandbox, **not** a runtime for untrusted plugins.
 
 ## Enable a trusted local extension
 

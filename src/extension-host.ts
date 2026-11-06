@@ -100,6 +100,14 @@ export class ExtensionHost {
     return this.active.map(({ id, version, routes }) => ({ id, version, routes }));
   }
   register(definition: ModuleDefinition): void {
+    this.registerInternal(definition, false);
+  }
+  /** Only the Host startup path may transfer the legacy SMS demo route. */
+  registerNativeSms(definition: ModuleDefinition): void {
+    if (definition?.id !== "sms-native") throw new Error("Expected bundled SMS extension");
+    this.registerInternal(definition, true);
+  }
+  private registerInternal(definition: ModuleDefinition, legacySmsTransfer: boolean): void {
     if (!definition || !ID.test(definition.id) || typeof definition.version !== "string" ||
         !definition.version || !definition.app ||
         typeof definition.app.routes !== "function" || typeof definition.app.dispatch !== "function") {
@@ -116,7 +124,7 @@ export class ExtensionHost {
       // Its OpenAPI catalogue entry stays published, while the built-in
       // extension becomes the only runtime handler. Third-party extensions
       // never receive this exemption.
-      const nativeSmsTransfer = definition.id === "sms-native" &&
+      const nativeSmsTransfer = legacySmsTransfer && definition.id === "sms-native" &&
         route.audience === "demo" && route.method === "POST" &&
         route.path === "/sms/messages";
       const conflicting = [

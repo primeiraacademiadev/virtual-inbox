@@ -358,23 +358,23 @@ test("native SMS sender is explicitly unavailable when disabled, while common in
   } finally { await f.close(); }
 });
 
-test("dedicated demo listener uses the same native SMS handler and HTTP contract", async () => {
-  const f = await fixture(true);
+test("dedicated demo listener uses the same native SMS handler and public ingestion API", async () => {
+  const management = await fixture();
+  const demo = await fixture(true);
   try {
+    const recipient = management.sandbox.create("sms", "+351912345680");
     const host = new ExtensionHost();
-    // The public functional ingestion endpoint lives on the *main* listener.
-    // This test also checks that demo-only request routing remains isolated.
-    const app = createApp();
-    app.post("/sms/messages", ctx => {
-      ctx.response.status = 201;
-      ctx.response.body = { accepted: true };
-    });
-    host.register({ id: "sms-native", version: "1.0.0", app });
-    f.context.extensionHost = host;
-    const response = await f.request("/sms/messages", "POST",
-      { from: "synthetic", to: "+351912345678", body: "hello" });
+    host.register(createNativeSmsExtension(management.base));
+    demo.context.extensionHost = host;
+    const response = await demo.request("/sms/messages", "POST",
+      { from: "synthetic", to: recipient.address, body: "hello" });
     assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { accepted: true });
-    assert.equal((await f.request("/demo/sms/messages", "POST", {})).status, 404);
-  } finally { await f.close(); }
+    const captured = await response.json() as { id: string; destinationId: string };
+    assert.equal(captured.destinationId, recipient.id);
+    assert.equal(management.sandbox.listMessages(recipient.id)[0].id, captured.id);
+    assert.equal((await demo.request("/demo/sms/messages", "POST", {})).status, 404);
+  } finally {
+    await demo.close();
+    await management.close();
+  }
 });

@@ -1,7 +1,7 @@
 import React from "react";
 
 type Name = "smtp" | "pop3" | "error" | "email" | "sms" | "logs" | "connections" |
-  "footprint" | "documentation" | "api";
+  "footprint" | "documentation" | "api" | "extensions";
 export function NavigationIcon({ name }: { name: Name }) {
   const shared = { width: 20, height: 20, viewBox: "0 0 24 24",
     fill: "none", stroke: "currentColor", strokeWidth: 1.8,
@@ -22,6 +22,12 @@ export function NavigationIcon({ name }: { name: Name }) {
   </svg>;
   if (name === "logs") return <svg {...shared}>
     <path d="M4 5h16M4 12h16M4 19h16"/><path d="M2 5h.01M2 12h.01M2 19h.01"/>
+  </svg>;
+  if (name === "extensions") return <svg {...shared}>
+    <rect x="2.5" y="3" width="8" height="8" rx="1.5"/>
+    <rect x="13.5" y="3" width="8" height="8" rx="1.5"/>
+    <rect x="2.5" y="14" width="8" height="8" rx="1.5"/>
+    <path d="M17.5 14v8m-4-4h8"/>
   </svg>;
   if (name === "footprint") return <svg {...shared}>
     <path d="M2 19h20M4 15V9M9 15V5M14 15v-8M19 15V3"/>

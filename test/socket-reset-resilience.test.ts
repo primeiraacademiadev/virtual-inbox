@@ -4,11 +4,16 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { createServer, connect } from "node:net";
+import { createServer, connect, type Socket } from "node:net";
 import { connect as connectTls } from "node:tls";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+
+// Long enough for a native crash triggered by the last reset to reach the parent as
+// 'exit'. child.exitCode alone is read before that event and reports a dying process
+// as alive (the Windows CI failure "SMTP greeting after resets failed; server exit=null").
+const EXIT_SETTLE_MS = 500;
 
 async function freePorts(count: number): Promise<number[]> {
   const listeners = Array.from({ length: count }, () => createServer());
@@ -40,7 +45,24 @@ async function abruptReset(port: number): Promise<void> {
   });
 }
 
-test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", { timeout: 60_000 }, async () => {
+async function orderlyClose(port: number): Promise<void> {
+  const socket = connect(port, "127.0.0.1");
+  socket.on("error", () => { /* Peer may discard bytes after FIN. */ });
+  const closed = once(socket, "close");
+  socket.once("connect", () => socket.end());
+  await closed;
+}
+
+type Server = {
+  ports: { smtp: number; smtps: number; pop3: number };
+  ca: () => Buffer;
+  /** Fails, with the settled exit code and output, if the process ended. */
+  assertAlive(stage: string): Promise<void>;
+  /** Diagnostic for a failed client operation: exit code after the settle window. */
+  describe(stage: string): Promise<string>;
+};
+
+async function withServer(run: (server: Server) => Promise<void>): Promise<void> {
   const temp = mkdtempSync(join(tmpdir(), "vi-reset-" + randomUUID().slice(0, 8)));
   const [httpPort, httpsPort, smtpPort, smtpsPort, pop3Port, demoPort, demoHttpsPort] = await freePorts(7);
   const child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
@@ -63,81 +85,111 @@ test("SMTP, SMTPS and POP3 survive repeated raw TCP resets and remain usable", {
   let output = "";
   child.stdout.on("data", chunk => { output += String(chunk); });
   child.stderr.on("data", chunk => { output += String(chunk); });
-  const readyUrl = "http://127.0.0.1:" + httpPort + "/api/health";
-  const assertHealthy = async (stage: string) => {
-    try {
-      const response = await fetch(readyUrl);
-      assert.equal(response.status, 200, "Unexpected health status at " + stage);
-    } catch (cause) {
-      await sleep(100); // Let child process exit events settle before printing diagnostics.
-      throw new Error("Health failed after " + stage + "; exitCode=" + child.exitCode +
-        "; signal=" + child.signalCode + "; output=" + output, {cause});
-    }
+  const exited = once(child, "exit").catch(() => {});
+  const settledExit = async () => {
+    await Promise.race([exited, sleep(EXIT_SETTLE_MS)]);
+    const code = child.exitCode;
+    return code === null ? (child.signalCode ? "signal " + child.signalCode : "running")
+      : code + " (0x" + (code >>> 0).toString(16).toUpperCase() + ")";
+  };
+  const healthUrl = "http://127.0.0.1:" + httpPort + "/api/health";
+  const server: Server = {
+    ports: { smtp: smtpPort, smtps: smtpsPort, pop3: pop3Port },
+    ca: () => readFileSync(join(temp, "certs", "ca.pem")),
+    async describe(stage) {
+      return stage + "; server exit=" + await settledExit() + "; output=" + output;
+    },
+    async assertAlive(stage) {
+      const state = await settledExit();
+      assert.equal(state, "running", "Server terminated after " + stage + ": exit=" + state + "; output=" + output);
+      const response = await fetch(healthUrl).catch(async cause => {
+        throw new Error("Health failed after " + stage + "; exit=" + await settledExit() + "; output=" + output, { cause });
+      });
+      assert.equal(response.status, 200, "Unexpected health status after " + stage);
+    },
   };
   try {
     let ready = false;
     for (let i = 0; i < 150; i++) {
       if (child.exitCode !== null) throw Error("Server died during startup: " + output);
-      try { if ((await fetch(readyUrl)).ok) { ready = true; break; } } catch {}
+      try { if ((await fetch(healthUrl)).ok) { ready = true; break; } } catch {}
       await sleep(100);
     }
     assert.ok(ready, "Server did not become healthy: " + output);
-    // POP3 first: distinguishes direct POP3 failure from latent SMTPS TLS corruption.
-    for (const [name, port] of [["POP3", pop3Port], ["SMTP", smtpPort], ["SMTPS", smtpsPort]] as const) {
-      for (let i = 0; i < 6; i++) {
-        try { await abruptReset(port); }
-        catch (error) { throw new Error(name + " reset attempt " + (i + 1) + " failed", { cause: error }); }
-        assert.equal(child.exitCode, null, "Server terminated after " + name + " reset " + (i + 1) + ": " + output);
-      }
-      await assertHealthy("resets on " + name + " port " + port);
-    }
-    if (process.env.VI_TEST_EARLY_FIN === "1") {
-      // A clean FIN before an implicit TLS handshake was observed to crash native
-      // Node 26 on Windows; exercise both Windows 24 and 26 in dedicated CI.
-      for (let i = 0; i < 6; i++) {
-        const socket = connect(smtpsPort, "127.0.0.1");
-        socket.on("error", () => { /* Peer may discard bytes after FIN. */ });
-        const closed = new Promise<void>(done => socket.once("close", () => done()));
-        socket.once("connect", () => socket.end());
-        await closed;
-        assert.equal(child.exitCode, null, "SMTPS process exited after premature TLS FIN: " + output);
-      }
-      await assertHealthy("SMTPS early FIN");
-    }
-    const smtp = connect(smtpPort, "127.0.0.1");
-    try {
-      const [data] = await once(smtp, "data").catch(error => {
-        throw new Error("SMTP greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
-      });
-      assert.match(String(data), /^220 /);
-    } finally { smtp.destroy(); }
-    const pop3 = connect(pop3Port, "127.0.0.1");
-    try {
-      const [data] = await once(pop3, "data").catch(error => {
-        throw new Error("POP3 greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
-      });
-      assert.match(String(data), /^\+OK /);
-    } finally { pop3.destroy(); }
-    const smtps = connectTls({
-      port: smtpsPort, host: "127.0.0.1", servername: "localhost",
-      ca: readFileSync(join(temp, "certs", "ca.pem")),
-    });
-    try {
-      await once(smtps, "secureConnect").catch(error => {
-        throw new Error("SMTPS handshake after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
-      });
-      const [data] = await once(smtps, "data").catch(error => {
-        throw new Error("SMTPS greeting after resets failed; server exit=" + child.exitCode + "; output=" + output, { cause: error });
-      });
-      assert.match(String(data), /^220 /);
-    } finally { smtps.destroy(); }
-    assert.equal(child.exitCode, null);
+    await run(server);
   } finally {
     if (child.exitCode === null) {
       child.kill("SIGTERM");
-      await Promise.race([once(child, "exit").catch(() => {}), sleep(2000)]);
+      await Promise.race([exited, sleep(2000)]);
       if (child.exitCode === null) child.kill("SIGKILL");
     }
     rmSync(temp, { recursive: true, force: true });
   }
-});
+}
+
+async function firstLine(socket: Socket, server: Server, stage: string): Promise<string> {
+  try {
+    const [data] = await once(socket, "data");
+    return String(data);
+  } catch (cause) {
+    throw new Error(await server.describe(stage + " failed"), { cause });
+  } finally { socket.destroy(); }
+}
+
+async function smtpGreeting(server: Server, stage: string) {
+  assert.match(await firstLine(connect(server.ports.smtp, "127.0.0.1"), server, "SMTP greeting " + stage), /^220 /);
+}
+async function pop3Greeting(server: Server, stage: string) {
+  assert.match(await firstLine(connect(server.ports.pop3, "127.0.0.1"), server, "POP3 greeting " + stage), /^\+OK /);
+}
+async function smtpsGreeting(server: Server, stage: string) {
+  const socket = connectTls({ port: server.ports.smtps, host: "127.0.0.1", servername: "localhost", ca: server.ca() });
+  await once(socket, "secureConnect").catch(async cause => {
+    socket.destroy();
+    throw new Error(await server.describe("SMTPS handshake " + stage + " failed"), { cause });
+  });
+  assert.match(await firstLine(socket, server, "SMTPS greeting " + stage), /^220 /);
+}
+
+async function resets(server: Server, name: string, port: number, count = 6) {
+  for (let i = 0; i < count; i++) {
+    try { await abruptReset(port); }
+    catch (error) { throw new Error(name + " reset attempt " + (i + 1) + " failed", { cause: error }); }
+  }
+  await server.assertAlive(count + " resets on " + name);
+}
+
+test("POP3 survives repeated raw TCP resets and still greets", { timeout: 60_000 }, () => withServer(async server => {
+  await resets(server, "POP3", server.ports.pop3);
+  await pop3Greeting(server, "after POP3 resets");
+}));
+
+test("SMTP survives repeated raw TCP resets and still greets", { timeout: 60_000 }, () => withServer(async server => {
+  await resets(server, "SMTP", server.ports.smtp);
+  await smtpGreeting(server, "after SMTP resets");
+}));
+
+// Resets before the deferred implicit TLS upgrade used to take the whole process
+// down natively; plain SMTP and POP3 then failed with ECONNRESET/ECONNREFUSED.
+test("SMTPS survives repeated raw TCP resets; SMTP, POP3 and SMTPS stay usable", { timeout: 60_000 }, () => withServer(async server => {
+  await resets(server, "SMTPS", server.ports.smtps);
+  await smtpGreeting(server, "after SMTPS resets");
+  await pop3Greeting(server, "after SMTPS resets");
+  await smtpsGreeting(server, "after SMTPS resets");
+}));
+
+test("SMTPS survives an orderly close before the TLS handshake", { timeout: 60_000 }, () => withServer(async server => {
+  for (let i = 0; i < 6; i++) await orderlyClose(server.ports.smtps);
+  await server.assertAlive("6 early FINs on SMTPS");
+  await smtpsGreeting(server, "after early FINs");
+}));
+
+test("all listeners survive resets in sequence and remain usable", { timeout: 60_000 }, () => withServer(async server => {
+  await resets(server, "POP3", server.ports.pop3);
+  await resets(server, "SMTP", server.ports.smtp);
+  await resets(server, "SMTPS", server.ports.smtps);
+  await smtpGreeting(server, "after all resets");
+  await pop3Greeting(server, "after all resets");
+  await smtpsGreeting(server, "after all resets");
+  await server.assertAlive("all greetings");
+}));

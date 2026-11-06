@@ -49,7 +49,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
       // on dedicated demo listeners the root maps to demo.
       const audience = demoOnly || sameOriginDemo ? "demo" : "management";
       const isPublicExtensionPath = demoOnly || sameOriginDemo || rawPath[0] === "api";
-      if (isPublicExtensionPath && await tryExtensionRequest(
+      if (isPublicExtensionPath && ctx.extensionHost && await tryExtensionRequest(
         req, res, ctx.extensionHost, audience,
         "/" + path.join("/") + url.search,
       )) return;

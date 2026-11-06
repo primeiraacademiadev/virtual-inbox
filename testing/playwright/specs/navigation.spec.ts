@@ -70,3 +70,21 @@ test("Markdown renderer loads only when navigating to Documentation or API", asy
   await page.locator("#primary-nav-menu button").first().click();
   await expect(page.locator(".workspace")).toBeVisible();
 });
+
+test("extensions console discovers bundled SMS routes and links to filtered logs", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".appNavigation > button").click();
+  await page.locator("#primary-nav-menu button").nth(3).click();
+  const sidebar = page.locator(".contextSidebar");
+  await expect(sidebar).toHaveAttribute("aria-label", "System navigation");
+  await sidebar.getByRole("button", { name: "Extensions" }).click();
+  await expect(page.getByRole("heading", { name: "Extensions" })).toBeVisible();
+  const sms = page.locator(".extensionCard").filter({ hasText: "sms-native" });
+  await expect(sms).toBeVisible();
+  await expect(sms.getByText("Native SMS sender")).toBeVisible();
+  await expect(sms.getByText("/demo/sms/messages")).toBeVisible();
+  await expect(sms.getByText("/sms/messages (dedicated demo listener)")).toBeVisible();
+  await sms.getByRole("button", { name: "View this extension's logs" }).click();
+  await expect(page.locator(".workspace")).toBeVisible();
+  await expect(page.locator(".logConsole, .logsView, .logsPanel").first()).toBeVisible();
+});

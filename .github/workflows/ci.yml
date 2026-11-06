@@ -82,6 +82,13 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+      - name: Diagnose SonarCloud failed conditions and security issues
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node testing/scripts/sonar-gate-diagnostics.mjs
 
   windows-network-resilience:
     name: Windows premature TLS close (${{ matrix.node }})

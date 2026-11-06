@@ -16,7 +16,7 @@ Defaults: `HOST=127.0.0.1`, `SMTP_HOST=127.0.0.1`, `PUBLIC_HOST=localhost`, `POR
 
 `TLS_MODE=auto|external|off`; `TLS_CERTIFICATES_DIR=./data/certificates`; `TLS_SERVER_NAMES=localhost,127.0.0.1`. External PEM identities use `TLS_CERT_FILE` and `TLS_KEY_FILE`. `TLS_MANAGED_IDENTITY_FILE` and `TLS_MANAGED_NAMES_FILE` default to files inside the certificate directory. `ADMIN_TOKEN` enables administrative writes over HTTPS. Public message APIs remain open. `HTTP_ALLOWED_HOSTS` and `HTTP_ALLOWED_ORIGINS` accept comma-separated additions.
 
-## Resource limits
+## Embedded extensions and native SMS\n\n`VI_EXTENSIONS` accepts a JSON array of trusted local `.js`/`.mjs` module paths (default `[]`). `sms-native` is bundled, loads before optional extensions and is enabled by default; it retains `POST /demo/sms/messages` on the main listener and `POST /sms/messages` on dedicated demo listeners. Set `VI_SMS_NATIVE_ENABLED=false` only to disable these sender routes (`503 SMS_EXTENSION_UNAVAILABLE`). The common functional endpoint `POST /api/sms/ingestions` remains available regardless. The bundled extension calls that ordinary public HTTP operation via the local main listener; no additional port or IPC service is required. Changing extension configuration requires a restart. See [Embedded Extension Host](embedded-extension-host.md).\n\n## Resource limits
 
 | Variable | Default |
 | --- | ---: |

@@ -84,3 +84,24 @@ test("module load failure is diagnosed and does not discard healthy registration
   assert.equal(host.errors.length, 1);
   assert.equal((await host.dispatch(request("/good")))?.response.status, 200);
 });
+
+
+test("only explicit bundled registration may claim the existing SMS sender route", () => {
+  const host = new ExtensionHost();
+  const createSender = () => {
+    const app = createApp();
+    app.post("/sms/messages", ctx => {
+      ctx.response.status = 201;
+      ctx.response.body = { captured: true };
+    });
+    return { id: "sms-native", version: "1.0.0", app };
+  };
+  assert.throws(() => host.register(createSender()), /conflict/i,
+    "An optional module named sms-native cannot silently replace the core route");
+  assert.equal(host.list().length, 0);
+  host.registerNativeSms(createSender());
+  assert.equal(host.hasRoute("demo", "POST", "/sms/messages"), true);
+  assert.throws(() => host.register(createSender()), /Duplicate extension ID/);
+  assert.throws(() => host.registerNativeSms(createModule("other", "/other")), /Expected bundled/);
+  assert.equal(host.list().length, 1);
+});

@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import { handleRequest as handleHttpRequest } from "./http/request-router.js";
 import { ExtensionHost, configuredExtensionFiles } from "./extension-host.js";
+import { createNativeSmsExtension } from "./extensions/sms-native.js";
+import { createVerifiedLocalFetch } from "./extensions/trusted-local-fetch.js";
 import { createSmtpProtocol } from "./smtp/transport.js";
 import { createServer as createHttpsServer } from "node:https";
 import {
@@ -252,6 +254,35 @@ const listenerSpecs: ListenerSpec[] = [
 ];
 async function startListeners() {
   try {
+    if (process.env.VI_SMS_NATIVE_ENABLED !== "false") {
+      // Use the same *public* ingestion API over verified HTTPS whenever the
+      // instance has TLS. Plain transport is used only if TLS was disabled
+      // explicitly for this test sandbox. Never silently downgrade after a
+      // failed certificate verification or network request.
+      const localHost = apiHost === "0.0.0.0" ? "127.0.0.1"
+        : apiHost === "::" || apiHost === "[::]" ? "[::1]" : apiHost;
+      const host = localHost.startsWith("[") ? localHost
+        : localHost.includes(":") ? "[" + localHost + "]" : localHost;
+      const origin = new URL("https://" + host + ":" + httpsPort + "/");
+      if (!tlsIdentity) {
+        origin.protocol = "http:";
+        origin.port = String(port);
+      }
+      const transport = tlsIdentity ? createVerifiedLocalFetch(origin, () => {
+        const current = certificateManager.identity;
+        if (!current) throw new Error("SMS public API TLS identity is unavailable");
+        const certificate = new X509Certificate(current.cert);
+        // The listening address can be an IP even when the certificate has a
+        // DNS SAN. Verify the configured certificate name over the local socket.
+        const dns = certificate.subjectAltName?.match(/DNS:([^,]+)/)?.[1]?.trim();
+        const servername = dns || localHost.replace(/^\\[|\\]$/g, "");
+        const ca = certificateManager.activeSource === "automatic"
+          ? readFileSync(join(tlsDirectory, "ca.pem")) : current.cert;
+        return { ca, servername };
+      }) : undefined;
+      extensionHost.registerNativeSms(createNativeSmsExtension(origin.href,
+        transport ? { fetch: transport } : {}));
+    }
     await extensionHost.loadFiles(configuredExtensionFiles(process.env.VI_EXTENSIONS));
     for (const diagnostic of extensionHost.errors) console.warn("VI extension unavailable:", diagnostic);
     await startFixedListeners(listenerSpecs, (endpoint) => {

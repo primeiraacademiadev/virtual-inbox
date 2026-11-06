@@ -291,10 +291,17 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
         res.writeHead(200, { "Content-Type": "application/x-pem-file",
           "Content-Disposition": "attachment; filename=virtual-inbox-server.pem" });
         return res.end(tlsIdentity.cert);
-      case "ingestSms":
       case "sendSms": {
+        // Preserve the documented demo route while transferring its runtime
+        // implementation exclusively to the bundled SMS extension.
+        if (ctx.extensionHost && await tryExtensionRequest(
+          req, res, ctx.extensionHost, "demo", "/" + path.join("/") + url.search,
+        )) return;
+        throw new Fault(503, "Native SMS sender extension unavailable", "SMS_EXTENSION_UNAVAILABLE");
+      }
+      case "ingestSms": {
         // Optional diagnostic correlation metadata, never treated as caller identity.
-        if (operation.id === "ingestSms" && req.headers["x-vi-correlation-id"] !== undefined) {
+        if (req.headers["x-vi-correlation-id"] !== undefined) {
           const correlation = req.headers["x-vi-correlation-id"];
           if (typeof correlation !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(correlation))
             throw new Fault(400, "Invalid SMS correlation identifier", "INVALID_CORRELATION_ID");

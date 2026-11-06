@@ -58,6 +58,8 @@ export type ClientOptions = {
   adminUrl?: string;
   /** Required for every administrative operation. Never included in error diagnostics. */
   adminToken?: string;
+  /** Optional transport injection, e.g. for a local HTTPS client with a pinned test CA. */
+  fetch?: typeof globalThis.fetch;
 };
 export type SmtpSession = {
   id: string;
@@ -199,7 +201,7 @@ export class VirtualInboxClient {
     headers.set("Accept", "application/json");
     if (admin) headers.set("Authorization", "Bearer " + this.options.adminToken);
     try {
-      return await fetch(new URL(path, root), { ...init, headers });
+      return await (this.options.fetch ?? fetch)(new URL(path, root), { ...init, headers });
     } catch (cause) {
       throw new VirtualInboxError("Virtual Inbox is unreachable", 0, "NETWORK_ERROR", {}, { cause });
     }

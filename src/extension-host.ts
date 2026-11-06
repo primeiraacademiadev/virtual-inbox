@@ -100,6 +100,14 @@ export class ExtensionHost {
     return this.active.map(({ id, version, routes }) => ({ id, version, routes }));
   }
   register(definition: ModuleDefinition): void {
+    this.registerInternal(definition, false);
+  }
+  /** Only the Host startup path may transfer the legacy SMS demo route. */
+  registerNativeSms(definition: ModuleDefinition): void {
+    if (definition?.id !== "sms-native") throw new Error("Expected bundled SMS extension");
+    this.registerInternal(definition, true);
+  }
+  private registerInternal(definition: ModuleDefinition, legacySmsTransfer: boolean): void {
     if (!definition || !ID.test(definition.id) || typeof definition.version !== "string" ||
         !definition.version || !definition.app ||
         typeof definition.app.routes !== "function" || typeof definition.app.dispatch !== "function") {
@@ -112,8 +120,16 @@ export class ExtensionHost {
     }
     for (const [index, route] of routes.entries()) {
       validRoute(route);
+      // Explicit one-time ownership transfer of the existing demo sender route.
+      // Its OpenAPI catalogue entry stays published, while the built-in
+      // extension becomes the only runtime handler. Third-party extensions
+      // never receive this exemption.
+      const nativeSmsTransfer = legacySmsTransfer && definition.id === "sms-native" &&
+        route.audience === "demo" && route.method === "POST" &&
+        route.path === "/sms/messages";
       const conflicting = [
-        ...operations.filter((r) => r.audience === route.audience && r.method === route.method),
+        ...operations.filter((r) => r.audience === route.audience && r.method === route.method &&
+          !(nativeSmsTransfer && r.id === "sendSms")),
         ...this.active.flatMap((ext) => ext.routes).filter((r) =>
           r.audience === route.audience && r.method === route.method),
         ...routes.slice(0, index).filter((r) =>

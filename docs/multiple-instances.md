@@ -84,7 +84,7 @@ From any terminal (PowerShell, CMD or POSIX shell with Node 24+):
 node -e "Promise.all([3000,3100].map(async p=>{const base='http://127.0.0.1:'+p+'/api';const [r,c]=await Promise.all([fetch(base+'/ready'),fetch(base+'/capabilities')]);const ready=await r.json();const cap=await c.json();console.log(p,r.status,ready.runId,cap.version,cap.protocols);if(r.status!==200)process.exitCode=1;})).catch(e=>{console.error(e);process.exitCode=1;})"
 ```
 
-Expect HTTP 200 twice and **different `runId` values**. Discover actual ports with `GET /api/connection-info` on each address. Check both TLS identities by reading their public certificates through `GET /api/tls/status` (no private key is returned); certificate fingerprints should differ because each directory stores an independent locally generated CA and server identity. For TLS *clients*, trust the correct instance-specific `ca.pem` file rather than disabling certificate verification.
+Expect HTTP 200 twice and **different `runId` values**. Discover actual ports with `GET /api/connection-info` on each address. Check both TLS identities by reading their public certificates through `GET /api/tls/status` (no private key is returned); certificate fingerprints should differ because each directory stores an independent locally generated CA and server identity. Each newly generated local CA has a distinct subject; TLS *clients* may trust both instance-specific `ca.pem` files in the same CA bundle, without disabling certificate verification. Older CAs generated before this improvement can share a subject: back them up and regenerate them deliberately if coexistence fails (this also requires renewing client trust).
 
 For a quick isolation check, run this from the repository root (or any directory with Node.js 24+):
 
@@ -113,3 +113,8 @@ Press **Ctrl+C** in **both** terminals. Runtime messages, sessions, logs and fau
 | Captured data, logs, attempts, sessions, simulations | Automatically independent | In-memory per process, not persisted or shared |
 
 For three or four instances, repeat the same pattern with unique fixed listener ports and paths. **Port `0`** is used by certain managed test harnesses to allocate ephemeral listeners. It is **not** the example for normal standalone use: configure explicit fixed ports, check `/api/ready`, and terminate the subprocess on completion. Do not use this guide to place a synthetic-data sandbox on a public network.
+
+
+## Known upstream SMTPS premature-close issue
+
+An implicit SMTPS connection that closes **before the TLS handshake**, via FIN or RST, can terminate a process using unpatched `smtp-server` 3.21.1. This is **not specific to Windows**; the native `getProtocol()` failure was reproduced independently on Windows and Linux with Node 24/26. See [known issues](known-issues.md) and [LVI-1b (#83)](https://github.com/primeiraacademiadev/virtual-inbox/issues/83) for the identified root causes, status of the proposed mitigation and future upstream contribution. Until a tested mitigation is included in the running version, use `/api/ready` or a complete TLS handshake for readiness checks; a bare TCP probe must not be considered safe.

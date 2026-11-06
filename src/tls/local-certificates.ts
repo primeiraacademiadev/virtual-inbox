@@ -126,7 +126,7 @@ export function ensureLocalTls(directory: string, namesText: string) {
   const serverKey = join(directory, "server-key.pem");
   const serverCert = join(directory, "server.pem");
   if (!existsSync(caKey) || !existsSync(caCert)) {
-    const ca = issueLocalCertificate({ commonName: "Virtual Inbox Local CA", days: 365, ca: true });
+    const ca = issueLocalCertificate({ commonName: "Virtual Inbox Local CA " + randomBytes(8).toString("hex"), days: 365, ca: true });
     save(caKey, ca.key, 0o600);
     save(caCert, ca.cert, 0o644);
   }
@@ -140,7 +140,9 @@ export function ensureLocalTls(directory: string, namesText: string) {
     Date.parse(new X509Certificate(readFileSync(serverCert)).validTo) < Date.now() + 7 * 86_400_000;
   if (renew) {
     const leaf = issueLocalCertificate({
-      commonName: names[0], names, issuerName: "Virtual Inbox Local CA",
+      commonName: names[0], names,
+      issuerName: new X509Certificate(readFileSync(caCert)).subject.match(/^CN=(.+)$/m)?.[1]
+        ?? "Virtual Inbox Local CA",
       issuerKey: readFileSync(caKey), days: 30,
     });
     save(serverKey, leaf.key, 0o600);

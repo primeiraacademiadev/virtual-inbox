@@ -32,3 +32,7 @@ Releases use `sdk-vX.Y.Z` Git tags matching `sdk/package.json` and the `.github/
 The first version may require an interactive `npm login` and `npm publish --access public` from `sdk/`, followed by configuring Trusted Publishing on the npm package settings. Select the direct `npm publish` permission.
 
 The SDK's MIT license is declared in `package.json` and included in the npm tarball. Publishing remains a separate owner-controlled release action; do not create a release tag until the package, npm ownership and Trusted Publishing configuration have been checked.
+
+## Prerelease and stable npm distribution
+
+After the consolidated change set is merged and internal CI passes, tag the approved commit `sdk-v1.0.0-rc.1`. The publishing workflow detects the hyphen in the version tag and runs `npm publish --access public --tag next`, preserving `latest` for the current stable SDK. The Communication consumer validates the **published** RC. Subsequent candidate versions use new `-rc.N` tags. To release GA, publish a distinct `1.0.0` package with tag `sdk-v1.0.0`; the workflow uses `latest`. Do not create the release tag from this draft PR.

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Fault } from "./domain-types.js";
-export type AttemptOutcome = "in_progress" | "rejected" | "stored_and_acknowledged" | "stored_without_ack";
+export type AttemptOutcome = "in_progress" | "rejected" | "aborted" | "stored_and_acknowledged" | "stored_without_ack";
 export type SmtpAttempt = {
   id:string; smtpSessionId:string; startedAt:string; updatedAt:string;
   sender?:string; recipients:string[]; messageIds:string[]; ruleIds:string[];
@@ -41,6 +41,6 @@ export class SmtpAttemptStore {
       (!f.ruleId||a.ruleIds.includes(f.ruleId))).slice(-limit).map(a=>this.get(a.id)!);
   }
   disconnect(sessionId:string){for(const a of this.attempts.values())if(a.smtpSessionId===sessionId&&a.outcome==="in_progress")
-    this.update(a.id,{outcome:a.persisted?"stored_without_ack":"rejected"});}
+    this.update(a.id,{outcome:a.persisted?"stored_without_ack":a.responseCode!==undefined?"rejected":"aborted"});}
   private trim(){while(this.attempts.size>this.limit)this.attempts.delete(this.attempts.keys().next().value!);}
 }

@@ -118,3 +118,24 @@ test("Node-issued leaf has a valid signature chained to the local CA", () => {
     a.clean();
   }
 });
+
+
+test("independent automatic CAs have distinct subjects and verify their own leaf certificates", () => {
+  const a = fixture(), b = fixture();
+  try {
+    const caA = new X509Certificate(readFileSync(a.files.ca));
+    const caB = new X509Certificate(readFileSync(b.files.ca));
+    const leafA = new X509Certificate(a.cert);
+    const leafB = new X509Certificate(b.cert);
+    assert.notEqual(caA.subject, caB.subject, "CA subjects must not alias across instances");
+    assert.equal(leafA.checkIssued(caA), true);
+    assert.equal(leafB.checkIssued(caB), true);
+    assert.equal(leafA.verify(caA.publicKey), true);
+    assert.equal(leafB.verify(caB.publicKey), true);
+    assert.equal(leafA.checkIssued(caB), false);
+    assert.equal(leafB.checkIssued(caA), false);
+    const original = caA.subject;
+    ensureLocalTls(a.dir, "localhost,127.0.0.1");
+    assert.equal(new X509Certificate(readFileSync(a.files.ca)).subject, original);
+  } finally { a.clean(); b.clean(); }
+});

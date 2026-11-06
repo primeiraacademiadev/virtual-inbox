@@ -14,7 +14,11 @@ test("SMTP attempts isolate transactions and retain immutable outcome snapshots"
  store.update(a.id,{phase:"AFTER_DATA",ruleId:"rule-1"});
  store.disconnect("conn-1");
  assert.equal(store.get(a.id)?.outcome,"stored_without_ack");
- assert.equal(store.get(b.id)?.outcome,"rejected");
+ assert.equal(store.get(b.id)?.outcome,"aborted");
+ const rejected=store.begin("conn-2","second@example.test");
+ store.update(rejected.id,{responseCode:451});
+ store.disconnect("conn-2");
+ assert.equal(store.get(rejected.id)?.outcome,"rejected");
  assert.equal(store.list({messageId:"msg-1"})[0].id,a.id);
  assert.equal(store.list({ruleId:"rule-1"})[0].id,a.id);
  assert.equal(store.list({recipient:"one@example.test"}).length,1);

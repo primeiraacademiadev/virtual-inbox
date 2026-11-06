@@ -42,7 +42,7 @@ As leituras de sessoes e tentativas SMTP sao abertas em HTTP e HTTPS, sem token,
 
 ## SDK distribuível e erros tipados
 
-O SDK `@virtual-inbox/client` é um pacote ESM compilado a partir de `sdk/client.ts`. A versão do SDK no repositório é 0.5.0; isto **não significa** que seja a última publicada no npm. Confirmar a versão no registo npm antes da instalação. Para criar um pacote local: `npm run build --prefix sdk` e `cd sdk && npm pack --dry-run`; o ficheiro `.tgz` pode ser instalado noutro repositório sem checkout do Virtual Inbox. O SDK foi publicado no npm; versoes futuras seguem o workflow de release. O cliente inclui `VirtualInboxError` (`status`, `errorCode`, `errorParams`, `cause`) e `waitOrThrow()` que distingue ausência de observação de rejeição SMTP. Em timeout, recolhe apenas metadados das últimas cinco mensagens da inbox pretendida; não consulta anomalias nem logs globais de outras suites. O método `wait()` continua a devolver `null` em HTTP 204. Métodos adicionais: `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, sessões SMTP e configuração das regras. As escritas administrativas exigem `adminUrl` HTTPS e `adminToken` explícitos: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Não registar tokens em logs de teste.
+O SDK `@virtual-inbox/client` é um pacote ESM compilado a partir de `sdk/client.ts`. A versão do SDK no repositório é 1.0.0-rc.1; isto **não significa** que seja a última publicada no npm. Confirmar a versão no registo npm antes da instalação. Para criar um pacote local: `npm run build --prefix sdk` e `cd sdk && npm pack --dry-run`; o ficheiro `.tgz` pode ser instalado noutro repositório sem checkout do Virtual Inbox. O SDK foi publicado no npm; versoes futuras seguem o workflow de release. O cliente inclui `VirtualInboxError` (`status`, `errorCode`, `errorParams`, `cause`) e `waitOrThrow()` que distingue ausência de observação de rejeição SMTP. Em timeout, recolhe apenas metadados das últimas cinco mensagens da inbox pretendida; não consulta anomalias nem logs globais de outras suites. O método `wait()` continua a devolver `null` em HTTP 204. Métodos adicionais: `findInbox`, `clearMessages`, `connectionInfo`, `waitForConnectionProbe`, sessões SMTP e configuração das regras. As escritas administrativas exigem `adminUrl` HTTPS e `adminToken` explícitos: `new VirtualInboxClient('http://127.0.0.1:3000', {adminUrl:'https://localhost:3443',adminToken:token})`. Não registar tokens em logs de teste.
 
 ## Asserções negativas e tentativas SMTP (#39)
 
@@ -85,7 +85,7 @@ await sdk.createSmtpRule({
 `connection.port` é a **porta local do listener**; `remotePort` é metadado efémero. O nome EHLO é **declarado pelo cliente**, sem autenticação, e não é conhecido em CONNECT; as credenciais não são conhecidas nem em CONNECT nem em EHLO. Seletores presentes usam AND; ausentes não restringem. Regras SPECIFIC elegíveis têm precedência sobre GLOBAL, independentemente da prioridade numérica. `drop` após accept não equivale a recusa da ligação TCP. Estas capacidades CONNECT/EHLO estão disponíveis no código do repositório. Confirmar a versão do pacote no registo npm antes de as utilizar.
 
 
-## Operações adicionais para consumidores (SDK fonte 0.5.0)
+## Operações adicionais para consumidores (SDK fonte 1.0.0-rc.1)
 
 O SDK já inclui `create`, `delete`, `messages`, `wait`, `smtpAttempts`, `smtpSessions`, `resolveSmtp` e gestão de regras. Acrescenta agora:
 
@@ -100,7 +100,7 @@ if (replay.gap || replay.reset) {
 }
 ```
 
-`logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. O SDK no repositório está na versão 0.5.0; confirmar no registo npm a disponibilidade dessa versão antes de a instalar.
+`logs()` utiliza a API de leitura aberta, sem token administrativo, e **não** implementa uma subscrição SSE contínua. O cursor do log é independente da sequência de mensagens de cada inbox. Todas as operações reutilizam endpoints existentes. O SDK no repositório está na versão 1.0.0-rc.1; confirmar no registo npm a disponibilidade dessa versão antes de a instalar.
 
 
 ### Modos de consulta dos logs

@@ -149,3 +149,34 @@ test("CONNECT accepts bounded drop, hang and delayed reply rules", () => {
     remaining:1,selectors:{ehloName:"test.example"}}).scope,"SPECIFIC");
   assert.throws(()=>store.create({phase:"CONNECT",action:"hang",remaining:1,durationMs:251}),Fault);
 });
+
+
+test("optional TTL expires unconsumed rules without timer races and frees capacity", () => {
+  let now = Date.parse("2026-11-03T00:00:00.000Z");
+  const store = new SmtpReplyRuleStore(1, 1000, () => now);
+  const input = {phase:"MAIL",action:"reply",code:451,remaining:2,ttlMs:1000};
+  for (const ttlMs of [0,-1,1.5,86_400_001]) assert.throws(() =>
+    store.create({...input,ttlMs}), Fault);
+  const first = store.create(input);
+  assert.equal(first.expiresAt,"2026-11-03T00:00:01.000Z");
+  now += 999;
+  assert.equal(store.consume("MAIL",{})?.id,first.id);
+  now += 1;
+  assert.equal(store.consume("MAIL",{}),undefined);
+  assert.deepEqual(store.list(),[]);
+  const replacement = store.create({...input,ttlMs:undefined});
+  now += 100_000;
+  assert.equal(store.consume("MAIL",{})?.id,replacement.id,
+    "rules with no TTL stay eligible while remaining is positive");
+});
+
+
+test("reset is a separate connection-breaking action without SMTP reply code", () => {
+  const store = new SmtpReplyRuleStore();
+  const rule = store.create({phase:"CONNECT",action:"reset",remaining:1,
+    selectors:{connection:{port:2525}}});
+  assert.equal(store.consume("CONNECT",{localPort:2525})?.id,rule.id);
+  assert.equal(store.consume("CONNECT",{localPort:2525}),undefined);
+  assert.throws(() => store.create({phase:"MAIL",action:"reset",code:451,remaining:1}),Fault);
+  assert.throws(() => store.create({phase:"MAIL",action:"reset",durationMs:20,remaining:1}),Fault);
+});

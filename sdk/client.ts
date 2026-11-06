@@ -81,15 +81,20 @@ export type SmtpReplySelectors = {
 };
 export type SmtpRuleInput = {
   phase: "CONNECT" | "EHLO" | "AUTH" | "MAIL" | "RCPT" | "DATA" | "AFTER_DATA";
-  action: "reply" | "delay" | "drop" | "hang";
+  action: "reply" | "delay" | "drop" | "hang" | "reset";
   remaining: number;
   selectors?: SmtpReplySelectors;
   priority?: number;
   code?: number;
   durationMs?: number;
+  ttlMs?: number;
   message?: string;
 };
-export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string; scope: "GLOBAL" | "SPECIFIC"; priority: number; selectors: SmtpReplySelectors };
+export type SmtpRule = SmtpRuleInput & { id: string; createdAt: string; expiresAt?: string; scope: "GLOBAL" | "SPECIFIC"; priority: number; selectors: SmtpReplySelectors };
+export type SmtpAttemptFilter = {smtpSessionId?:string; sender?:string; recipient?:string; messageId?:string; ruleId?:string};
+export type SmtpAttempt = {id:string; smtpSessionId:string; startedAt:string; updatedAt:string;
+  sender?:string; recipients:string[]; messageIds:string[]; ruleIds:string[];
+  outcome:string; phase:string; persisted:boolean; responseCode?:number};
 export type SmtpResolveInput = { credentials?: { username: string; password: string }; origin?: { ip: string } };
 export type SmtpResolveOrigin = { id: string; ip: string; connections: Array<{ id: string; credentialsIds?: string[]; connected: boolean; connectedAt: string }> };
 export type SmtpResolveResult = { credentials?: { id: string; origins: SmtpResolveOrigin[] }; origins?: SmtpResolveOrigin[] };
@@ -301,17 +306,41 @@ export class VirtualInboxClient {
   }
 
   /** Public, filtered SMTP correlation data. No unscoped global history. */
-  smtpAttempts(filter: { smtpSessionId?: string; sender?: string; recipient?: string; messageId?: string; ruleId?: string }, limit = 100): Promise<Array<{
-    id: string; smtpSessionId: string; sender?: string; recipients: string[];
-    messageIds: string[]; ruleIds: string[]; outcome: string; phase: string; persisted: boolean;
-    responseCode?: number;
-  }>> {
+  smtpAttempts(filter: SmtpAttemptFilter, limit = 100): Promise<SmtpAttempt[]> {
     if (!Object.values(filter).some(Boolean))
       throw new VirtualInboxError("SMTP attempt filter required", 0, "ATTEMPT_FILTER_REQUIRED");
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(filter)) if (value) params.set(key, value);
     params.set("limit", String(limit));
     return this.request("/admin/smtp/attempts?" + params);
+  }
+
+  /** Wait for a completed SMTP attempt, optionally scoped by ID or start time. */
+  async waitForCompletedSmtpAttempt(
+    filter: SmtpAttemptFilter,
+    options: { attemptId?: string; startedAfter?: string; timeoutMs?: number; pollIntervalMs?: number } = {},
+  ): Promise<SmtpAttempt> {
+    const timeoutMs = options.timeoutMs ?? 10_000;
+    const pollIntervalMs = options.pollIntervalMs ?? 50;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000 ||
+        !Number.isSafeInteger(pollIntervalMs) || pollIntervalMs < 1 || pollIntervalMs > 10_000)
+      throw new VirtualInboxError("Invalid SMTP attempt wait window", 0, "INVALID_WAIT_WINDOW");
+    if (options.startedAfter !== undefined && !Number.isFinite(Date.parse(options.startedAfter)))
+      throw new VirtualInboxError("Invalid SMTP attempt start time", 0, "INVALID_WAIT_WINDOW");
+    const startedAt = Date.now();
+    do {
+      const attempts = await this.smtpAttempts(filter, 200);
+      const matching = attempts.filter(attempt =>
+        (!options.attemptId || attempt.id === options.attemptId) &&
+        (!options.startedAfter || Date.parse(attempt.startedAt) >= Date.parse(options.startedAfter)));
+      const completed = matching.reverse().find(attempt => attempt.outcome !== "in_progress");
+      if (completed) return completed;
+      const left = timeoutMs - (Date.now() - startedAt);
+      if (left <= 0) break;
+      await new Promise<void>(done => setTimeout(done, Math.min(pollIntervalMs, left)));
+    } while (true);
+    throw new VirtualInboxError("SMTP attempt did not complete within the configured window",
+      0, "SMTP_ATTEMPT_TIMEOUT", {filter, attemptId: options.attemptId});
   }
 
   clearMessages(inbox: Inbox): Promise<void> {
@@ -395,6 +424,13 @@ export class VirtualInboxClient {
   deleteSmtpRule(ruleId: string): Promise<void> {
     return this.request("/admin/smtp/reply-rules/" + encodeURIComponent(ruleId),
       { method: "DELETE" }, true);
+  }
+
+  /** Register a disposable rule and always attempt cleanup, including callback failures. */
+  async withSmtpRule<T>(input: SmtpRuleInput, run: (rule: SmtpRule) => Promise<T>): Promise<T> {
+    const rule = await this.createSmtpRule(input);
+    try { return await run(rule); }
+    finally { await this.deleteSmtpRule(rule.id); }
   }
 
   createTestSession(username: string, password: string): Promise<{ sessionId: string }> {

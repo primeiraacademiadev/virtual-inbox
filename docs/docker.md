@@ -34,7 +34,7 @@ Other services on the Compose network use `virtual-inbox:2525` for SMTP and `htt
 
 Mount PEM files read-only and set `TLS_MODE=external`, `TLS_CERT_FILE`, `TLS_KEY_FILE` for externally issued identities. Keep private keys out of Docker images and build contexts. Copy only the public CA for client trust, e.g. `docker cp virtual-inbox:/app/data/certificates/ca.pem ./vi-ca.pem`.
 
-Docker does not read a host `.env` into the application automatically; use `--env-file`, `-e` or Compose environment configuration. Persisted network settings can override those environment values, with a startup warning. See [Configuration](configuration.md) and [TLS](i18n/en/tls.md).
+Docker does not read a host `.env` into the application automatically; use `--env-file`, `-e` or Compose environment configuration. Explicit environment values take precedence over persisted network settings, with a startup warning when a saved key is shadowed. See [Configuration](configuration.md) and [TLS](i18n/en/tls.md).
 
 ## Validation scope
 

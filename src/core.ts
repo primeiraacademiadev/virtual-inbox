@@ -73,7 +73,7 @@ export type Event = {
   messageId?: string;
   data?: Record<string, unknown>;
 };
-export const logFilterKeys = ["type", "inboxId", "messageId", "smtpSessionId", "attemptId", "sender", "recipient", "ruleId"] as const;
+export const logFilterKeys = ["type", "inboxId", "messageId", "smtpSessionId", "attemptId", "sender", "recipient", "ruleId", "extensionId"] as const;
 export type LogFilters = Partial<Record<(typeof logFilterKeys)[number], string>> & { includeAnomalies?: boolean };
 export const isAnomaly = (event: Event): boolean => event.type === "message.captured";
 export function matchesLog(event: Event, filters: LogFilters = {}): boolean {
@@ -85,7 +85,7 @@ export function matchesLog(event: Event, filters: LogFilters = {}): boolean {
     attemptId: event.attemptId ?? data.attemptId,
     sender: data.sender ?? data.mailFrom,
     recipient: data.recipient ?? data.recipients ?? data.rcptTo,
-    ruleId: data.ruleId,
+    ruleId: data.ruleId, extensionId: data.extensionId,
   };
   return logFilterKeys.every((key) => {
     const value = filters[key];

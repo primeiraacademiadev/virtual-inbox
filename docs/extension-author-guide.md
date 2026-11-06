@@ -19,7 +19,7 @@ The extension application is **not Express**: Express middleware, `req`, `res`, 
 
 ## A real, runnable extension
 
-The repository contains [`examples/extensions/ping.mjs`](../examples/extensions/ping.mjs). It is compiled-module-compatible ESM and demonstrates both audiences. From the repository root on Node 24+:
+The repository contains [`examples/extensions/ping.mjs`](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/examples/extensions/ping.mjs). It is compiled-module-compatible ESM and demonstrates both audiences. From the repository root on Node 24+:
 
 ```sh
 npm ci
@@ -106,7 +106,7 @@ These modules run **in the same Node.js process**. A ten-second deadline bounds 
 
 ## Calling the public functional API
 
-The bundled native SMS adapter is the reference implementation: [`src/extensions/sms-native.ts`](../src/extensions/sms-native.ts) builds the SDK app, then invokes `VirtualInboxClient.ingestSms({from, to, body})`, which sends `POST /api/sms/ingestions`.
+The bundled native SMS adapter is the reference implementation: [`src/extensions/sms-native.ts`](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/src/extensions/sms-native.ts) builds the SDK app, then invokes `VirtualInboxClient.ingestSms({from, to, body})`, which sends `POST /api/sms/ingestions`.
 
 ```text
 Test client -> POST /demo/sms/messages

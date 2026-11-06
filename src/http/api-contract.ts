@@ -257,6 +257,7 @@ export const operations: readonly ApiOperation[] = [
     ];
   }),
   { id: "sendDemoEmail", method: "POST", path: "/mailboxes/{inboxId}/demo-send", audience: "demo", tag: "Demo", status: 202, request: "DemoEmail", response: "Accepted", summary: "Send a test email through the application's SMTP listener." },
+  management({ id: "ingestSms", method: "POST", path: "/sms/ingestions", tag: "SMS", status: 201, request: "SmsInput", response: "Message", summary: "Capture a simulated SMS through the common public functional API; available to every client including extensions." }),
   { id: "sendSms", method: "POST", path: "/sms/messages", audience: "demo", tag: "Demo", status: 201, request: "SmsInput", response: "Message", summary: "Capture a simulated SMS. No external carrier is contacted." },
 ];
 

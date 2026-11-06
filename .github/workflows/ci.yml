@@ -33,6 +33,10 @@ jobs:
           npm install --prefix sdk --ignore-scripts --no-package-lock --no-audit --no-fund
           npm run build --prefix sdk
           (cd sdk && npm pack --dry-run)
+      - name: Build and test Extension Application SDK
+        run: |
+          npm install --prefix extension-sdk --ignore-scripts --no-package-lock --no-audit --no-fund
+          npm test --prefix extension-sdk
       - name: Backend dependency audit
         run: npm audit --audit-level=high
       - name: Console dependency audit

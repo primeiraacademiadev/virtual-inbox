@@ -158,3 +158,26 @@ html,body,#root{height:100%;min-height:0;overflow:hidden}
 .footprintCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px}
 .footprintCards .detail{margin:0}
 @media(max-width:800px){.connectionFilters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Read-only extension inventory: works for arbitrary provider route sets. */
+.extensionPageHead{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.extensionPageHead h2{margin-top:0}
+.extensionInventory{display:grid;gap:14px}
+.extensionCard{background:#172437;border:1px solid #34435d;border-radius:12px;padding:16px;min-width:0;overflow-wrap:anywhere}
+.extensionCardHead{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.extensionCardHead h3{margin:0 0 5px}
+.extensionState{display:inline-flex;padding:4px 10px;border-radius:14px;border:1px solid #64748b;font-size:12px;white-space:nowrap}
+.extensionState-active{border-color:#338f75;color:#8cdec4}
+.extensionState-failed{border-color:#c47f6c;color:#ffc2b0}
+.extensionState-disabled{border-color:#64748b;color:#bcc9dc}
+.extensionMetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:10px;margin:12px 0}
+.extensionMetrics>div{padding:10px;background:#1d2d43;border-radius:8px;min-width:0}
+.extensionMetrics dt{font-size:12px;color:#b7c5d9}
+.extensionMetrics dd{font-size:19px;font-weight:650;margin:5px 0 0;overflow-wrap:anywhere}
+.extensionRoutesScroll{overflow-x:auto}
+.extensionRoutes{width:100%;border-collapse:collapse;min-width:520px}
+.extensionRoutes th,.extensionRoutes td{text-align:left;padding:8px;border-bottom:1px solid #34435d;vertical-align:top}
+.extensionRoutes th{font-size:12px;color:#c1d2e8}
+.extensionPublicPath{display:block;margin-bottom:5px;white-space:normal;overflow-wrap:anywhere}
+.extensionActions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px}
+.extensionCapabilities{margin:12px 0}

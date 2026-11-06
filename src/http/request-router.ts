@@ -71,6 +71,8 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
         return json(res, 200, applicationFootprint(sandbox, smtpSessions, pop3Connections,
           credentialStore, simulations, lastCleanupAt));
       }
+      case "extensionRegistry":
+        return json(res, 200, ctx.extensionHost?.registry() ?? []);
       case "protocolMetrics": {
         if (!adminAllowed(req)) throw new Fault(403, "Administrative HTTPS token required");
         return json(res, 200, protocolCounters.snapshot());

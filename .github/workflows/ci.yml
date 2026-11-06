@@ -30,6 +30,8 @@ jobs:
         run: npm run build
       - name: Verify embedded Extension Host and ESM example
         run: node testing/scripts/extension-smoke.mjs
+      - name: Verify independently authored ESM provider conformance
+        run: node testing/scripts/extension-conformance.mjs
       - name: Compile and pack SDK candidate
         run: |
           npm install --prefix sdk --ignore-scripts --no-package-lock --no-audit --no-fund

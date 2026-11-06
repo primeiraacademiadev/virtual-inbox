@@ -124,6 +124,7 @@ nav:
       - SDK: reference/sdk.md
       - Architecture: reference/architecture.md
       - Extension author guide: reference/extension-author-guide.md
+      - Extension conformance: reference/extension-conformance.md
       - Embedded Extension Host: reference/embedded-extension-host.md
       - Extension registry: reference/extension-registry.md
       - Extension routing: reference/extension-routing-contract.md

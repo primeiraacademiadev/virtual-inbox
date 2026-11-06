@@ -261,7 +261,9 @@ test("public SMS ingestion and demo sender share capture semantics without break
   try {
     const target = f.sandbox.create("sms", "+351912345678");
     const input = { from: "synthetic-provider", to: target.address, body: "hello" };
-    const common = await f.request("/api/sms/ingestions", "POST", input);
+    const common = await f.request("/api/sms/ingestions", "POST", input,
+      { "X-VI-Correlation-ID": "provider-test-123" });
+    assert.equal(common.headers.get("x-vi-correlation-id"), "provider-test-123");
     const demo = await f.request("/demo/sms/messages", "POST", input);
     assert.equal(common.status, 201);
     assert.equal(demo.status, 201);
@@ -284,6 +286,10 @@ test("public SMS ingestion and demo sender share capture semantics without break
     assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
     assert.equal(anomaly.originalRecipient, "+351999888777");
     assert.equal((await f.request("/api/sms/ingestions", "GET")).status, 404);
+    const invalid = await f.request("/api/sms/ingestions", "POST", input,
+      { "X-VI-Correlation-ID": "invalid value with spaces" });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).errorCode, "INVALID_CORRELATION_ID");
   } finally { await f.close(); }
 });
 

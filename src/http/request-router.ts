@@ -293,6 +293,13 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
         return res.end(tlsIdentity.cert);
       case "ingestSms":
       case "sendSms": {
+        // Optional diagnostic correlation metadata, never treated as caller identity.
+        if (operation.id === "ingestSms" && req.headers["x-vi-correlation-id"] !== undefined) {
+          const correlation = req.headers["x-vi-correlation-id"];
+          if (typeof correlation !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(correlation))
+            throw new Fault(400, "Invalid SMS correlation identifier", "INVALID_CORRELATION_ID");
+          res.setHeader("X-VI-Correlation-ID", correlation);
+        }
         const input = await body(req);
         return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
       }

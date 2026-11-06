@@ -1,25 +1,27 @@
 import React, { useState } from "react";
 import { NavigationIcon } from "./NavigationIcon";
 
-type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint";
+type AreaPage = "workspace" | "connections" | "smtp" | "pop3" | "simulations" | "documentation" | "api" | "footprint" | "extensions";
 type Props = {
   page: AreaPage;
   docPage: string;
   docText: string;
   onPage: (page: AreaPage) => void;
   onDocument: (doc: string) => void;
+  extensionsLabel?: string;
 };
 const docs = [
   { id: "overview", label: "Introduction" },
   { id: "demo", label: "Getting started" },
   { id: "integration", label: "Integration" },
   { id: "sdk", label: "SDK and testing" },
+  { id: "extensions", label: "Extensions" },
   { id: "tls", label: "TLS" },
   { id: "architecture", label: "Architecture" },
   { id: "development", label: "Development" },
 ];
 /** Each top-level area owns its own context navigation; inbox navigation stays separate. */
-export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: Props) {
+export function ContextSidebar({ page, docPage, docText, onPage, onDocument, extensionsLabel = "Extensions" }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const docsArea = page === "documentation" || page === "api";
   const protocolsArea = page === "smtp" || page === "pop3" || page === "simulations";
@@ -29,7 +31,8 @@ export function ContextSidebar({ page, docPage, docText, onPage, onDocument }: P
     : protocolsArea
       ? [{ key: "smtp", label: "SMTP", icon: "smtp" }, { key: "pop3", label: "POP3", icon: "pop3" }, { key: "simulations", label: "Simulated errors", icon: "error" }]
       : [{ key: "connections", label: "Connections and TLS", icon: "connections" },
-          { key: "footprint", label: "Footprint", icon: "footprint" }];
+          { key: "footprint", label: "Footprint", icon: "footprint" },
+          { key: "extensions", label: extensionsLabel, icon: "extensions" }];
   const headings = docText.split("\n").filter(line => /^#{1,3}\s+/.test(line)).map((line, i) => ({
     ordinal: i + 1, label: line.replace(/^#{1,3}\s+/, "").replace(/[*_`]/g, "").trim(), level: line.match(/^#+/)?.[0].length || 2,
   }));

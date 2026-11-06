@@ -23,7 +23,6 @@ export interface ExtensionDispatchResult {
 }
 const SEGMENT = /^\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
-const STATUS = new Set([200, 201, 202, 204, 400, 401, 403, 404, 409, 413, 422, 429, 500, 502, 503, 504]);
 const MAX_REQUEST_MS = 10_000;
 
 function portions(path: string): string[] {
@@ -138,6 +137,11 @@ export class ExtensionHost {
         this.errors.push({ source: String(path), error: error instanceof Error ? error.message : String(error) });
       }
     }
+  }
+  hasRoute(audience: Audience, method: HttpMethod, path: string): boolean {
+    const pathname = normalizeRequestPath(path);
+    return pathname !== null && this.active.some((ext) => ext.routes.some((route) =>
+      route.audience === audience && route.method === method && matchesPattern(route.path, pathname)));
   }
   async dispatch(request: ExtensionRequest): Promise<ExtensionDispatchResult | null> {
     const pathname = normalizeRequestPath(request.path);

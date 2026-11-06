@@ -12,6 +12,7 @@ import type { RequestContext } from "../src/server.js";
 import { createApp } from "../extension-sdk/src/index.js";
 import { ExtensionHost } from "../src/extension-host.js";
 import { VirtualInboxClient } from "../sdk/client.js";
+import { createNativeSmsExtension } from "../src/extensions/sms-native.js";
 
 type Fixture = {
   sandbox: Sandbox;
@@ -259,6 +260,9 @@ test("router handles observer subscriptions, invalid hosts, CORS and unsupported
 test("public SMS ingestion and demo sender share capture semantics without breaking legacy URLs", async () => {
   const f = await fixture();
   try {
+    const host = new ExtensionHost();
+    host.register(createNativeSmsExtension(f.base));
+    f.context.extensionHost = host;
     const target = f.sandbox.create("sms", "+351912345678");
     const input = { from: "synthetic-provider", to: target.address, body: "hello" };
     const common = await f.request("/api/sms/ingestions", "POST", input,

@@ -9,9 +9,9 @@
 import { createApp, type JsonValue } from "../../extension-sdk/src/index.js";
 import { VirtualInboxClient, VirtualInboxError, type SmsIngestion } from "../../sdk/client.js";
 
-export function createNativeSmsExtension(publicApiBaseUrl: string) {
+export function createNativeSmsExtension(publicApiBaseUrl: string, options: { fetch?: typeof globalThis.fetch } = {}) {
   const app = createApp();
-  const client = new VirtualInboxClient(publicApiBaseUrl);
+  const client = new VirtualInboxClient(publicApiBaseUrl, options);
 
   app.post("/sms/messages", async (ctx) => {
     try {

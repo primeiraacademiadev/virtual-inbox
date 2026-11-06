@@ -121,8 +121,13 @@ export async function assertTimeoutContract(): Promise<void> {
   host.register({ id: "timeout-probe", version: "1", app });
   // Host owns a 10s asynchronous deadline; this deliberately tests the actual
   // runtime rather than a mocked timeout or a false promise of sync preemption.
-  await assert.rejects(host.dispatch({ method: "GET", audience: "demo", path: "/never" }),
-    /Extension request timeout/);
+  const keepAlive = setInterval(() => {}, 500);
+  try {
+    await assert.rejects(host.dispatch({ method: "GET", audience: "demo", path: "/never" }),
+      /Extension request timeout/);
+  } finally {
+    clearInterval(keepAlive);
+  }
   assert.equal(host.registry()[0].metrics.lastStatus, 504);
   assert.equal(host.registry()[0].metrics.errors, 1);
 }

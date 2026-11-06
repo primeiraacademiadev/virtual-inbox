@@ -10,6 +10,8 @@ COPY src ./src
 COPY test ./test
 # SDK is compiled by the unit tests and TypeScript build; keep it in builder only.
 COPY sdk ./sdk
+# Embedded Extension Host imports shared SDK types; compile them with the server.
+COPY extension-sdk ./extension-sdk
 COPY scripts ./scripts
 COPY README.md ./
 COPY docs ./docs

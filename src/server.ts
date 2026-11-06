@@ -258,7 +258,7 @@ async function startListeners() {
       // endpoint. Loading before optional modules reserves its exact route.
       const localHost = apiHost === "0.0.0.0" ? "127.0.0.1"
         : apiHost === "::" || apiHost === "[::]" ? "[::1]" : apiHost;
-      extensionHost.register(createNativeSmsExtension(
+      extensionHost.registerNativeSms(createNativeSmsExtension(
         "http://" + (localHost.includes(":") && !localHost.startsWith("[")
           ? "[" + localHost + "]" : localHost) + ":" + port + "/",
       ));

@@ -21,47 +21,37 @@ export type ExtensionRecord = {
   diagnosticCode?: string;
 };
 
-const labels = {
-  "pt-PT": {
-    heading: "Extensões", description: "Extensões HTTP publicadas pelo Virtual Inbox. Inventário apenas de leitura.",
-    refresh: "Atualizar extensões", empty: "Não existem extensões registadas.",
-    loading: "A carregar extensões…", unavailable: "Não foi possível consultar as extensões.",
-    active: "Ativa", failed: "Falhou", disabled: "Desativada",
-    capabilities: "Capacidades", endpoints: "Endpoints publicados", requests: "Pedidos",
-    errors: "Erros", duration: "Duração acumulada", lastStatus: "Último estado HTTP",
-    method: "Método", audience: "Âmbito", path: "Caminho lógico", publicPath: "Acessos públicos",
-    noRoutes: "Esta extensão não tem endpoints ativos.",
-    diagnostic: "Diagnóstico", documentation: "Documentação", openGuide: "Abrir guia",
-    logs: "Ver logs desta extensão", version: "Versão",
-    refreshing: "Atualização automática a cada 15 segundos.",
-  },
-  en: {
-    heading: "Extensions", description: "HTTP extensions published by Virtual Inbox. Read-only inventory.",
-    refresh: "Refresh extensions", empty: "No extensions are registered.",
-    loading: "Loading extensions…", unavailable: "Unable to load extensions.",
-    active: "Active", failed: "Failed", disabled: "Disabled",
-    capabilities: "Capabilities", endpoints: "Published endpoints", requests: "Requests",
-    errors: "Errors", duration: "Total duration", lastStatus: "Last HTTP status",
-    method: "Method", audience: "Audience", path: "Logical path", publicPath: "Public paths",
-    noRoutes: "This extension has no active endpoints.",
-    diagnostic: "Diagnostic", documentation: "Documentation", openGuide: "Open guide",
-    logs: "View this extension's logs", version: "Version",
-    refreshing: "Automatically refreshes every 15 seconds.",
-  },
-  fr: {
-    heading: "Extensions", description: "Extensions HTTP publiées par Virtual Inbox. Inventaire en lecture seule.",
-    refresh: "Actualiser les extensions", empty: "Aucune extension enregistrée.",
-    loading: "Chargement des extensions…", unavailable: "Impossible de consulter les extensions.",
-    active: "Active", failed: "Échec", disabled: "Désactivée",
-    capabilities: "Fonctionnalités", endpoints: "Points d'accès publiés", requests: "Requêtes",
-    errors: "Erreurs", duration: "Durée cumulée", lastStatus: "Dernier statut HTTP",
-    method: "Méthode", audience: "Audience", path: "Chemin logique", publicPath: "Chemins publics",
-    noRoutes: "Cette extension n'a aucun point d'accès actif.",
-    diagnostic: "Diagnostic", documentation: "Documentation", openGuide: "Ouvrir le guide",
-    logs: "Afficher les logs de cette extension", version: "Version",
-    refreshing: "Actualisation automatique toutes les 15 secondes.",
-  },
-} as const;
+// Pair each translation with one shared set of keys. This avoids three copies
+// of the same dictionary shape and keeps locale parity mechanically checked.
+const labelKeys = [
+  "heading", "description", "refresh", "empty", "loading", "unavailable",
+  "active", "failed", "disabled", "capabilities", "endpoints", "requests",
+  "errors", "duration", "lastStatus", "method", "audience", "path",
+  "publicPath", "noRoutes", "diagnostic", "documentation", "openGuide",
+  "logs", "version", "refreshing",
+] as const;
+type LabelKey = typeof labelKeys[number];
+const translations: Record<Locale, readonly string[]> = {
+  "pt-PT": [
+    "Extensões", "Extensões HTTP publicadas pelo Virtual Inbox. Inventário apenas de leitura.", "Atualizar extensões", "Não existem extensões registadas.", "A carregar extensões…", "Não foi possível consultar as extensões.",
+    "Ativa", "Falhou", "Desativada", "Capacidades", "Endpoints publicados", "Pedidos", "Erros", "Duração acumulada", "Último estado HTTP", "Método", "Âmbito", "Caminho lógico",
+    "Acessos públicos", "Esta extensão não tem endpoints ativos.", "Diagnóstico", "Documentação", "Abrir guia", "Ver logs desta extensão", "Versão", "Atualização automática a cada 15 segundos.",
+  ],
+  en: [
+    "Extensions", "HTTP extensions published by Virtual Inbox. Read-only inventory.", "Refresh extensions", "No extensions are registered.", "Loading extensions…", "Unable to load extensions.",
+    "Active", "Failed", "Disabled", "Capabilities", "Published endpoints", "Requests", "Errors", "Total duration", "Last HTTP status", "Method", "Audience", "Logical path",
+    "Public paths", "This extension has no active endpoints.", "Diagnostic", "Documentation", "Open guide", "View this extension's logs", "Version", "Automatically refreshes every 15 seconds.",
+  ],
+  fr: [
+    "Extensions", "Extensions HTTP publiées par Virtual Inbox. Inventaire en lecture seule.", "Actualiser les extensions", "Aucune extension enregistrée.", "Chargement des extensions…", "Impossible de consulter les extensions.",
+    "Active", "Échec", "Désactivée", "Fonctionnalités", "Points d'accès publiés", "Requêtes", "Erreurs", "Durée cumulée", "Dernier statut HTTP", "Méthode", "Audience", "Chemin logique",
+    "Chemins publics", "Cette extension n'a aucun point d'accès actif.", "Diagnostic", "Documentation", "Ouvrir le guide", "Afficher les logs de cette extension", "Version", "Actualisation automatique toutes les 15 secondes.",
+  ],
+};
+export function extensionLabels(locale: Locale): Record<LabelKey, string> {
+  const values = translations[locale];
+  return Object.fromEntries(labelKeys.map((key, index) => [key, values[index]])) as Record<LabelKey, string>;
+}
 
 const supportedDocs = new Set(["architecture", "integration", "sdk", "extensions"]);
 /** Only documentation already published by the console is navigable. */
@@ -81,7 +71,7 @@ export function ExtensionInventorySummary({ entries, locale, onLogs, onDocumenta
   onLogs: (extensionId: string) => void;
   onDocumentation: (documentId: string) => void;
 }) {
-  const t = labels[locale];
+  const t = extensionLabels(locale);
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
   return <div className="extensionInventory">
     {entries.length === 0 && <p className="muted">{t.empty}</p>}
@@ -144,7 +134,7 @@ export function ExtensionInventory({ onLogs, onDocumentation }: {
   onDocumentation: (documentId: string) => void;
 }) {
   const { locale } = useI18n();
-  const t = labels[locale];
+  const t = extensionLabels(locale);
   const [entries, setEntries] = useState<ExtensionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

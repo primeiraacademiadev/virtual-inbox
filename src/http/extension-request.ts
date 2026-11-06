@@ -9,8 +9,9 @@ function publicHeaders(source: IncomingMessage["headers"]): Record<string, strin
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries(source)) {
     if (value === undefined || !value) continue;
-    // Do not pass cookies or credentials into unrelated extension middleware by default.
-    if (name === "authorization" || name === "cookie" || name === "proxy-authorization") continue;
+    // Provider authentication belongs to its extension; keep Authorization/Cookie.
+    // Hop-by-hop transport headers remain the Host responsibility.
+    if (["connection", "transfer-encoding", "upgrade", "proxy-authorization"].includes(name)) continue;
     headers[name] = Array.isArray(value) ? value.join(", ") : value;
   }
   return headers;

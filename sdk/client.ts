@@ -236,7 +236,7 @@ export class VirtualInboxClient {
    *  This is not a provider-facing/demo endpoint; extensions may invoke it without recursion.
    */
   ingestSms(input: SmsIngestion): Promise<InboxMessage> {
-    return this.request("/sms/ingestions", { method: "POST", body: JSON.stringify(input) });
+    return this.request("/api/sms/ingestions", { method: "POST", body: JSON.stringify(input) });
   }
 
   /** A 503 response is returned as readiness=false, not confused with transport failure. */

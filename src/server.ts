@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 
 import { handleRequest as handleHttpRequest } from "./http/request-router.js";
 import { ExtensionHost, configuredExtensionFiles } from "./extension-host.js";
+import { createNativeSmsExtension } from "./extensions/sms-native.js";
 import { createSmtpProtocol } from "./smtp/transport.js";
 import { createServer as createHttpsServer } from "node:https";
 import {
@@ -252,6 +253,16 @@ const listenerSpecs: ListenerSpec[] = [
 ];
 async function startListeners() {
   try {
+    if (process.env.VI_SMS_NATIVE_ENABLED !== "false") {
+      // The existing demo sender always uses the ordinary public HTTP ingestion
+      // endpoint. Loading before optional modules reserves its exact route.
+      const localHost = apiHost === "0.0.0.0" ? "127.0.0.1"
+        : apiHost === "::" || apiHost === "[::]" ? "[::1]" : apiHost;
+      extensionHost.register(createNativeSmsExtension(
+        "http://" + (localHost.includes(":") && !localHost.startsWith("[")
+          ? "[" + localHost + "]" : localHost) + ":" + port + "/",
+      ));
+    }
     await extensionHost.loadFiles(configuredExtensionFiles(process.env.VI_EXTENSIONS));
     for (const diagnostic of extensionHost.errors) console.warn("VI extension unavailable:", diagnostic);
     await startFixedListeners(listenerSpecs, (endpoint) => {

@@ -28,7 +28,7 @@ export function createNativeSmsExtension(publicApiBaseUrl: string) {
         ctx.response.body = {
           error: error.message,
           errorCode: error.errorCode,
-          errorParams: error.errorParams,
+          errorParams: error.errorParams as JsonValue,
         };
         return;
       }

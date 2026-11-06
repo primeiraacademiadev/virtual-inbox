@@ -1,6 +1,6 @@
 # ADR-0002 — Embedded HTTP extensions with a public-API boundary
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-06
 - **Scope:** Virtual Inbox HTTP entry points, Extension Host, Extension Application SDK and extensions
 - **Related:** #95, #96, #97, #98, #99, #100, #101, #102, #103, #104, #105; compatible with ADR-0001
@@ -14,13 +14,13 @@ Goals: preserve all existing consumer-facing behavior and ports; allow independe
 ## Decision
 
 1. **The VI HTTP runtime owns entry points.** The existing listeners, TLS, Host/Origin/CORS checks, HTTP request lifecycle, route registration and routing, operational metrics and observability remain VI responsibilities. No new publicly exposed listener is required to install an extension. The SDK does not call `listen()`.
-2. **V1 extensions run as trusted ESM modules in the VI Node.js process**, enabled by explicit local configuration or bundled by VI. The Extension Host loads them through supported module loading, performs manifest/protocol-version checks, validates route declarations and registers routes atomically before activation. Installation from arbitrary URLs, remote catalogs and execution of untrusted code are **not** supported.
+2. **V1 extensions run as trusted ESM modules in the VI Node.js process**, enabled by explicit local configuration or bundled by VI. The Extension Host loads them through supported module loading, performs manifest validation (protocol-version negotiation remains deferred), validates route declarations and registers routes atomically before activation. Installation from arbitrary URLs, remote catalogs and execution of untrusted code are **not** supported.
 3. **The Extension Application SDK supplies application ergonomics**, broadly `createApp()`, `app.use()`, `app.get/post/put/delete()`, and async onion-style middleware `await next()`. Middleware may short-circuit, transform or replace a completed handler response before the HTTP runtime sends it. This is not Express compatibility; neither Node request/response objects nor arbitrary Express middleware are part of the extension contract.
-4. **Only the public functional VI API is an integration boundary.** The existing `@virtual-inbox/client` (or ordinary HTTP) is used by extensions as by every other client. No privileged access to the Sandbox, store, event emitter, SMTP internals or private helper functions; in-process loading is not permission isolation, so this is an architectural convention with tests, not a security guarantee. If the public SMS ingestion contract is insufficient, evolve it as one common, documented API under #100.
+4. **Only the public functional VI API is an integration boundary.** The existing `@virtual-inbox/client` (or ordinary HTTP) is used by extensions as by every other client. No privileged access to the Sandbox, store, event emitter, SMTP internals or private helper functions; in-process loading is not permission isolation, so this is an architectural convention with tests, not a security guarantee. The common public SMS ingestion operation is now `POST /api/sms/ingestions` (#100).
 5. **Keep functional API, extension SDK and routing responsibilities distinct.** `@virtual-inbox/client` models VI functional operations; `@virtual-inbox/extension-sdk` models route handlers and middleware; the Extension Host owns registration and dispatch. A stable, JSON-compatible request/response model permits a later out-of-process dispatcher but does not require IPC now.
-6. **An extension declares the routes and audiences it owns.** The Host must reject conflicts with core routes, other extensions, and reserved management/console namespaces. There is no general-purpose route override or middleware interception of core endpoints. The built-in SMS extension will receive its existing endpoints through an **explicit, controlled ownership migration** (#101): remove their core registration and transfer exactly those routes, retaining the old URLs/contracts and avoiding a window where both implementations can register.
-7. **The native SMS sender becomes a bundled, enabled-by-default extension**, subject to #100 and #101. The core retains SMS inboxes, routing, captures, TTL, anomalies and diagnostics. The outgoing/demo HTTP contract migrates; the extension calls the same common public ingestion API as an ordinary client. Disabling the extension must not disable the core or other transports. Defaults must preserve existing installations.
-8. **The public registry/observability API is source of truth for console and automation** (#102). The console discovers installed/active/failed/disabled extensions, published routes and optional documentation, without provider-specific code or dynamically importing arbitrary UI.
+6. **An extension declares the routes and audiences it owns.** The Host must reject conflicts with core routes, other extensions, and reserved management/console namespaces. There is no general-purpose route override or middleware interception of core endpoints. The built-in SMS extension has received its existing endpoints through an **explicit, controlled ownership migration** (#101): it is the only runtime handler for the retained legacy core-catalogue operation, keeping old URLs/contracts; it is not a general route override.
+7. **The native SMS sender is a bundled, enabled-by-default extension**, subject to #100 and #101. The core retains SMS inboxes, routing, captures, TTL, anomalies and diagnostics. The outgoing/demo HTTP contract migrates; the extension calls the same common public ingestion API as an ordinary client. Disabling the extension must not disable the core or other transports. Defaults must preserve existing installations.
+8. **The implemented public registry/observability API is source of truth for console and automation** (#102). The console discovers installed/active/failed/disabled extensions, published routes and optional documentation, without provider-specific code or dynamically importing arbitrary UI.
 9. **Fail predictably, not silently.** A route publication failure must register *none* of the extension's routes; an exception or rejected handler promise becomes a bounded, observable failure. Request body sizes, asynchronous deadlines, headers, response sizes and diagnostic fields are constrained and documented. Process crashes, `process.exit()`, global state mutation and blocking synchronous code remain risks of the embedded, trusted model. A timeout cannot preempt synchronous JavaScript.
 10. **No provider semantics leak into VI.** Auth schemes, campaigns, per-provider errors, response formats and retry behavior belong to provider extensions. A response override after a successful public ingestion call does **not** undo the SMS capture; logs and documentation must distinguish provider response simulation from delivery outcomes.
 
@@ -37,7 +37,7 @@ Client
   <- HTTP runtime writes one final response
 ```
 
-The client-to-VI HTTP request and the extension-to-VI **public HTTP API** call are separate transactions. The latter must call a public ingestion operation distinct from the publication endpoint implemented by the extension, to avoid recursion. #100 must specify the public operation before #101 migrates the current send endpoint.
+The client-to-VI HTTP request and the extension-to-VI **public HTTP API** call are separate transactions. The latter calls `POST /api/sms/ingestions`, distinct from the publication endpoint, to avoid recursion. The native sender has been migrated under #101.
 
 ### Execution boundary for a future IPC dispatcher
 
@@ -58,10 +58,10 @@ Model each request/response using JSON-compatible values: request ID, method, no
 - ADR-0001 remains authoritative: test data only, openly observable, no production RBAC or plugin-security project. Existing operational protections for admin writes, TLS and network controls remain.
 - Bundled `sms-native` is enabled by default. Legacy paths, response bodies/statuses, error semantics, sender/recipient lookup, message limits and tests must be retained without changing consumers.
 - A module is trusted executable code, not sandboxed. Configuration must require explicit local installation/enabling; document provenance and the risk of `process.exit`, blocking loops, crashes and dependency side effects.
-- When a configured optional extension fails to load, the core should remain operational and the failure should be visible, but required bundled-extension failure behavior must be defined and tested before shipping the migration. Do not claim route availability if it was not published.
-- SDK and host protocol versions must be checked; avoid hot-unload promises because ESM module caching and side effects make it nontrivial.
-- The console can display extension-owned OpenAPI documentation **separately** from the authoritative, generated VI management/demo contracts; do not blend external schemas into the VI core OpenAPI.
-- Headers such as `User-Agent`, `X-VI-Correlation-ID` and extension identifiers are diagnostic metadata, not credentials or trusted identities; propagate only validated, bounded fields, and do not leak secrets. Exact header naming is subject to #100/#102.
+- When a configured optional extension fails to load, the core should remain operational and the failure should be visible, while bundled native registration failure prevents startup. Do not claim route availability if it was not published.
+- **Deferred:** SDK/Host protocol-version negotiation is not implemented. Avoid hot-unload promises because ESM module caching and side effects make it nontrivial.
+- The console displays the extension registry and links only to known local guides. **Extension-owned OpenAPI publication is not yet implemented**; do not blend external schemas into the VI core OpenAPI.
+- Headers such as `User-Agent`, `X-VI-Correlation-ID` and extension identifiers are diagnostic metadata, not credentials or trusted identities; propagate only validated, bounded fields, and do not leak secrets. `X-VI-Correlation-ID` is implemented as an optional, validated and echoed header on public SMS ingestion; the extension dispatcher generates a separate correlation ID for its log events.
 - Batches, SMS national-number configuration (#94), provider m-it!, remote module catalog, untrusted sandbox and IPC runtime are out of this ADR's implementation scope.
 
 ## Consequences and validation
@@ -69,7 +69,7 @@ Model each request/response using JSON-compatible values: request ID, method, no
 - A new extension can publish a contract without new listener ports or edits to provider-specific core branches.
 - API-level semantics and extensions' own middleware are independently testable; registration/resolution tests must establish the same behavior on the demo and main listeners.
 - A public API call from a module is deliberate: the integration test must prove an external client can make the exact same call with the same validations and outcomes.
-- Follow-up implementation: #97 route contract, #98 SDK, #99 host, #100 common ingestion API, #101 SMS native migration, #102 registry, #103 console, #104 docs, #105 conformance.
+- Implemented: #97 route contract, #98 SDK, #99 Host, #100 common ingestion API, #101 native migration, #102 registry and #103 console. Documentation consolidation is #104; conformance suite is #105.
 
 ## Revisit triggers
 

@@ -66,6 +66,7 @@ plugins:
             Integration notes: Notas de integração
             Search: Pesquisa
             SDK: SDK
+            Extensions: Extensões
         - locale: fr
           name: Français
           nav_translations:
@@ -93,6 +94,7 @@ plugins:
             Integration notes: Notes d'intégration
             Search: Recherche
             SDK: SDK
+            Extensions: Extensions
 # Only the selected language appears in the sidebar; reference starts collapsed.
 nav:
   - Getting started: index.md
@@ -102,6 +104,7 @@ nav:
   - Tests and SDK: sdk.md
   - TLS: tls.md
   - Architecture: architecture.md
+  - Extensions: extensions.md
   - Development: development.md
   - Technical reference:
       - HTTP API: reference/api.md
@@ -120,4 +123,8 @@ nav:
       - Search: reference/search.md
       - SDK: reference/sdk.md
       - Architecture: reference/architecture.md
+      - Extension author guide: reference/extension-author-guide.md
+      - Embedded Extension Host: reference/embedded-extension-host.md
+      - Extension registry: reference/extension-registry.md
+      - Extension routing: reference/extension-routing-contract.md
       - TLS: reference/tls.md

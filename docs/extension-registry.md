@@ -16,7 +16,7 @@ The registry counts dispatched requests and failed responses (`status >= 400`), 
 
 Use `GET /api/logs?extensionId=<id>` or the existing `/api/logs/events?extensionId=<id>` SSE stream to inspect these requests. Existing `log_id` ordering, bounded retention and missing-sequence behavior are unchanged. This filter is observation, not authorization.
 
-The registry is an in-memory snapshot of the Extension Host. It reports only currently activated routes; a failed or disabled extension does not claim an active route. The console will render these same public records in #103.
+The registry is an in-memory snapshot of the Extension Host. It reports only currently activated routes; a failed or disabled extension does not claim an active route. The read-only System → Extensions console renders these same public records (implemented in #103).
 
 ## Scope and limitations
 

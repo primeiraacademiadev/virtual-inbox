@@ -1,6 +1,6 @@
 # Virtual Inbox Extension Application SDK (V1)
 
-Small Express-like **application model**, deliberately **not Express-compatible**. It does not open a socket, grant access to VI internals or implement an extension Host. The future Host owns listeners and atomically publishes route descriptors. The first transport is embedded JavaScript; logical request and response data are JSON-compatible for a possible IPC dispatcher later.
+Small Express-like **application model**, deliberately **not Express-compatible**. It does not open a socket, grant access to VI internals or implement an extension Host. The implemented embedded Host owns listeners and atomically publishes route descriptors. The first transport is embedded JavaScript; logical request and response data are JSON-compatible for a possible IPC dispatcher later.
 
 ```ts
 import { createApp } from "@virtual-inbox/extension-sdk";
@@ -31,4 +31,4 @@ app.post("/sms/messages", async (ctx) => {
 
 ## Scope
 
-Package is private until API stabilizes; it is distinct from `@virtual-inbox/client`. The Host lifecycle/ESM loading and physical route mounting follow in #99; the public ingestion API in #100; the bundled SMS extension in #101. No IPC runtime or provider-specific contract is included.
+Package is private until API stabilizes; it is distinct from `@virtual-inbox/client`. The Host lifecycle/ESM loading and physical routing are implemented (#99), the shared public ingestion API is available (#100) and the bundled native SMS extension is active by default (#101). See [the full author guide](../docs/extension-author-guide.md), [the runtime](../docs/embedded-extension-host.md), and [the registry](../docs/extension-registry.md). No IPC runtime, arbitrary root-level mounts or provider-specific third-party contracts are included.

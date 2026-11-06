@@ -12,7 +12,7 @@ import shutil
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "docs"
 TARGET = ROOT / ".cache" / "docs-site" / "docs"
-PAGES = ("overview", "demo", "integration", "api", "sdk", "tls", "architecture", "development")
+PAGES = ("overview", "demo", "integration", "api", "sdk", "tls", "architecture", "development", "extensions")
 LANGUAGES = {"en": "", "pt-PT": ".pt", "fr": ".fr"}
 OMIT_REFERENCE = {
     "index.md", "backlog.md", "code-style.md", "documentation-review.md",

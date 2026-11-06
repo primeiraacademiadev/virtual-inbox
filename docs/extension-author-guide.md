@@ -1,6 +1,6 @@
 # HTTP extension author guide — implemented V1
 
-This guide describes the **implemented** trusted JavaScript/ESM extension model in Virtual Inbox. For the decision record see [ADR-0002](adr/0002-http-extensions.md), for the route semantics see [HTTP routing contract](extension-routing-contract.md), and for runtime/metrics see [Extension Host](embedded-extension-host.md) and [public registry](extension-registry.md).
+This guide describes the **implemented** trusted JavaScript/ESM extension model in Virtual Inbox. For the decision record see [ADR-0002](https://github.com/primeiraacademiadev/virtual-inbox/blob/main/docs/adr/0002-http-extensions.md), for the route semantics see [HTTP routing contract](extension-routing-contract.md), and for runtime/metrics see [Extension Host](embedded-extension-host.md) and [public registry](extension-registry.md).
 
 ## First principles
 

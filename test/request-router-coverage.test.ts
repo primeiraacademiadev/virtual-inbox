@@ -378,3 +378,40 @@ test("dedicated demo listener uses the same native SMS handler and public ingest
     await management.close();
   }
 });
+
+
+test("extension registry is public, exposes active endpoints and metrics but no secrets", async () => {
+  const f = await fixture();
+  try {
+    const host = new ExtensionHost();
+    const app = createApp();
+    app.get("/registry-test", ctx => {
+      ctx.response.status = 200;
+      ctx.response.body = { ok: true };
+    });
+    host.register({ id: "discovery-test", version: "2.1.0",
+      displayName: "Discovery test", capabilities: ["test-provider"], app });
+    host.markDisabled("sms-native");
+    f.context.extensionHost = host;
+    host.observeOutcomes(event => f.sandbox.log("extension.request", undefined, undefined, {
+      extensionId: event.extensionId, method: event.method, audience: event.audience,
+      route: event.route, correlationId: event.correlationId,
+      status: event.status, durationMs: event.durationMs,
+    }));
+    const first = await f.request("/api/extensions");
+    assert.equal(first.status, 200);
+    const registry = await first.json() as Array<{ id: string; state: string; routes: unknown[]; metrics: { count: number } }>;
+    assert.deepEqual(registry.map(e => e.id), ["discovery-test", "sms-native"]);
+    assert.equal(registry[0].routes.length, 1);
+    assert.equal(registry[0].metrics.count, 0);
+    assert.equal(registry[1].state, "disabled");
+    const routed = await f.request("/demo/registry-test");
+    assert.equal(routed.status, 200);
+    const after = await (await f.request("/api/extensions")).json() as typeof registry;
+    assert.equal(after[0].metrics.count, 1);
+    const filtered = await f.request("/api/logs?extensionId=discovery-test");
+    assert.equal(filtered.status, 200);
+    assert.match(JSON.stringify(await filtered.json()), /extension.request/);
+    assert.doesNotMatch(JSON.stringify(after), /Bearer secret|\/tmp\/|password/);
+  } finally { await f.close(); }
+});

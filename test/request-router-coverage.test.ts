@@ -251,3 +251,35 @@ test("router handles observer subscriptions, invalid hosts, CORS and unsupported
     assert.equal(hostStatus, 421);
   } finally { await f.close(); }
 });
+
+
+test("public SMS ingestion and demo sender share capture semantics without breaking legacy URLs", async () => {
+  const f = await fixture();
+  try {
+    const target = f.sandbox.create("sms", "+351912345678");
+    const input = { from: "synthetic-provider", to: target.address, body: "hello" };
+    const common = await f.request("/api/sms/ingestions", "POST", input);
+    const demo = await f.request("/demo/sms/messages", "POST", input);
+    assert.equal(common.status, 201);
+    assert.equal(demo.status, 201);
+    const a = await common.json() as Record<string, unknown>;
+    const b = await demo.json() as Record<string, unknown>;
+    for (const message of [a, b]) {
+      assert.equal(message.channel, "sms");
+      assert.equal(message.from, input.from);
+      assert.equal(message.body, input.body);
+      assert.equal(message.originalRecipient, input.to);
+      assert.equal(message.destinationId, target.id);
+    }
+    const captures = f.sandbox.listMessages(target.id);
+    assert.equal(captures.length, 2);
+    assert.deepEqual(captures.map((m) => m.id), [a.id, b.id]);
+    const unknown = await f.request("/api/sms/ingestions", "POST",
+      { ...input, to: "+351999888777" });
+    assert.equal(unknown.status, 201);
+    const anomaly = await unknown.json() as Record<string, unknown>;
+    assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
+    assert.equal(anomaly.originalRecipient, "+351999888777");
+    assert.equal((await f.request("/api/sms/ingestions", "GET")).status, 404);
+  } finally { await f.close(); }
+});

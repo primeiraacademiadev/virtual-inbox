@@ -36,5 +36,5 @@ export function createNativeSmsExtension(publicApiBaseUrl: string, options: { fe
     }
   });
 
-  return { id: "sms-native", version: "1.0.0", app };
+  return { id: "sms-native", displayName: "Native SMS sender", version: "1.0.0",\n    capabilities: ["sms-sender"], documentation: "/docs/embedded-extension-host", app };
 }

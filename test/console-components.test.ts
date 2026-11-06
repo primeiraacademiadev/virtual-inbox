@@ -12,7 +12,7 @@ const { ProtocolConnections, filteredConnections } = await import(modulePath("pr
 const { NavigationIcon } = await import(modulePath("NavigationIcon"));
 const { AttachmentIndicator } = await import(modulePath("AttachmentIndicator"));
 const { FootprintView, FootprintSummary } = await import(modulePath("FootprintView"));
-const { ExtensionInventorySummary, extensionDocumentId } = await import(modulePath("ExtensionInventory"));
+const { ExtensionInventorySummary, extensionDocumentId, extensionLabels } = await import(modulePath("ExtensionInventory"));
 
 // Render the real React components with the console's installed React runtime.
 // This tests accessible markup without requiring a browser or live admin API.
@@ -196,4 +196,47 @@ test("system navigation includes extensions and its own active link", () => {
   assert.match(markup, /Extensões/);
   assert.match(markup, /aria-current="page"/);
   assert.match(render(NavigationIcon, { name: "extensions" }), /<svg/);
+});
+
+test("extension locale keys stay aligned, including status labels and error states", () => {
+  const languages = ["pt-PT", "en", "fr"] as const;
+  const keys = Object.keys(extensionLabels("en"));
+  assert.equal(keys.length, 26);
+  for (const locale of languages) {
+    const labels = extensionLabels(locale);
+    assert.deepEqual(Object.keys(labels), keys);
+    assert.equal(Object.values(labels).every((value: unknown) =>
+      typeof value === "string" && value.length > 0), true);
+  }
+  assert.equal(extensionLabels("pt-PT").disabled, "Desativada");
+  assert.equal(extensionLabels("fr").failed, "Échec");
+});
+
+test("extension console renders inactive records, unavailable documentation and all supported locales", () => {
+  const inactive = [{
+    id: "disabled-provider", displayName: "External provider", version: "",
+    state: "disabled", capabilities: [], routes: [],
+    documentation: "/docs/unknown-provider", diagnosticCode: "DISABLED_BY_CONFIGURATION",
+    metrics: { count: 0, errors: 0, totalDurationMs: 0 },
+  }];
+  for (const locale of ["pt-PT", "en", "fr"] as const) {
+    const html = render(ExtensionInventorySummary, { locale, entries: inactive,
+      onLogs: () => {}, onDocumentation: () => {} });
+    assert.match(html, /DISABLED_BY_CONFIGURATION/);
+    assert.match(html, /\/docs\/unknown-provider/);
+    assert.doesNotMatch(html, /Open guide|Abrir guia|Ouvrir le guide/);
+    assert.doesNotMatch(html, /<table/);
+  }
+  const withoutDocs = render(ExtensionInventorySummary, {
+    locale: "en", entries: [{ ...inactive[0], state: "active",
+      capabilities: ["sms-sender"], documentation: undefined,
+      routes: [{ method: "GET", audience: "management", path: "/provider/status",
+        publicPaths: ["/api/provider/status"] }],
+      metrics: { count: 12, errors: 2, totalDurationMs: 123, lastStatus: 200 },
+    }], onLogs: () => {}, onDocumentation: () => {},
+  });
+  assert.match(withoutDocs, /sms-sender/);
+  assert.match(withoutDocs, /\/api\/provider\/status/);
+  assert.match(withoutDocs, /<table/);
+  assert.doesNotMatch(withoutDocs, /Open guide/);
 });

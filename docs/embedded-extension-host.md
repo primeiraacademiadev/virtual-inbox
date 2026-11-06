@@ -37,7 +37,7 @@ The `sms-native` extension is installed and enabled by default. It registers the
 
 `VI_SMS_NATIVE_ENABLED=false` disables only the bundled sender endpoint. Calls to the former public demo URLs return `503` with error code `SMS_EXTENSION_UNAVAILABLE`; the functional public ingestion API, inboxes, SMTP, POP3 and other extensions remain available. Any other value, including an unset variable, leaves it enabled. Changing this setting requires restart. If native registration fails, startup fails visibly rather than silently serving a different implementation. A third-party extension cannot take over this reserved route merely by using the `sms-native` identifier.
 
-The embedded handler uses the main listener's local HTTP port to call the shared functional API without bypassing its validation or introducing internal APIs. There is no new listener and no IPC. A failed internal HTTP call produces a controlled extension error; provider-facing error responses from the public SMS API retain their original status and structured error body.
+The embedded handler uses the **existing main public API listener**. If TLS is configured it calls HTTPS with certificate verification: the generated local CA is trusted explicitly (or the active external/uploaded certificate is pinned), and TLS failure never downgrades to plaintext. Only an instance with TLS explicitly disabled uses the existing HTTP listener, following the test-sandbox configuration. There is no new listener and no IPC. A failed internal HTTP call produces a controlled extension error; provider-facing error responses from the public SMS API retain their original status and structured error body.
 
 ## Next
 

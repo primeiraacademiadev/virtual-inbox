@@ -289,6 +289,7 @@ export function createOpenApiDocument(audience: ApiAudience = "management") {
     if (operation.query) for (const name of operation.query.split(","))
       parameters.push({ name, in: "query", schema: string });
     if (operation.mediaType === "text/event-stream") parameters.push({ name: "Last-Event-ID", in: "header", schema: string });
+    if (operation.id === "ingestSms") parameters.push({ name: "X-VI-Correlation-ID", in: "header", required: false, description: "Optional untrusted diagnostic token (1-128 safe ASCII characters); echoed on successful ingestion.", schema: string });
     const success: Record<string, unknown> = { description: operation.status === 204 ? "No content." : "Success." };
     if (operation.status !== 204) success.content = {
       [operation.mediaType || "application/json"]: { schema: operation.response ? reference(operation.response) : { type: "string", ...(operation.mediaType === "application/octet-stream" ? { format: "binary" } : {}) } },

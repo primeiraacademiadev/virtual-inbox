@@ -172,9 +172,10 @@ export function createApp(): ExtensionApp {
         request: { ...request, path: pathname, headers: { ...(request.headers ?? {}) } },
         params, query, response: { status: 204, headers: {} }, state: {},
       };
+      const handler = selected.handler;
       const pipeline: Middleware[] = [
         ...middleware.filter((m) => prefixMatches(m.prefix, pathname)).map((m) => m.middleware),
-        async (ctx) => selected.handler(ctx),
+        async (ctx) => handler(ctx),
       ];
       let index = -1;
       const invoke = async (i: number): Promise<void> => {

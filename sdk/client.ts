@@ -232,6 +232,13 @@ export class VirtualInboxClient {
     });
   }
 
+  /** Capture a synthetic SMS via the same public functional API as every other client.
+   *  This is not a provider-facing/demo endpoint; extensions may invoke it without recursion.
+   */
+  ingestSms(input: SmsIngestion): Promise<InboxMessage> {
+    return this.request("/sms/ingestions", { method: "POST", body: JSON.stringify(input) });
+  }
+
   /** A 503 response is returned as readiness=false, not confused with transport failure. */
   async ready(): Promise<Readiness> {
     const response = await this.fetchResponse("/ready");

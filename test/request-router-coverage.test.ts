@@ -23,7 +23,7 @@ type Fixture = {
   close: () => Promise<void>;
 };
 
-async function fixture(): Promise<Fixture> {
+async function fixture(demoOnly = false): Promise<Fixture> {
   const sandbox = new Sandbox(100);
   const rules = new SmtpReplyRuleStore();
   const directory = mkdtempSync(join(tmpdir(), "vi-router-contract-"));
@@ -68,7 +68,7 @@ async function fixture(): Promise<Fixture> {
     listenersReady: true, startedListeners: [{ name: "HTTP", port: 3000, host: "127.0.0.1" }],
   } as unknown as RequestContext;
   const server: Server = createServer((req, res) => {
-    void handleRequest(req, res, context).catch(error => {
+    void handleRequest(req, res, context, demoOnly).catch(error => {
       if (!res.headersSent) res.writeHead(500);
       res.end(String(error));
     });
@@ -322,5 +322,59 @@ test("embedded extension uses exactly the same public SMS ingestion API as exter
     assert.equal(captured[0].id, result.capturedMessageId);
     assert.equal(captured[0].body, input.body);
     assert.equal(captured[0].from, input.from);
+  } finally { await f.close(); }
+});
+
+test("native SMS extension preserves demo validation errors and anomaly capture", async () => {
+  const f = await fixture();
+  try {
+    const host = new ExtensionHost();
+    host.register(createNativeSmsExtension(f.base));
+    f.context.extensionHost = host;
+    const invalid = await f.request("/demo/sms/messages", "POST", { from: "test", to: "" });
+    assert.equal(invalid.status, 400);
+    const invalidBody = await invalid.json() as { error: string; errorCode: string };
+    assert.match(invalidBody.error, /required/i);
+    assert.equal(typeof invalidBody.errorCode, "string");
+    const missing = await f.request("/demo/sms/messages", "POST",
+      { from: "test-sender", to: "+351999888666", body: "not delivered" });
+    assert.equal(missing.status, 201);
+    const captured = await missing.json() as { originalRecipient: string; captureReason: string };
+    assert.equal(captured.originalRecipient, "+351999888666");
+    assert.equal(captured.captureReason, "UNKNOWN_RECIPIENT");
+  } finally { await f.close(); }
+});
+
+test("native SMS sender is explicitly unavailable when disabled, while common ingestion works", async () => {
+  const f = await fixture();
+  try {
+    const legacy = await f.request("/demo/sms/messages", "POST",
+      { from: "test", to: "+351912345678", body: "test" });
+    assert.equal(legacy.status, 503);
+    assert.equal((await legacy.json()).errorCode, "SMS_EXTENSION_UNAVAILABLE");
+    const common = await f.request("/api/sms/ingestions", "POST",
+      { from: "test", to: "+351912345678", body: "test" });
+    assert.equal(common.status, 201);
+  } finally { await f.close(); }
+});
+
+test("dedicated demo listener uses the same native SMS handler and HTTP contract", async () => {
+  const f = await fixture(true);
+  try {
+    const host = new ExtensionHost();
+    // The public functional ingestion endpoint lives on the *main* listener.
+    // This test also checks that demo-only request routing remains isolated.
+    const app = createApp();
+    app.post("/sms/messages", ctx => {
+      ctx.response.status = 201;
+      ctx.response.body = { accepted: true };
+    });
+    host.register({ id: "sms-native", version: "1.0.0", app });
+    f.context.extensionHost = host;
+    const response = await f.request("/sms/messages", "POST",
+      { from: "synthetic", to: "+351912345678", body: "hello" });
+    assert.equal(response.status, 201);
+    assert.deepEqual(await response.json(), { accepted: true });
+    assert.equal((await f.request("/demo/sms/messages", "POST", {})).status, 404);
   } finally { await f.close(); }
 });

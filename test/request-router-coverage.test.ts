@@ -261,7 +261,7 @@ test("public SMS ingestion and demo sender share capture semantics without break
   const f = await fixture();
   try {
     const host = new ExtensionHost();
-    host.register(createNativeSmsExtension(f.base));
+    host.registerNativeSms(createNativeSmsExtension(f.base));
     f.context.extensionHost = host;
     const target = f.sandbox.create("sms", "+351912345678");
     const input = { from: "synthetic-provider", to: target.address, body: "hello" };
@@ -329,7 +329,7 @@ test("native SMS extension preserves demo validation errors and anomaly capture"
   const f = await fixture();
   try {
     const host = new ExtensionHost();
-    host.register(createNativeSmsExtension(f.base));
+    host.registerNativeSms(createNativeSmsExtension(f.base));
     f.context.extensionHost = host;
     const invalid = await f.request("/demo/sms/messages", "POST", { from: "test", to: "" });
     assert.equal(invalid.status, 400);
@@ -364,7 +364,7 @@ test("dedicated demo listener uses the same native SMS handler and public ingest
   try {
     const recipient = management.sandbox.create("sms", "+351912345680");
     const host = new ExtensionHost();
-    host.register(createNativeSmsExtension(management.base));
+    host.registerNativeSms(createNativeSmsExtension(management.base));
     demo.context.extensionHost = host;
     const response = await demo.request("/sms/messages", "POST",
       { from: "synthetic", to: recipient.address, body: "hello" });

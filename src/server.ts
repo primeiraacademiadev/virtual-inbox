@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import { handleRequest as handleHttpRequest } from "./http/request-router.js";
+import { ExtensionHost, configuredExtensionFiles } from "./extension-host.js";
 import { createSmtpProtocol } from "./smtp/transport.js";
 import { createServer as createHttpsServer } from "node:https";
 import {
@@ -43,6 +44,7 @@ import {
 } from "./tls/server-names.js";
 
 export const sandbox = new Sandbox(config.logs);
+const extensionHost = new ExtensionHost();
 const credentialStore = new InboxCredentialStore();
 const inboxAddresses = new Map<string, string>();
 const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
@@ -173,7 +175,7 @@ let allowedHosts = allowedHostsForCertificate(tlsIdentity?.cert);
 
 function requestState() {
   return {
-    sandbox, credentialStore, inboxAddresses, smtpAuthPolicy, smtpSessions, simulations, smtpAttempts, smtpReplyRules, smtpRuleIdentities, smtpCredentialIds, protocolCounters, pop3Connections, lastCleanupAt, networkSettingsFile, savedSettings, setting, networkKeys, adminAllowed, port, smtpPort, pop3Port, httpsPort, smtpsPort, demoPort, demoHttpsPort, tlsMode, tlsDirectory, managedNamesFile, managedIdentityFile, effectiveTlsNames, certificateManager, addressHost, apiHost, smtpHost, allowedOrigins, allowedHosts, listenersReady, startedListeners,
+    sandbox, extensionHost, credentialStore, inboxAddresses, smtpAuthPolicy, smtpSessions, simulations, smtpAttempts, smtpReplyRules, smtpRuleIdentities, smtpCredentialIds, protocolCounters, pop3Connections, lastCleanupAt, networkSettingsFile, savedSettings, setting, networkKeys, adminAllowed, port, smtpPort, pop3Port, httpsPort, smtpsPort, demoPort, demoHttpsPort, tlsMode, tlsDirectory, managedNamesFile, managedIdentityFile, effectiveTlsNames, certificateManager, addressHost, apiHost, smtpHost, allowedOrigins, allowedHosts, listenersReady, startedListeners,
     get tlsIdentity() { return tlsIdentity; },
     set tlsIdentity(value: typeof tlsIdentity) { tlsIdentity = value; },
   };
@@ -250,6 +252,8 @@ const listenerSpecs: ListenerSpec[] = [
 ];
 async function startListeners() {
   try {
+    await extensionHost.loadFiles(configuredExtensionFiles(process.env.VI_EXTENSIONS));
+    for (const diagnostic of extensionHost.errors) console.warn("VI extension unavailable:", diagnostic);
     await startFixedListeners(listenerSpecs, (endpoint) => {
       startedListeners.push(endpoint);
       console.log(endpoint.name + " listening on " + endpoint.port);

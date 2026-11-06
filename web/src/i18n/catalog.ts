@@ -37,6 +37,8 @@ export const messages = {
     strategy_FIRST_LAST_SUFFIX: "Nome.Apelido.Sufixo",
     strategy_RANDOM: "Aleatório",
     strategy_NATIONAL_FORMAT: "Formato nacional",
+    extensions: "Extensões",
+    extensions: "Extensions",
     inboxes: "Inboxes",
     inboxGroup: "Inboxes",
     connections: "Ligações e TLS",

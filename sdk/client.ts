@@ -31,6 +31,8 @@ export type InboxMessage = {
   receivedAt?: string;
   captureReason?: "UNKNOWN_RECIPIENT" | "EXPIRED_RECIPIENT";
 };
+/** Common public SMS ingestion contract, shared by external clients and extensions. */
+export type SmsIngestion = { from: string; to: string; body: string };
 export type MessageMatch = {
   from?: string;
   subjectContains?: string;

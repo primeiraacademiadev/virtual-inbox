@@ -291,6 +291,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
         res.writeHead(200, { "Content-Type": "application/x-pem-file",
           "Content-Disposition": "attachment; filename=virtual-inbox-server.pem" });
         return res.end(tlsIdentity.cert);
+      case "ingestSms":
       case "sendSms": {
         const input = await body(req);
         return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));

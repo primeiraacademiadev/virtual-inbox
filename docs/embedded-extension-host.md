@@ -4,7 +4,7 @@ This document describes the **initial runtime** implemented for #99. See [ADR-00
 
 ## Enable a trusted local extension
 
-Configure `VI_EXTENSIONS` as a JSON array of absolute or working-directory-relative paths to compiled `.js`/`.mjs` modules. When omitted or `[]`, **nothing changes** for existing Virtual Inbox installations.
+Configure `VI_EXTENSIONS` as a JSON array of absolute or working-directory-relative paths to compiled `.js`/`.mjs` modules. When omitted or `[]`, no third-party extensions are installed. The bundled `sms-native` extension remains enabled by default and owns the existing demo sender endpoints.
 
 ```sh
 npm run build:server
@@ -31,6 +31,14 @@ V1 responses are JSON-compatible objects, with optional bounded `X-*` and `Cache
 
 `VI_EXTENSIONS` must be valid JSON array input, otherwise startup fails explicitly. Loaded optional extensions that fail to import or validate are reported in startup diagnostics and do not prevent base listeners from starting. Hot reload, actual ESM unloading, private module isolation and per-extension resource quotas are intentionally not promised.
 
+## Bundled native SMS sender
+
+The `sms-native` extension is installed and enabled by default. It registers the single logical `demo /sms/messages` operation, published as `POST /demo/sms/messages` on the main listener and `POST /sms/messages` on the dedicated demo listener. The **OpenAPI operationId, request shape, 201 response and existing URLs remain unchanged**. The handler calls `@virtual-inbox/client.ingestSms()` using the normal `POST /api/sms/ingestions` public HTTP endpoint; it does not access the VI Sandbox directly.
+
+`VI_SMS_NATIVE_ENABLED=false` disables only the bundled sender endpoint. Calls to the former public demo URLs return `503` with error code `SMS_EXTENSION_UNAVAILABLE`; the functional public ingestion API, inboxes, SMTP, POP3 and other extensions remain available. Any other value, including an unset variable, leaves it enabled. Changing this setting requires restart. If native registration fails, startup fails visibly rather than silently serving a different implementation. A third-party extension cannot take over this reserved route merely by using the `sms-native` identifier.
+
+The embedded handler uses the main listener's local HTTP port to call the shared functional API without bypassing its validation or introducing internal APIs. There is no new listener and no IPC. A failed internal HTTP call produces a controlled extension error; provider-facing error responses from the public SMS API retain their original status and structured error body.
+
 ## Next
 
-#100 stabilizes public SMS ingestion, #101 moves existing HTTP SMS sending to a bundled, enabled-by-default extension; #102 makes the module catalogue and failures observable through a public API; #103 renders it in the console. The existing sender remains in the core until #101.
+#102 exposes extension state and published endpoints in a public registry; #103 renders them in the console. The bundled sender and all its routes are real SDK/Host registrations, not simulated console metadata.

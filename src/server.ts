@@ -47,6 +47,13 @@ import {
 
 export const sandbox = new Sandbox(config.logs);
 const extensionHost = new ExtensionHost();
+extensionHost.observeOutcomes(outcome => {
+  sandbox.log("extension.request", undefined, undefined, {
+    extensionId: outcome.extensionId, method: outcome.method,
+    audience: outcome.audience, route: outcome.route, status: outcome.status,
+    durationMs: outcome.durationMs, correlationId: outcome.correlationId,
+  });
+});
 const credentialStore = new InboxCredentialStore();
 const inboxAddresses = new Map<string, string>();
 const smtpAuthPolicy = process.env.SMTP_AUTH_POLICY || "INBOX";
@@ -254,7 +261,9 @@ const listenerSpecs: ListenerSpec[] = [
 ];
 async function startListeners() {
   try {
-    if (process.env.VI_SMS_NATIVE_ENABLED !== "false") {
+    if (process.env.VI_SMS_NATIVE_ENABLED === "false") {
+      extensionHost.markDisabled("sms-native");
+    } else {
       // Use the same *public* ingestion API over verified HTTPS whenever the
       // instance has TLS. Plain transport is used only if TLS was disabled
       // explicitly for this test sandbox. Never silently downgrade after a

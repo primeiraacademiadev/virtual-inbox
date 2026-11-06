@@ -199,7 +199,7 @@ const management = (operation: Omit<ApiOperation, "audience">): ApiOperation => 
 });
 const streams = ["logs/events", "observers/events", "observers/{observerId}/events"].map(
   (path, index) => management({ id: ["logEvents", "newObserverEvents", "observerEvents"][index],
-    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,includeAnomalies",
+    method: "GET", path: `/${path}`, tag: "Events", status: 200, query: "after,type,inboxId,messageId,smtpSessionId,attemptId,sender,recipient,ruleId,extensionId,includeAnomalies",
     summary: "Open an SSE stream; use Last-Event-ID or after for replay.", mediaType: "text/event-stream" }),
 );
 

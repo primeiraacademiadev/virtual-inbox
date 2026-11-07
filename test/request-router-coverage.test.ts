@@ -269,8 +269,8 @@ test("public SMS ingestion and demo sender share capture semantics without break
       { "X-VI-Correlation-ID": "provider-test-123" });
     assert.equal(common.headers.get("x-vi-correlation-id"), "provider-test-123");
     const demo = await f.request("/demo/sms/messages", "POST", input);
-    assert.equal(common.status, 201);
-    assert.equal(demo.status, 201);
+    assert.equal(common.status, 202);
+    assert.equal(demo.status, 202);
     const a = await common.json() as Record<string, unknown>;
     const b = await demo.json() as Record<string, unknown>;
     for (const message of [a, b]) {
@@ -285,7 +285,7 @@ test("public SMS ingestion and demo sender share capture semantics without break
     assert.deepEqual(captures.map((m) => m.id), [a.id, b.id]);
     const unknown = await f.request("/api/sms/ingestions", "POST",
       { ...input, to: "+351999888777" });
-    assert.equal(unknown.status, 201);
+    assert.equal(unknown.status, 202);
     const anomaly = await unknown.json() as Record<string, unknown>;
     assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
     assert.equal(anomaly.originalRecipient, "+351999888777");
@@ -338,7 +338,7 @@ test("native SMS extension preserves demo validation errors and anomaly capture"
     assert.equal(typeof invalidBody.errorCode, "string");
     const missing = await f.request("/demo/sms/messages", "POST",
       { from: "test-sender", to: "+351999888666", body: "not delivered" });
-    assert.equal(missing.status, 201);
+    assert.equal(missing.status, 202);
     const captured = await missing.json() as { originalRecipient: string; captureReason: string };
     assert.equal(captured.originalRecipient, "+351999888666");
     assert.equal(captured.captureReason, "UNKNOWN_RECIPIENT");
@@ -354,7 +354,7 @@ test("native SMS sender is explicitly unavailable when disabled, while common in
     assert.equal((await legacy.json()).errorCode, "SMS_EXTENSION_UNAVAILABLE");
     const common = await f.request("/api/sms/ingestions", "POST",
       { from: "test", to: "+351912345678", body: "test" });
-    assert.equal(common.status, 201);
+    assert.equal(common.status, 202);
   } finally { await f.close(); }
 });
 
@@ -368,7 +368,7 @@ test("dedicated demo listener uses the same native SMS handler and public ingest
     demo.context.extensionHost = host;
     const response = await demo.request("/sms/messages", "POST",
       { from: "synthetic", to: recipient.address, body: "hello" });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 202);
     const captured = await response.json() as { id: string; destinationId: string };
     assert.equal(captured.destinationId, recipient.id);
     assert.equal(management.sandbox.listMessages(recipient.id)[0].id, captured.id);

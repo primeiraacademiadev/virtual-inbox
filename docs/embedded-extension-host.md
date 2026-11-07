@@ -33,7 +33,7 @@ V1 responses are JSON-compatible objects, with optional bounded `X-*` and `Cache
 
 ## Bundled native SMS sender
 
-The `sms-native` extension is installed and enabled by default. It registers the single logical `demo /sms/messages` operation, published as `POST /demo/sms/messages` on the main listener and `POST /sms/messages` on the dedicated demo listener. The **OpenAPI operationId, request shape, 201 response and existing URLs remain unchanged**. The handler calls `@virtual-inbox/client.ingestSms()` using the normal `POST /api/sms/ingestions` public HTTP endpoint; it does not access the VI Sandbox directly.
+The `sms-native` extension is installed and enabled by default. It registers the single logical `demo /sms/messages` operation, published as `POST /demo/sms/messages` on the main listener and `POST /sms/messages` on the dedicated demo listener. The **OpenAPI operationId, request shape, 202 Accepted response (previously 201) and existing URLs remain unchanged**. The handler calls `@virtual-inbox/client.ingestSms()` using the normal `POST /api/sms/ingestions` public HTTP endpoint; it does not access the VI Sandbox directly.
 
 `VI_SMS_NATIVE_ENABLED=false` disables only the bundled sender endpoint. Calls to the former public demo URLs return `503` with error code `SMS_EXTENSION_UNAVAILABLE`; the functional public ingestion API, inboxes, SMTP, POP3 and other extensions remain available. Any other value, including an unset variable, leaves it enabled. Changing this setting requires restart. If native registration fails, startup fails visibly rather than silently serving a different implementation. A third-party extension cannot take over this reserved route merely by using the `sms-native` identifier.
 

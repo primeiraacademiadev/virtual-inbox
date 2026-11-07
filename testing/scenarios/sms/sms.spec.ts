@@ -25,7 +25,11 @@ test("national and E.164 SMS route to the same inbox", async () => {
         body: JSON.stringify({ from: "harness", to: "+351" + national, body: text }),
       },
     );
-    expect(response.ok).toBeTruthy();
+    expect(response.status).toBe(202);
+    const submitted = await response.json();
+    expect(submitted.originalRecipient).toBe("+351" + national);
+    // Accepted is not a carrier delivery confirmation.
+    expect(submitted.id).toBeTruthy();
     const msgs = await api.messages({ id: inbox.id, address: national, channel: "sms" });
     expect(msgs.some((m) => m.body === text)).toBeTruthy();
   } finally {

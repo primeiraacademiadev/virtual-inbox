@@ -4,11 +4,24 @@ export const positive = (key: string, fallback: number) => {
   if (!Number.isSafeInteger(value) || value <= 0) throw Error("Invalid " + key);
   return value;
 };
+/**
+ * Only explicitly modelled phone profiles may be used for national-number
+ * routing. A bare country code is insufficient to infer a numbering plan.
+ */
+export function parseSmsDefaultCountryCode(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\\+[1-9][0-9]{0,2}$/.test(value) ||
+      !["+351", "+1", "+33"].includes(value)) {
+    throw Error("Invalid SMS_DEFAULT_COUNTRY_CODE (supported: +351, +1, +33)");
+  }
+  return value;
+}
 export const config = {
   smtpBytes: positive("MAX_SMTP_MESSAGE_BYTES", 20 * 1024 * 1024),
   attachmentBytes: positive("MAX_ATTACHMENT_BYTES", 20 * 1024 * 1024),
   httpBytes: positive("MAX_HTTP_BODY_BYTES", 32 * 1024 * 1024),
   smsBytes: positive("MAX_SMS_BODY_BYTES", 64 * 1024),
+  smsDefaultCountryCode: parseSmsDefaultCountryCode(process.env.SMS_DEFAULT_COUNTRY_CODE),
   bodyChars: positive("MAX_MESSAGE_BODY_CHARS", 2 * 1024 * 1024),
   messages: positive("MAX_MESSAGE_COUNT", 10000),
   storedBytes: positive("MAX_STORED_BYTES", 256 * 1024 * 1024),

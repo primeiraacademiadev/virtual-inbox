@@ -19,6 +19,7 @@ jobs:
       - name: Verify lockfile and overrides
         run: |
           npm ci --ignore-scripts --no-fund
+          npm ci --prefix web --ignore-scripts --no-fund
           npm ls c8 test-exclude glob minimatch
           npm audit --audit-level=moderate
           npm run test:coverage

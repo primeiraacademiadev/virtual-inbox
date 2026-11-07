@@ -10,7 +10,7 @@ export const positive = (key: string, fallback: number) => {
  */
 export function parseSmsDefaultCountryCode(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  if (!/^\\+[1-9][0-9]{0,2}$/.test(value) ||
+  if (!/^\+[1-9][0-9]{0,2}$/.test(value) ||
       !["+351", "+1", "+33"].includes(value)) {
     throw Error("Invalid SMS_DEFAULT_COUNTRY_CODE (supported: +351, +1, +33)");
   }

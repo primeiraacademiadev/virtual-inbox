@@ -24,13 +24,13 @@ Each example creates an inbox, sends MIME with a binary attachment, waits for de
 
 ## SMS
 
-The existing demo sender endpoints are now served by the bundled `sms-native` SDK extension, enabled by default, with unchanged URLs, payloads and responses. It calls the same public `POST /api/sms/ingestions` operation as any external client. Set `VI_SMS_NATIVE_ENABLED=false` only to disable the demo sender (HTTP `503`, `SMS_EXTENSION_UNAVAILABLE`); direct public ingestion remains available. This requires a restart.
+The existing demo sender endpoints are now served by the bundled `sms-native` SDK extension, enabled by default, with unchanged URLs and payloads; successful submissions now return HTTP 202 Accepted (previously 201). It calls the same public `POST /api/sms/ingestions` operation as any external client. Set `VI_SMS_NATIVE_ENABLED=false` only to disable the demo sender (HTTP `503`, `SMS_EXTENSION_UNAVAILABLE`); direct public ingestion remains available. This requires a restart.
 
 There is no real telecom transport. POST JSON `{"from":"test-app","to":"+351912345678","body":"Test message"}` to `/demo/sms/messages` on the main origin, or `/sms/messages` on the demo listener (default 3001/3444). For normal delivery, the destination must match the created number; supported national/international aliases refer to the same inbox. Unknown or expired numbers are accepted into anomalies as described below. `node examples/sms-roundtrip.mjs` runs a complete example.
 
-The **common public SMS ingestion API** is `POST /api/sms/ingestions` on the main HTTP(S) listener, with the same JSON body and `201` captured-message response. It is available to any test client, including extensions, and uses the same capture/routing/TTL/anomaly behavior as the demo sender. This is a separate functional operation to avoid extensions recursively calling their own provider-facing endpoint. The typed `@virtual-inbox/client` exposes `ingestSms({ from, to, body })` for this operation. The API does not contact a carrier and does not implement provider-specific campaign or authentication semantics. An optional `X-VI-Correlation-ID` header (1–128 safe ASCII characters) is echoed in the response to help associate the caller's request with the capture; it is diagnostic only, not an authenticated identity. The header does not currently become a persistent message/log field. The public operation is documented in `/api/openapi.json`; legacy demo endpoints remain unchanged.
+The **common public SMS ingestion API** is `POST /api/sms/ingestions` on the main HTTP(S) listener, with the same JSON body and `202 Accepted` response containing the captured-message record. It is available to any test client, including extensions, and uses the same capture/routing/TTL/anomaly behavior as the demo sender. This is a separate functional operation to avoid extensions recursively calling their own provider-facing endpoint. The typed `@virtual-inbox/client` exposes `ingestSms({ from, to, body })` for this operation. The API does not contact a carrier and does not implement provider-specific campaign or authentication semantics. An optional `X-VI-Correlation-ID` header (1–128 safe ASCII characters) is echoed in the response to help associate the caller's request with the capture; it is diagnostic only, not an authenticated identity. The header does not currently become a persistent message/log field. The public operation is documented in `/api/openapi.json`; legacy demo endpoints remain unchanged.
 
-The [demo OpenAPI contract](/api/openapi-demo.json) documents these auxiliary endpoints. The main API reference intentionally excludes them. Email demo sending returns `202`; simulated SMS capture returns `201`.
+The [demo OpenAPI contract](/api/openapi-demo.json) documents these auxiliary endpoints. The main API reference intentionally excludes them. Email demo sending returns `202`; simulated SMS submission returns `202 Accepted` (capture is not delivery confirmation).
 
 
 ## Unknown or expired recipients
@@ -39,9 +39,9 @@ The [demo OpenAPI contract](/api/openapi-demo.json) documents these auxiliary en
 
 | Recipient | Email (SMTP/STARTTLS/SMTPS) | SMS (demo API) |
 | --- | --- | --- |
-| Active inbox | Normal delivery; `250 Accepted` after `DATA` | Normal capture; HTTP `201 Created` |
-| Unregistered | `RCPT TO` succeeds; `250 Accepted` after `DATA`; `UNKNOWN_RECIPIENT` capture | HTTP `201 Created`; `UNKNOWN_RECIPIENT` capture |
-| Expired | Accepted and captured with `EXPIRED_RECIPIENT` | HTTP `201 Created`; `EXPIRED_RECIPIENT` capture |
+| Active inbox | Normal delivery; `250 Accepted` after `DATA` | Normal capture; HTTP `202 Accepted` |
+| Unregistered | `RCPT TO` succeeds; `250 Accepted` after `DATA`; `UNKNOWN_RECIPIENT` capture | HTTP `202 Accepted`; `UNKNOWN_RECIPIENT` capture |
+| Expired | Accepted and captured with `EXPIRED_RECIPIENT` | HTTP `202 Accepted`; `EXPIRED_RECIPIENT` capture |
 | Limits/failures | Acceptance is not guaranteed: e.g. `552` for size, `452` for capacity, or an injected failure | May return `413`, `507` or fail other validation |
 
 System anomaly inboxes are created automatically: `anomalies@sandbox.test` (email) and `+999000000000` (SMS). To inspect captured messages:

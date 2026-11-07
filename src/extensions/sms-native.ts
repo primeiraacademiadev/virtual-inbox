@@ -18,7 +18,7 @@ export function createNativeSmsExtension(publicApiBaseUrl: string, options: { fe
       // Preserve the legacy input contract: { from, to, body }.
       // Missing/invalid values are validated by the common public API.
       const captured = await client.ingestSms(ctx.request.body as SmsIngestion);
-      ctx.response.status = 201;
+      ctx.response.status = 202;
       ctx.response.body = captured as unknown as JsonValue;
     } catch (error) {
       if (error instanceof VirtualInboxError && error.status >= 400) {

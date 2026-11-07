@@ -160,7 +160,7 @@ test("SDK ingestSms calls only the common public ingestion endpoint", async () =
       body: JSON.parse(String(init?.body)), correlationId: new Headers(init?.headers).get("X-VI-Correlation-ID") });
     return Response.json({ id: "captured", channel: "sms", destinationId: "inbox",
       sequence: 1, from: "tester", originalRecipient: "+351912345678", body: "Hello" },
-      { status: 201 });
+      { status: 202 });
   };
   try {
     const sdk = new VirtualInboxClient("http://127.0.0.1:3000/api/");

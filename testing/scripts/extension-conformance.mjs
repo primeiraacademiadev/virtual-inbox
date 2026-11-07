@@ -44,7 +44,7 @@ try {
     req.on("end", () => {
       const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       captures.push(payload);
-      return respond(201, {
+      return respond(202, {
         id: "capture-" + captures.length, channel: "sms", sequence: captures.length,
         from: payload.from, originalRecipient: payload.to, body: payload.body,
         destinationId: "synthetic-inbox",

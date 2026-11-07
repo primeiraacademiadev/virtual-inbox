@@ -33,7 +33,7 @@ test("short-lived inbox expires and delivers subsequent messages to anomalies", 
     )
     .toBe(404);
   const sent = await demoSms(inbox.address, "expired-" + randomUUID());
-  expect(sent.status).toBe(201);
+  expect(sent.status).toBe(202);
   const anomalies = await api.json<Array<{ id: string; system?: boolean }>>("/phone-numbers");
   const system = anomalies.find((x) => x.system);
   expect(system).toBeTruthy();
@@ -71,7 +71,7 @@ test("concurrent SMS deliveries are all captured without duplicate IDs", async (
     const results = await Promise.all(
       Array.from({ length: 20 }, (_, i) => demoSms(inbox.address, prefix + i)),
     );
-    expect(results.every((r) => r.status === 201)).toBe(true);
+    expect(results.every((r) => r.status === 202)).toBe(true);
     const messages = await api.messages(inbox);
     const relevant = messages.filter((m) => m.body.startsWith(prefix));
     expect(relevant).toHaveLength(20);
@@ -107,7 +107,7 @@ test("SMS size boundary rejects oversized messages and keeps service responsive"
     const result = await demoSms(inbox.address, "x".repeat(513));
     expect(result.status).toBe(413);
     const accepted = await demoSms(inbox.address, "ok");
-    expect(accepted.status).toBe(201);
+    expect(accepted.status).toBe(202);
   } finally {
     await api.dispose();
   }

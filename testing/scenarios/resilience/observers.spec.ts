@@ -41,7 +41,7 @@ test("concurrent observers independently subscribe and receive messages", async 
       expect(watched.status).toBe(200);
     }
     const marker = "observer-" + randomUUID();
-    expect((await sms(inbox.address, marker)).status).toBe(201);
+    expect((await sms(inbox.address, marker)).status).toBe(202);
     const received = await api.messages(inbox);
     expect(received.some((m) => m.body === marker)).toBe(true);
     for (const observer of observers) {
@@ -83,7 +83,7 @@ test("global message capacity can be recovered by deleting messages", async () =
         reachedLimit = true;
         break;
       }
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(202);
       accepted++;
     }
     expect(reachedLimit, "Global message quota should eventually reject delivery").toBe(true);
@@ -97,7 +97,7 @@ test("global message capacity can be recovered by deleting messages", async () =
       { method: "DELETE" },
     );
     expect(deleted.status).toBe(204);
-    expect((await sms(inbox.address, prefix + "-recovered")).status).toBe(201);
+    expect((await sms(inbox.address, prefix + "-recovered")).status).toBe(202);
     expect((await fetch(baseUrl + "/health")).status).toBe(200);
   } finally {
     await api.dispose();
@@ -111,7 +111,7 @@ test("SSE replay delivers events missed during disconnection", async () => {
     const inbox = await api.create("sms");
     const first = "replay-first-" + randomUUID(),
       second = "replay-second-" + randomUUID();
-    expect((await sms(inbox.address, first)).status).toBe(201);
+    expect((await sms(inbox.address, first)).status).toBe(202);
     const logs = await api.json<{
       events: Array<{ id: string; type: string; resourceId?: string }>;
     }>("/logs");
@@ -119,7 +119,7 @@ test("SSE replay delivers events missed during disconnection", async () => {
       (e) => e.type === "message.received" && e.resourceId === inbox.id,
     );
     expect(event).toBeTruthy();
-    expect((await sms(inbox.address, second)).status).toBe(201);
+    expect((await sms(inbox.address, second)).status).toBe(202);
     const ctrl = new AbortController();
     try {
       const response = await fetch(

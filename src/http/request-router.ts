@@ -310,7 +310,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
           res.setHeader("X-VI-Correlation-ID", correlation);
         }
         const input = await body(req);
-        return json(res, 201, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
+        return json(res, 202, publicMessage(sandbox.deliver("sms", input.from, input.to, input.body)));
       }
       case "logs": {
         const filters = parseLogFilters(url.searchParams);

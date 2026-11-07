@@ -5,6 +5,7 @@ import { Fault, type Channel } from "./domain-types.js";
 import {
   generateAddress,
   canonicalAddress,
+  phoneCountryCode,
   generationDefaults,
   locales,
   type Generation,
@@ -158,6 +159,7 @@ export class Sandbox {
       channel: Channel,
       params?: Generation,
     ) => string = generateAddress,
+    readonly smsDefaultCountryCode: string | undefined = config.smsDefaultCountryCode,
   ) {
     this.emitter.setMaxListeners(0);
     this.defaults = {
@@ -171,8 +173,13 @@ export class Sandbox {
   private aliases(c: Channel, a: string, locale: IdentityLocale = generationDefaults.locale) {
     const keys = [this.key(c, a)];
     if (c === "sms") {
-      keys.push(this.key(c, canonicalAddress(c, a, locale)));
-      for (const candidate of locales) keys.push(this.key(c, canonicalAddress(c, a, candidate)));
+      if (!this.smsDefaultCountryCode) keys.push(this.key(c, canonicalAddress(c, a, locale)));
+      if (this.smsDefaultCountryCode) {
+        const locale = locales.find(candidate => phoneCountryCode(candidate) === this.smsDefaultCountryCode);
+        if (locale) keys.push(this.key(c, canonicalAddress(c, a, locale)));
+      } else {
+        for (const candidate of locales) keys.push(this.key(c, canonicalAddress(c, a, candidate)));
+      }
     }
     return [...new Set(keys)];
   }

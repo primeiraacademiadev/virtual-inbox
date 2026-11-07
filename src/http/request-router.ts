@@ -276,6 +276,7 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse, c
             SMTPS_PORT: String(smtpsPort), POP3_PORT: String(pop3Port),
             DEMO_PORT: String(demoPort), DEMO_HTTPS_PORT: String(demoHttpsPort) },
           environmentControlledKeys: environmentControlledKeys(process.env, networkKeys),
+          smsRouting: { defaultCountryCode: config.smsDefaultCountryCode ?? null },
           http: { port, httpsPort: tlsIdentity ? httpsPort : null, demoPort,
             demoHttpsPort: tlsIdentity ? demoHttpsPort : null },
           smtp: { plainPort: smtpPort, starttls: !!tlsIdentity,

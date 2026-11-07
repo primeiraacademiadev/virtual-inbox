@@ -140,6 +140,9 @@ export function generateAddress(channel: Channel, input: Generation = {}): strin
       : national;
   return options.includeCountryCode ? "+" + profile.countryCode + e164National : national;
 }
+export function phoneCountryCode(locale: IdentityLocale): string {
+  return "+" + catalogs[locale].phone.countryCode;
+}
 export function canonicalAddress(
   channel: Channel,
   address: string,

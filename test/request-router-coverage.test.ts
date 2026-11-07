@@ -23,8 +23,8 @@ type Fixture = {
   close: () => Promise<void>;
 };
 
-async function fixture(demoOnly = false): Promise<Fixture> {
-  const sandbox = new Sandbox(100);
+async function fixture(demoOnly = false, countryCode?: string): Promise<Fixture> {
+  const sandbox = new Sandbox(100, undefined, countryCode);
   const rules = new SmtpReplyRuleStore();
   const directory = mkdtempSync(join(tmpdir(), "vi-router-contract-"));
   const sessions = new Map<string, unknown>();
@@ -413,5 +413,35 @@ test("extension registry is public, exposes active endpoints and metrics but no 
     assert.equal(filtered.status, 200);
     assert.match(JSON.stringify(await filtered.json()), /extension.request/);
     assert.doesNotMatch(JSON.stringify(after), /Bearer secret|\/tmp\/|password/);
+  } finally { await f.close(); }
+});
+
+test("operational +351 SMS routing resolves national and international addresses through public APIs", async () => {
+  const f = await fixture(false, "+351");
+  try {
+    const created = await f.request("/api/phone-numbers", "POST", { phoneNumber: "+351912345678" });
+    assert.equal(created.status, 201);
+    const number = await created.json() as { id: string; address: string };
+    const lookup = await f.request("/api/phone-numbers?address=912345678");
+    assert.deepEqual((await lookup.json() as Array<{ id: string }>).map(x => x.id), [number.id]);
+    const duplicate = await f.request("/api/phone-numbers", "POST", { phoneNumber: "912345678" });
+    assert.equal(duplicate.status, 409);
+    const captured = await f.request("/api/sms/ingestions", "POST",
+      { from: "MYAPP", to: "912345678", body: "operational country" });
+    assert.equal(captured.status, 202);
+    const message = await captured.json() as { destinationId: string; originalRecipient: string; from: string };
+    assert.equal(message.destinationId, number.id);
+    assert.equal(message.originalRecipient, "912345678");
+    assert.equal(message.from, "MYAPP");
+    const messages = await f.request("/api/phone-numbers/" + number.id + "/messages");
+    assert.equal((await messages.json() as unknown[]).length, 1);
+    const unknown = await f.request("/api/sms/ingestions", "POST",
+      { from: "APP", to: "999999999", body: "unknown" });
+    assert.equal((await unknown.json() as { captureReason: string }).captureReason, "UNKNOWN_RECIPIENT");
+    const foreign = await f.request("/api/phone-numbers", "POST", { phoneNumber: "+12025551234" });
+    assert.equal(foreign.status, 201);
+    const foreignNational = await f.request("/api/phone-numbers?address=2025551234");
+    assert.deepEqual(await foreignNational.json(), [],
+      "Configured Portugal plan must not guess US national number aliases");
   } finally { await f.close(); }
 });

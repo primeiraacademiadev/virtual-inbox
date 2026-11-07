@@ -44,8 +44,10 @@ test("demo routes are excluded from the main contract and admin writes declare s
   const demo = createOpenApiDocument("demo");
   assert.equal(main.paths["/sms/messages"], undefined);
   assert.ok(demo.paths["/sms/messages"]);
-  assert.ok(demo.paths["/sms/messages"].post.responses["202"]);
-  assert.ok(main.paths["/sms/ingestions"].post.responses["202"]);
+  const demoSms = demo.paths["/sms/messages"].post as { responses: Record<string, unknown> };
+  const publicSms = main.paths["/sms/ingestions"].post as { responses: Record<string, unknown> };
+  assert.ok(demoSms.responses["202"]);
+  assert.ok(publicSms.responses["202"]);
   const put = main.paths["/admin/tls"].put as { security: unknown; requestBody: unknown };
   assert.deepEqual(put.security, [{ adminToken: [] }]);
   assert.ok(put.requestBody);

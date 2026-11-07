@@ -24,13 +24,13 @@ Chaque exemple crée une boîte, envoie MIME et pièce jointe binaire, attend, c
 
 ## SMS
 
-Les endpoints de démonstration SMS sont désormais servis par l'extension SDK intégrée `sms-native`, activée par défaut, sans changement d'URL, de requête ou de réponse. L'extension utilise la même API publique `POST /api/sms/ingestions` que les clients externes. `VI_SMS_NATIVE_ENABLED=false` désactive uniquement l'émetteur de démonstration (HTTP `503`, `SMS_EXTENSION_UNAVAILABLE`), tout en conservant l'API publique de capture. Le redémarrage est nécessaire.
+Les endpoints de démonstration SMS sont désormais servis par l'extension SDK intégrée `sms-native`, activée par défaut, sans changement d'URL ni de requête ; la soumission SMS renvoie maintenant HTTP 202 Accepted (au lieu de 201). L'extension utilise la même API publique `POST /api/sms/ingestions` que les clients externes. `VI_SMS_NATIVE_ENABLED=false` désactive uniquement l'émetteur de démonstration (HTTP `503`, `SMS_EXTENSION_UNAVAILABLE`), tout en conservant l'API publique de capture. Le redémarrage est nécessaire.
 
 Aucun transport télécom réel. Envoyer `{"from":"test-app","to":"+351912345678","body":"Message de test"}` à `/demo/sms/messages` sur l’origine principale, ou `/sms/messages` sur le listener demo (3001/3444). Pour une livraison normale, le destinataire doit correspondre au numéro créé ; les alias nationaux/internationaux pris en charge rejoignent la même boîte. Les numéros inconnus ou expirés sont acceptés dans les anomalies, comme indiqué ci-dessous. `node examples/sms-roundtrip.mjs` exécute le parcours complet.
 
-L’**API publique fonctionnelle de capture SMS** est `POST /api/sms/ingestions` sur le listener HTTP(S) principal. Elle accepte le même JSON et renvoie `201` avec le message capturé. Tous les clients de test, y compris les extensions, utilisent la même capture, le même routage, les mêmes TTL et anomalies que l’émetteur de démonstration. Cette opération distincte évite à une extension de rappeler récursivement son propre endpoint fournisseur. Le client typé `@virtual-inbox/client` propose `ingestSms({ from, to, body })`. Aucun transport télécom réel, ni sémantique de campagne ou d’authentification fournisseur. L’en-tête facultatif `X-VI-Correlation-ID` (1 à 128 caractères ASCII sûrs) est renvoyé dans la réponse pour faciliter la corrélation. Il n’identifie pas un utilisateur authentifié et n’est pas encore conservé dans les métadonnées du message ni les logs. L’opération figure dans `/api/openapi.json` ; les endpoints demo restent inchangés.
+L’**API publique fonctionnelle de capture SMS** est `POST /api/sms/ingestions` sur le listener HTTP(S) principal. Elle accepte le même JSON et renvoie `202 Accepted` avec le message capturé. Tous les clients de test, y compris les extensions, utilisent la même capture, le même routage, les mêmes TTL et anomalies que l’émetteur de démonstration. Cette opération distincte évite à une extension de rappeler récursivement son propre endpoint fournisseur. Le client typé `@virtual-inbox/client` propose `ingestSms({ from, to, body })`. Aucun transport télécom réel, ni sémantique de campagne ou d’authentification fournisseur. L’en-tête facultatif `X-VI-Correlation-ID` (1 à 128 caractères ASCII sûrs) est renvoyé dans la réponse pour faciliter la corrélation. Il n’identifie pas un utilisateur authentifié et n’est pas encore conservé dans les métadonnées du message ni les logs. L’opération figure dans `/api/openapi.json` ; les endpoints demo restent inchangés.
 
-Le [contrat OpenAPI demo](/api/openapi-demo.json) documente ces opérations séparément. L’envoi email demo renvoie `202` ; la capture SMS renvoie `201`.
+Le [contrat OpenAPI demo](/api/openapi-demo.json) documente ces opérations séparément. L’envoi email demo renvoie `202` ; la soumission SMS renvoie `202 Accepted` (pas une confirmation de livraison).
 
 
 ## Destinataires inconnus ou expirés
@@ -39,9 +39,9 @@ Le [contrat OpenAPI demo](/api/openapi-demo.json) documente ces opérations sép
 
 | Destinataire | Email (SMTP/STARTTLS/SMTPS) | SMS (API de démonstration) |
 | --- | --- | --- |
-| Boîte active | Livraison normale ; `250 Accepted` après `DATA` | Capture normale ; HTTP `201 Created` |
-| Inconnu | `RCPT TO` accepté ; `250 Accepted` après `DATA` ; capture `UNKNOWN_RECIPIENT` | HTTP `201 Created` ; capture `UNKNOWN_RECIPIENT` |
-| Expiré | Accepté et capturé avec `EXPIRED_RECIPIENT` | HTTP `201 Created` ; capture `EXPIRED_RECIPIENT` |
+| Boîte active | Livraison normale ; `250 Accepted` après `DATA` | Capture normale ; HTTP `202 Accepted` |
+| Inconnu | `RCPT TO` accepté ; `250 Accepted` après `DATA` ; capture `UNKNOWN_RECIPIENT` | HTTP `202 Accepted` ; capture `UNKNOWN_RECIPIENT` |
+| Expiré | Accepté et capturé avec `EXPIRED_RECIPIENT` | HTTP `202 Accepted` ; capture `EXPIRED_RECIPIENT` |
 | Limites/erreurs | Acceptation non garantie : par exemple `552` pour la taille, `452` pour la capacité ou erreur injectée | Peut retourner `413`, `507` ou échouer à une autre validation |
 
 Les boîtes système sont créées automatiquement : `anomalies@sandbox.test` (email) et `+999000000000` (SMS). Pour consulter les messages :

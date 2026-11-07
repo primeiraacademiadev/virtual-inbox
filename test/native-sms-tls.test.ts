@@ -26,7 +26,7 @@ test("native SMS sender calls the public HTTPS API with certificate validation",
       req.on("end", () => {
         const input = JSON.parse(Buffer.concat(chunks).toString("utf8")) as
           { from: string; to: string; body: string };
-        res.writeHead(201, { "Content-Type": "application/json" });
+        res.writeHead(202, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ...input, id: "verified", sequence: 1, channel: "sms",
           destinationId: "test", originalRecipient: input.to }));
       });
@@ -44,7 +44,7 @@ test("native SMS sender calls the public HTTPS API with certificate validation",
       audience: "demo", method: "POST", path: "/sms/messages",
       body: { from: "native-test", to: "+351912345678", body: "hello" },
     });
-    assert.equal(result?.response.status, 201);
+    assert.equal(result?.response.status, 202);
     assert.equal((result?.response.body as { id: string }).id, "verified");
     const untrusted = createVerifiedLocalFetch(origin, () =>
       ({ ca: "not a trusted CA", servername: "localhost" }));

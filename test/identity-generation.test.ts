@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Sandbox } from "../src/core.js";
+import { parseSmsDefaultCountryCode } from "../src/config.js";
 import {
   generateAddress,
   canonicalAddress,
@@ -69,4 +70,57 @@ test("exhausted collision retries return a stable error code", () => {
       "code" in error &&
       error.code === "IDENTITY_GENERATION_EXHAUSTED",
   );
+});
+
+test("optional operational country code preserves legacy aliases when absent", () => {
+  const legacy = new Sandbox(200, undefined, undefined);
+  const phone = legacy.create("sms", "912345678");
+  assert.equal(legacy.find("sms", "+351912345678")?.id, phone.id);
+  assert.equal(legacy.smsDefaultCountryCode, undefined);
+  const us = legacy.create("sms", "2025551234");
+  assert.equal(legacy.find("sms", "+12025551234")?.id, us.id);
+});
+
+test("configured +351 routing treats national and international recipient as one identity", () => {
+  const sandbox = new Sandbox(200, undefined, "+351");
+  const intl = sandbox.create("sms", "+351912345678");
+  assert.equal(sandbox.find("sms", "912345678")?.id, intl.id);
+  assert.throws(() => sandbox.create("sms", "912345678"), /already exists/);
+  const first = sandbox.deliver("sms", "SUBSCRIBER", "912345678", "national");
+  const second = sandbox.deliver("sms", "SUBSCRIBER", "+351912345678", "international");
+  assert.equal(first.destinationId, intl.id);
+  assert.equal(second.destinationId, intl.id);
+  assert.equal(first.from, "SUBSCRIBER");
+  assert.equal(first.originalRecipient, "912345678");
+  assert.equal(second.originalRecipient, "+351912345678");
+  assert.equal(sandbox.listMessages(intl.id).length, 2);
+  assert.equal(sandbox.find("sms", "2025551234"), undefined,
+    "A Portuguese operational prefix must not guess the USA plan");
+  const foreign = sandbox.create("sms", "+12025551234");
+  assert.equal(sandbox.find("sms", "+12025551234")?.id, foreign.id);
+  assert.equal(sandbox.find("sms", "2025551234"), undefined);
+  const anomaly = sandbox.deliver("sms", "MYAPP", "999999999", "unknown");
+  assert.equal(anomaly.captureReason, "UNKNOWN_RECIPIENT");
+  assert.equal(anomaly.originalRecipient, "999999999");
+});
+
+test("configured operational profile applies to existing national inbox and expiry", () => {
+  const sandbox = new Sandbox(200, undefined, "+351");
+  const national = sandbox.create("sms", "912345679");
+  assert.equal(sandbox.find("sms", "+351912345679")?.id, national.id);
+  sandbox.deleteResource(national.id);
+  const removed = sandbox.deliver("sms", "provider", "+351912345679", "after deletion");
+  assert.equal(removed.captureReason, "UNKNOWN_RECIPIENT");
+  assert.equal(removed.originalRecipient, "+351912345679");
+});
+
+test("operational country code configuration rejects ambiguous and unsupported values", () => {
+  assert.equal(parseSmsDefaultCountryCode(undefined), undefined);
+  for (const code of ["+351", "+1", "+33"]) assert.equal(parseSmsDefaultCountryCode(code), code);
+  for (const bad of ["", "351", "00", "00351", "+0", "+999", "+351 ", "abc", "+1234"]) {
+    assert.throws(() => parseSmsDefaultCountryCode(bad), /Invalid SMS_DEFAULT_COUNTRY_CODE/);
+  }
+  const french = new Sandbox(200, undefined, "+33");
+  const international = french.create("sms", "+33612345678");
+  assert.equal(french.find("sms", "0612345678")?.id, international.id);
 });

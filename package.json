@@ -20,7 +20,7 @@
     "test:all": "node testing/scripts/run-managed.mjs test:all"
   },
   "dependencies": {
-    "nodemailer": "^10.3.1",
+    "nodemailer": "^10.4.0",
     "postal-mime": "^4.2.0",
     "smtp-server": "3.21.3"
   },

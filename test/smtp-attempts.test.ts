@@ -53,6 +53,6 @@ test("SDK negative assertion uses a sequence cursor and cannot confuse an observ
 test("SDK negative assertion accepts bounded non-observation without asserting SMTP rejection",async()=>{
  const original=globalThis.fetch;
  globalThis.fetch=async()=>new Response(null,{status:204});
- try {await new VirtualInboxClient().expectNoMessage(inbox,{after:3,forMs:10});}
+ try {await assert.doesNotReject(new VirtualInboxClient().expectNoMessage(inbox,{after:3,forMs:10}));}
  finally{globalThis.fetch=original;}
 });

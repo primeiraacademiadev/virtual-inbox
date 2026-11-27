@@ -20,15 +20,15 @@
     "test:all": "node testing/scripts/run-managed.mjs test:all"
   },
   "dependencies": {
-    "nodemailer": "^10.3.1",
-    "postal-mime": "^4.2.0",
-    "smtp-server": "3.21.3"
+    "nodemailer": "^10.6.0",
+    "postal-mime": "^4.2.1",
+    "smtp-server": "3.21.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/smtp-server": "^3.5.13",
     "c8": "^12.0.0",
-    "prettier": "3.9.10",
+    "prettier": "3.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
